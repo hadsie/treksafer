@@ -1,0 +1,10 @@
+.idea
+.DS_Store
+.pytest_cache
+treksafer.iml
+.vscode
+venv
+config/prod.yaml
+config/test.yaml
+*__pycache__
+logs

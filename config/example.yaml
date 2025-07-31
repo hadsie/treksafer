@@ -1,0 +1,69 @@
+env: prod
+
+# The radius to search for fires within (km).
+fire_radius: 50
+
+# The amount of time to wait for a download before giving up, in seconds.
+download_timeout: 600
+
+# Path to shapefiles
+shapefiles: "shapefiles"
+
+# Logging
+log_file: "logs/prod.log"
+# logging.INFO
+log_level: 20
+
+transports:
+  - type: "signalwire"
+    project_id: "REPLACE WITH SIGNALWIRE PROJECT ID"
+    api_token: "REPLACE WITH SIGNALWIRE API TOKEN"
+    phone_number: "REPLACE WITH SIGNALWIRE PHONE NUMBER"
+    enabled: false
+  - type: "cli"
+    host: "localhost"
+    port: 8888
+    enabled: true
+
+# Data files, located at {shapfiles}/{location}/{filename}.
+data:
+  - location: AB
+    filename: AB_Fire_Perimeters_{DATE}.zip
+    mapping:
+      fields:
+        Fire: FIRE_NUMBE
+        Size: AREA
+        Name: ALIAS
+        Location: COMPLEX
+        Status: STATUS
+  - location: BC
+    filename: BC_Fire_Perimeters_{DATE}.zip
+    mapping:
+      fields:
+        Fire: FIRE_NUM
+        Size: FIRE_SZ_HA
+      api:
+        url: https://wildfiresituation-api.nrs.gov.bc.ca/publicPublishedIncident/{FIRE_NUM}?fireYear={FIRE_YEAR}
+        fields:
+          Name: incidentName
+          Location: incidentLocation
+          Status: stageOfControl
+  - location: CA
+    filename: CA_Fire_Perimeters_{DATE}.zip
+    mapping:
+      fields:
+        Fire: fireId
+        Name: fireId
+        Location: fireArea
+        Size: fireSize
+        Status: fireStage
+  - location: US
+    filename: "WFIGS_Interagency_Perimeters_{DATE}.zip"
+    mapping:
+      fields:
+        Fire: attr_Fir_6
+        Name: attr_Inc_2
+        Location: attr_Inc_4
+        Size: attr_Incid
+        Status: attr_Fir_2
+      size_transform: acres_to_hectares
