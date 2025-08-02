@@ -1,23 +1,41 @@
-#!venv/bin/python
+"""
+Find and summarize nearby wildfires
 
-import geopandas as gpd
+Usage:
+
+    fires = FindFires((49.25, -123.1))   # lat, lon in WGS-84
+    if fires.out_of_range():
+        print("No fire data sources near you.")
+    else:
+        print(fires.nearby())
+
+Design notes
+------------
+* Data sources (shapefiles + optional REST APIs) are declared in config/<env>.yaml.
+* The heavy geopandas look-ups are memoised with `@lru_cache`, so repeated
+  calls for the same coords are cheap.
+"""
+from __future__ import annotations
+
 import re
-import requests
-
 from functools import lru_cache
 from pathlib import Path
+
+import geopandas as gpd
+import requests
 from pyproj import Transformer
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
-from .config import get_config
+from .config import Settings, get_config
 from .helpers import acres_to_hectares, compass_direction
+
 
 TRANSFORMS = {
     "acres_to_hectares": acres_to_hectares,
 }
 
-def process_fire_value(data_key, raw_value, mapping):
+def _apply_transform(data_key, raw_value, mapping):
     """
     Applies a transform to a value if a transform is defined for this data key.
     """
@@ -28,9 +46,10 @@ def process_fire_value(data_key, raw_value, mapping):
             return transform_func(raw_value)
     return raw_value
 
-def process_fire_row(mapping, row, location, closest_point, distance):
+def _normalize_row(mapping, row, location, closest_point, distance):
     """
-    Normalizes a row of fire data from a shapefile according to a mapping dict.
+    Normalizes a row of fire data from a shapefile according to the supplied
+    mapping dict.
     """
     data = {
         "Distance": distance,
@@ -40,7 +59,7 @@ def process_fire_row(mapping, row, location, closest_point, distance):
     fields = mapping.get("fields", {})
     for data_key, row_attr in fields.items():
         raw_value = getattr(row, row_attr, None)
-        data[data_key] = process_fire_value(data_key, raw_value, mapping)
+        data[data_key] = _apply_transform(data_key, raw_value, mapping)
 
     # Optionally call the API for additional attributes if available.
     api_config = mapping.get("api")
@@ -54,7 +73,7 @@ def process_fire_row(mapping, row, location, closest_point, distance):
             response = requests.get(url, timeout=30).json()
             for data_key, api_field in api_config["fields"].items():
                 raw_value = response.get(api_field)
-                data[data_key] = process_fire_value(data_key, raw_value, mapping)
+                data[data_key] = _apply_transform(data_key, raw_value, mapping)
         except Exception as e:
             print(f"[WARN] Failed to fetch API data for fire {data.get('Fire', 'unknown')}: {e}")
 
@@ -63,61 +82,33 @@ def process_fire_row(mapping, row, location, closest_point, distance):
 
     return data
 
+
 class FindFires:
+    """Locate fires within [fire_radius]km of a lat/lon coordinate."""
+
     def __init__(self, coords):
         self.settings = get_config()
         self.distance_limit = self.settings.fire_radius * 1000
-        self.location = self._convert_to_point(coords)
+        self.location = self._to_epsg3857_point(coords)
         self.sources = self._data_sources()
 
-    def sources_map(self):
-        sources_map = {}
-        for data_file in self.settings.data:
-            filename = data_file.filename.replace(r'{DATE}', r'*')
-            target_dir = Path(self.settings.shapefiles) / data_file.location
-            matches = sorted(target_dir.glob(filename), reverse=True)
-            if matches:
-                sources_map[data_file.location] = matches[0]
-        return sources_map
+    def out_of_range(self) -> bool:
+        """
+        Checks if the fire sources are within range of the given coordinates.
 
-    def _convert_to_point(self, coords):
-        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857")
-        transformed = transformer.transform(coords[0], coords[1])
-        location = Point(transformed[0], transformed[1])
-        return location
-
-    def out_of_range(self):
-        return not bool(len(self.sources))
-
-    @lru_cache
-    def _data_sources(self):
-        """Find all data sources that are within distance_limit to the location."""
-        countries_filepath = "shapefiles/World_Countries_(Generalized)_-573431906301700955.zip"
-        countries = gpd.read_file(countries_filepath)
-        canada_provinces_filepath = "shapefiles/Canada_Provincial_boundaries_generalized_-3595751168909660783.zip"
-        canada_provinces = gpd.read_file(canada_provinces_filepath)
-
-        sources = []
-        # Find all matching countries.
-        for index, row in countries.to_crs(epsg=3857).iterrows():
-            distance = row['geometry'].distance(self.location)
-            if distance <= self.distance_limit:
-                sources.append(row.ISO)
-        # Find all matching Canadian provinces.
-        for index, row in canada_provinces.to_crs(epsg=3857).iterrows():
-            distance = row['geometry'].distance(self.location)
-            if distance <= self.distance_limit:
-                sources.append(row.postal)
-        return sources
+        Returns:
+            bool: True if no data sources in range, False otherwise.
+        """
+        return not bool(self.sources)
 
     def search(self, perimeters, mapping):
         fires = []
-        for index, row in perimeters.iterrows():
+        for _, row in perimeters.iterrows():
             fire_perimeter = row['geometry']
             distance = fire_perimeter.distance(self.location)
             if distance < self.distance_limit:
                 pointB = nearest_points(self.location, fire_perimeter)[1]
-                data = process_fire_row(mapping, row, self.location, pointB, distance)
+                data = _normalize_row(mapping, row, self.location, pointB, distance)
                 fires.append(data)
         return fires
 
@@ -134,3 +125,58 @@ class FindFires:
                     mapping = data_file.mapping
             fires += self.search(fire_perimeters, mapping)
         return fires
+
+    def sources_map(self):
+        """
+        Returns a dictionary mapping data source locations to their respective
+        filenames. Grabs the most recent shapefile in the folder ordered by date.
+        """
+        sources_map = {}
+        for data_file in self.settings.data:
+            filename = data_file.filename.replace(r'{DATE}', r'*')
+            target_dir = Path(self.settings.shapefiles) / data_file.location
+            matches = sorted(target_dir.glob(filename), reverse=True)
+            if matches:
+                sources_map[data_file.location] = matches[0]
+        return sources_map
+
+    @lru_cache
+    def _data_sources(self):
+        """
+        Return list of ISO country codes or Canadian province codes whose
+        polygon centroids lie within self.distance_limit of the query point.
+        """
+        countries_filepath = "shapefiles/World_Countries_(Generalized)_-573431906301700955.zip"
+        countries = gpd.read_file(countries_filepath)
+        canada_provinces_filepath = "shapefiles/Canada_Provincial_boundaries_generalized_-3595751168909660783.zip"
+        canada_provinces = gpd.read_file(canada_provinces_filepath)
+
+        sources = []
+        # Find all matching countries.
+        for _, row in countries.to_crs(epsg=3857).iterrows():
+            distance = row['geometry'].distance(self.location)
+            if distance <= self.distance_limit:
+                sources.append(row.ISO)
+        # Find all matching Canadian provinces.
+        for _, row in canada_provinces.to_crs(epsg=3857).iterrows():
+            distance = row['geometry'].distance(self.location)
+            if distance <= self.distance_limit:
+                sources.append(row.postal)
+        return sources
+
+    @staticmethod
+    def _to_epsg3857_point(coords):
+        """
+        Transforms given coordinates in EPSG:4326 (lat, long) format to meters for
+        spacial operations.
+
+        Parameters:
+            coords (tuple): A tuple of latitude and longitude.
+
+        Returns:
+            shapely.geometry.Point: The converted point.
+        """
+        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+        x, y = transformer.transform(coords[1], coords[0])
+        return Point(x, y)
+
