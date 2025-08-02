@@ -3,13 +3,14 @@
 Order of precedence:
 1. Environment variables
 2. .env.<ENV> file
-3. YAML file in config/<ENV>.yaml
+3. config.yaml
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, Literal, List, Union
 
@@ -19,6 +20,8 @@ from pydantic import BaseModel, Field, model_validator
 from pydantic.types import SecretStr
 from pydantic_settings import BaseSettings
 
+
+CONFIG_YAML = Path.cwd() / "config.yaml"
 
 class SignalWireConfig(BaseModel):
     type: Literal["signalwire"]
@@ -43,7 +46,8 @@ class EmailConfig(BaseModel):
     enabled: bool
 
 
-TransportConfig = Union[SignalWireConfig, CLIConfig, EmailConfig]
+#TransportConfig = Union[SignalWireConfig, CLIConfig, EmailConfig]
+TransportConfig = Union[SignalWireConfig, CLIConfig]
 
 
 # ---- Core settings model ---- #
@@ -55,8 +59,10 @@ class DataFile(BaseModel):
 
 
 class Settings(BaseSettings):
+    model_config = {"env_prefix": "TREKSAFER_"}
+
     """App-wide settings loaded from YAML + env vars."""
-    env: str = Field("dev", description="Environment ID: test, dev, or prod")
+    env: str = os.getenv("TREKSAFER_ENV", "dev")
     fire_radius: int = 100
     download_timeout: int = 600
     request_cache_timeout: int = 14400  # 4 hours.
@@ -66,45 +72,44 @@ class Settings(BaseSettings):
 
     transports: List[TransportConfig] = []
 
-    log_level: int = logging.INFO
     log_file: str | None = None
+    log_level: int = logging.INFO
 
-    model_config = {"env_prefix": "TREKSAFER_"}
-
-    @model_validator(mode="after")
-    def set_default_log_file(self):
+    def model_post_init(self, __context):
         if self.log_file is None:
             self.log_file = f"logs/{self.env}.log"
-        return self
+
 
 # ---- Loader helpers ---- #
+_PLACEHOLDER_RE = re.compile(r"\${([A-Z0-9_]+)(?::-(.*?))?}")
 
-def _load_yaml_defaults(env: str) -> dict[str, Any]:
-    """Load settings from a YAML file matching the given environment."""
-    file_path = Path("config") / f"{env}.yaml"
-    try:
-        with open(file_path, "r") as fh:
-            return yaml.safe_load(fh) or {}
+def _expand_placeholders(text: str) -> str:
+    """
+    Replace ${VAR}            → value from env  (or '')
+            ${VAR:-default}   → value or fallback
+    """
+    def repl(match: re.Match):
+        var, default = match.group(1), match.group(2)
+        return os.getenv(var, default or "")
 
-    except FileNotFoundError as err:
-        raise FileNotFoundError(
-            f"YAML config '{file_path}' not found."
-        ) from err
+    return _PLACEHOLDER_RE.sub(repl, text)
 
+def _yaml_defaults() -> dict[str, Any]:
+    """Return dict from config.yaml with ${VAR} placeholders expanded."""
+    raw = CONFIG_YAML.read_text()
+    raw = _expand_placeholders(raw)
+    return yaml.safe_load(raw) or {}
 
-def _load_dotenv(env: str) -> None:
-    """Populate os.environ from `.env.<env>` if it exists."""
-    dotenv_path = Path.cwd() / f".env.{env}"
-    if dotenv_path.exists():
-        load_dotenv(dotenv_path, override=False)
-
+def _load_dotenv() -> None:
+    """Populate os.environ from .env.<env> if it exists."""
+    env = os.getenv("TREKSAFER_ENV", "dev")
+    load_dotenv(f".env.{env}", override=False)
+    load_dotenv(".env", override=False)
 
 def get_config() -> Settings:
     """Returns the settings object that will be used by the rest of the app."""
-    env = os.getenv("TREKSAFER_ENV", "dev")
-    _load_dotenv(env)
-    yaml_defaults = _load_yaml_defaults(env)
-    return Settings(**yaml_defaults)
+    _load_dotenv()
+    return Settings(**_yaml_defaults())
 
 
 # Instantiate once so callers can use from app.config import settings.

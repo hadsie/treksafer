@@ -1,13 +1,17 @@
-.idea
-.DS_Store
-.pytest_cache
+# Editor / IDE settings
+.idea/
+.continue/
+.vscode/
 treksafer.iml
-.vscode
-venv
-cache
-shapefiles
-config/prod.yaml
-config/dev.yaml
-config/test.yaml
-*__pycache__
-logs
+# macOS / System files
+.DS_Store
+# Python stuff
+__pycache__/
+.pytest_cache/
+venv/
+# Application runtime output
+cache/
+logs/
+shapefiles/
+# Environment / secrets
+.env*

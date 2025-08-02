@@ -1,4 +1,4 @@
-env: prod
+# Config for TrekSafer
 
 # The radius to search for fires within (km).
 fire_radius: 50
@@ -10,20 +10,20 @@ download_timeout: 600
 shapefiles: "shapefiles"
 
 # Logging
-log_file: "logs/prod.log"
+log_file: "logs/${TREKSAFER_ENV}.log"
 # logging.INFO
 log_level: 20
 
 transports:
   - type: "signalwire"
-    project_id: "REPLACE WITH SIGNALWIRE PROJECT ID"
-    api_token: "REPLACE WITH SIGNALWIRE API TOKEN"
-    phone_number: "REPLACE WITH SIGNALWIRE PHONE NUMBER"
-    enabled: false
+    enabled: ${TREKSAFER_SW_ENABLED:-false}
+    project_id: ${TREKSAFER_SW_PROJECT}
+    api_token : ${TREKSAFER_SW_TOKEN}
+    phone_number: "${TREKSAFER_SW_NUMBER}"
   - type: "cli"
-    host: "localhost"
-    port: 8888
-    enabled: true
+    enabled: ${TREKSAFER_CLI_ENABLED:-true}
+    host: ${TREKSAFER_CLI_HOST:-localhost}
+    port: "${TREKSAFER_CLI_PORT:-8888}"
 
 # Data files, located at {shapfiles}/{location}/{filename}.
 data:
