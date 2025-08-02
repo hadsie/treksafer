@@ -1,33 +1,43 @@
+"""
+Transport package
 
-from app.config import get_config
+A transport is a pluggable message gateway, allows us to simultaneously receive / send from
+different sources (SMS, email, etc).
+"""
 
-#from .signal import SignalWireTransport
+from typing import List, Optional
+
+from app.config import Settings
+from .base import BaseTransport
+from .signalwire import SignalWireTransport
 from .cli import CLITransport
 #from .email import EmailTransport
 
 TRANSPORT_FACTORIES = {
-    #"signalwire": SignalWireTransport,
+    "signalwire": SignalWireTransport,
     "cli": CLITransport,
     #"email": EmailTransport,
 }
 
-def get_transport_config(type):
-    settings = get_config()
+def get_transport_config(settings: Settings, transport_type: str):
+    """
+    Return the Pydantic config object for the requested transport type,
+    or None if not found.
+    """
     for cfg in settings.transports:
-        if cfg.type == type:
+        if cfg.type == transport_type:
             return cfg
-    return False
+    return None
 
-def get_transports():
-    settings = get_config()
-    transport_instances = []
+def get_transports(settings: Settings) -> List[BaseTransport]:
+    instances: list[BaseTransport] = []
 
     for cfg in settings.transports:
         if not cfg.enabled:
             continue
-        transport_class = TRANSPORT_FACTORIES[cfg.type]
-        # If you used SecretStr, unwrap secrets here:
-        transport = transport_class(cfg.dict())
-        transport_instances.append(transport)
+        factory = TRANSPORT_FACTORIES[cfg.type]
+        if factory is None:
+            raise ValueError(f"Unsupported transport type '{cfg.type}' in config.")
+        instances.append(factory(cfg))
 
-    return transport_instances
+    return instances

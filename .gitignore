@@ -4,7 +4,10 @@
 treksafer.iml
 .vscode
 venv
+cache
+shapefiles
 config/prod.yaml
+config/dev.yaml
 config/test.yaml
 *__pycache__
 logs

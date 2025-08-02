@@ -47,4 +47,4 @@ def parse_message(message):
 
     if lat and long:
         return (lat, long)
-    return False
+    return None

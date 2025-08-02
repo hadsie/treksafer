@@ -1,14 +1,16 @@
 from abc import ABC, abstractmethod
 
-class Transport(ABC):
+class BaseTransport(ABC):
     @abstractmethod
     def send(self, recipient, content):
         pass
 
     @abstractmethod
-    def listen(self):
+    async def listen(self) -> None:
+        """Run the listener. Should not return until asked to stop."""
         pass
 
     @abstractmethod
-    def on_incoming_message(self, message):
+    async def stop(self) -> None:
+        """Shut down resources opened in listen()."""
         pass

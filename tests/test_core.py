@@ -4,9 +4,10 @@ import socket
 import pytest
 
 from app.transport import get_transport_config
+from app.config import settings
 
 def _cli_transport(message):
-    config = get_transport_config('cli')
+    config = get_transport_config(settings, 'cli')
     try:
         with socket.create_connection((config.host, config.port)) as sock:
             print(f"Connected to CLI transport at {config.host}:{config.port}")

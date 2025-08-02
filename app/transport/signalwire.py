@@ -1,80 +1,107 @@
+
+import asyncio
 import logging
+from typing import Optional
 
 from signalwire.relay.consumer import Consumer
-from signalwire.relay.client import Client
 
 from app.messages import handle_message
-from .base import Transport
+from app.config import SignalWireConfig
+from .base import BaseTransport
+
 
 class CustomConsumer(Consumer):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.logger = None
-        self.responses = None
-        self.sms_log = None
-        self.number = None
 
-    def setup(self):
-        self.contexts = ['treksafer']
-        #self.client = Client(project=self.project, token=self.token)
-        self.responses = Messages()
+    def __init__(self, project: str, token: str, from_number: str, logger: logging.Logger):
+        super().__init__(project=project, token=token, contexts=["treksafer"])
+        self.from_number = from_number
+        self.log = logger
+        self.sms_log = self._setup_sms_logger()
 
-    def setupLogging(self):
-        self.sms_log = logging.getLogger('sms')
-        formatter = logging.Formatter('%(asctime)s %(name)s %(levelname)s %(message)s', datefmt="%Y-%m-%d %H:%M:%S")
-        log_handler = logging.FileHandler('logs/sms.log')
-        log_handler.setFormatter(formatter)
-        self.sms_log.setLevel(logging.DEBUG)
-        self.sms_log.addHandler(log_handler)
+    def _setup_sms_logger(self) -> logging.Logger:
+        # separate SMS-only log
+        sms_log = logging.getLogger("sms")
+        if not sms_log.handlers:
+            fmt = "%(asctime)s %(name)s %(levelname)s %(message)s"
+            h = logging.FileHandler("logs/sms.log")
+            h.setFormatter(logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S"))
+            sms_log.setLevel(logging.DEBUG)
+            sms_log.addHandler(h)
+        return sms_log
 
-    async def ready(self):
-        print('SignalWire consumer is ready...')
-        self.logger.info('SignalWire Consumer is listening for messages.')
+    async def ready(self) -> None:
+        self.log.info("SignalWire consumer ready (context: treksafer).")
 
     async def on_incoming_message(self, message):
-        self.logger.info(f'SignalWire Consumer received incoming message from {message.from_number}.')
-        outgoing_message = handle_message(message.body)
-        return self.send_message(message.from_number, outgoing_message)
+        self.log.info("SignalWire SMS received incoming message from %s.", message.from_number)
+        response = handle_message(message.body)
 
-    async def send_message(self, number, message):
-        result = await self.client.messaging.send(context='treksafer', from_number=self.number, to_number=number, body=message)
+        self.sms_log.info("From: %s, Body: %s", message.from_number, message.body)
+
+        result = await self.client.messaging.send(
+            context="treksafer",
+            from_number=self.from_number,
+            to_number=message.from_number,
+            body=response,
+        )
+
         if result.successful:
-            self.logger.info(f'Sent SMS to {number} with message ID {result.message_id}.')
+            self.log.info("Replied to %s (msg id %s).", message.from_number, result.message_id)
         else:
-            self.logger.warning(f'Failed to send SMS response to {number} with message ID {result.message_id}.')
-        self.sms_log.info(message)
+            self.log.warning("Failed to reply to %s.", message.from_number)
 
-        return result.successful
+        self.sms_log.info("Reply: %s", response)
 
 
-class SignalWireTransport(Transport):
-    def __init__(self, settings: dict):
-        self.settings = settings
-        self.server_socket = None
+class SignalWireTransport(BaseTransport):
+    """Async transport adapter for SignalWire SMS."""
 
-    def send(self, recipient, content):
-        raise NotImplementedError("CLITransport.send_message is not used.")
+    def __init__(self, cfg: SignalWireConfig):
+        self.cfg = cfg
+        self._consumer: Optional[CustomConsumer] = None
+        self._thread_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._future: Optional[asyncio.Future] = None
 
-    def listen(self):
-        consumer = CustomConsumer()
-        consumer.run()
+    async def listen(self) -> None:
+        package_logger = logging.getLogger(__name__.split(".", 1)[0])
 
-        package_name = __name__.split('.', 1)[0]
-        logger = logging.getLogger(package_name)
+        self._consumer = CustomConsumer(
+            project=self.cfg.project_id.get_secret_value(),
+            token=self.cfg.api_token.get_secret_value(),
+            from_number=self.cfg.phone_number,
+            logger=package_logger,
+        )
 
-        try:
-            consumer = CustomConsumer(
-                project=self.settings.project_id,
-                token=self.settings.api_token
-            )
-            consumer.number = self.settings.phone_number
-            consumer.logger = logger
-            consumer.run()
-        except Exception as err:
-            logger.error('Exception caught in signalwire consumer: %s' % str(err))
-            print(f"Unexpected {err=}, {type(err)=}")
-            raise
+        # run consumer in a separate thread, keep the thread's loop reference so
+        # we can shut it down later.
+        self._future = asyncio.create_task(
+            asyncio.to_thread(_run_consumer_in_thread, self._consumer, self)
+        )
 
-    def on_incoming_message(self, message):
-        response = handle_message(message)
-        return response
+        await self._future
+
+    async def stop(self) -> None:
+        if self._consumer and self._thread_loop:
+            coro = getattr(self._consumer, "end", None) or getattr(self._consumer, "disconnect")
+            if asyncio.iscoroutinefunction(coro):
+                fut = asyncio.run_coroutine_threadsafe(coro(), self._thread_loop)
+                await asyncio.wrap_future(fut)
+            else:
+                self._thread_loop.call_soon_threadsafe(coro)
+
+        # Wait for the background thread to finish; no explicit cancel needed
+        if self._future and not self._future.done():
+            await self._future
+
+    def send(self, recipient: str, content: str):
+        raise NotImplementedError("SignalWireTransport.send() is unused.")
+
+def _run_consumer_in_thread(consumer: Consumer, parent: "SignalWireTransport"):
+    """Runs SignalWire Consumer in its own thread-local event loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    parent._thread_loop = loop          # give stop() access to this loop
+    try:
+        consumer.run()                  # blocks until end()/disconnect()
+    finally:
+        loop.close()

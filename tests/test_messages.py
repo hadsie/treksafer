@@ -44,7 +44,7 @@ class TestParseMessage:
 
     def test_invalid_coords(self):
         message = "Message with invalid coords (1234, 99)"
-        assert(parse_message(message) == False)
+        assert(parse_message(message) == None)
 
 class TestMessages:
     def test_standard_fire(self):
@@ -85,3 +85,51 @@ class TestMessages:
         }
         message = Messages().fire(fire, "short")
         assert len(message) == 22, f"Got {len(message)} characters:\n{message}"
+
+
+def mock_fire(**overrides):
+    base = {
+        "Fire": "K72481",
+        "Name": "Little Creek",
+        "Location": "5 km NW of Town",
+        "Distance": 12345,
+        "Direction": "NW",
+        "Size": 123.4,
+        "Status": "Out of Control",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_format_full_message():
+    m = Messages().fire(mock_fire(), size="full")
+    assert "Fire: Little Creek (K72481)" in m
+    assert "Size: 123 ha" in m
+    assert "Status:" in m
+    # Ensure it's multiple lines.
+    assert "\n" in m
+
+
+def test_format_medium_truncates():
+    m = Messages().fire(mock_fire(), size="medium")
+    assert "Status" not in m
+    assert m.count("\n") == 2
+
+
+def test_format_auto_shortens_for_sms():
+    big_name = "VeryLongFireNameThatWillPushTheMessageOverTheLimit"
+    # Make it even longer.
+    fire = mock_fire(Name=big_name * 4)
+    m = Messages().fire(fire, size="full")
+    assert len(m.encode("utf_16_le")) // 2 <= 159
+
+
+def test_distance_rounding_rules():
+    # < 10 km = 1 decimal
+    assert Messages()._format_distance(9444) == 9.4
+    # Rounding
+    assert Messages()._format_distance(9950) == 10
+    # Strips .0
+    assert Messages()._format_distance(1000) == 1
+    # ≥ 10 km = integer
+    assert Messages()._format_distance(43210) == 43
