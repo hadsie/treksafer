@@ -27,7 +27,7 @@ from pyproj import Transformer
 from shapely.geometry import Point
 from shapely.ops import nearest_points
 
-from .config import Settings, get_config
+from .config import get_config
 from .helpers import acres_to_hectares, compass_direction
 
 

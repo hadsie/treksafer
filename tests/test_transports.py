@@ -1,5 +1,3 @@
-# Note: Run tests with: TREKSAFER_ENV=test pytest
-
 import socket
 import pytest
 

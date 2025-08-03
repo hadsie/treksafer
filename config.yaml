@@ -25,7 +25,7 @@ transports:
     host: ${TREKSAFER_CLI_HOST:-localhost}
     port: "${TREKSAFER_CLI_PORT:-8888}"
 
-# Data files, located at {shapfiles}/{location}/{filename}.
+# Data files, located at {shapefiles}/{location}/{filename}.
 data:
   - location: AB
     filename: AB_Fire_Perimeters_{DATE}.zip

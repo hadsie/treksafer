@@ -9,11 +9,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
+from typing import Iterable
 
 import requests_cache
 
 from .config import get_config, Settings
-from .transport import get_transports
+from .transport import get_transports, BaseTransport
 
 def _configure_logging(settings: Settings) -> None:
     log_dir = Path("logs")
