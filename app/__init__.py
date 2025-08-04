@@ -38,7 +38,7 @@ def _configure_logging(settings: Settings) -> None:
         logger.addHandler(sh)
 
 def _install_caches(settings: Settings) -> None:
-    cache_dir = Path("caches")
+    cache_dir = Path("cache")
     cache_dir.mkdir(exist_ok=True)
 
     bc_api_cache_name = f"cache/bc_fire_api_cache_{settings.env}"

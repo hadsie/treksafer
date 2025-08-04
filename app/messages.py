@@ -115,7 +115,7 @@ class Messages:
             km_rounded = round(km)
 
         # Strip the trailing “.0” if the number is an integer
-        return int(km_rounded) if km_rounded.is_integer() else km_rounded
+        return int(km_rounded) if km_rounded == int(km_rounded) else km_rounded
 
 def handle_message(message):
     responses = Messages()

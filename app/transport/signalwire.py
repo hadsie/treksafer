@@ -34,9 +34,9 @@ class CustomConsumer(Consumer):
 
     async def on_incoming_message(self, message):
         self.log.info("SignalWire SMS received incoming message from %s.", message.from_number)
-        response = handle_message(message.body)
-
         self.sms_log.info("From: %s, Body: %s", message.from_number, message.body)
+
+        response = handle_message(message.body)
 
         result = await self.client.messaging.send(
             context="treksafer",
