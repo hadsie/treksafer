@@ -9,7 +9,7 @@ Send the service a message from your satellite messenger with your GPS coordinat
 
 See https://treksafer.com for more information.
 
-1. Add TrekSafer’s number to your contacts (e.g. **+1-555-555-1234**).
+1. Add TrekSafer’s number to your contacts.
 1. From your inReach / satellite SMS device, open a new message to that number.
 1. Type **`fires`** — that’s it. *(Any text is fine; `fires` is easy to remember.)*
 1. Make sure your device is set to **include location** with outgoing messages (most inReach presets add “(lat, lon)” automatically).
