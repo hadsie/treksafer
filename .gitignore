@@ -3,6 +3,7 @@
 .continue/
 .vscode/
 treksafer.iml
+*.code-workspace
 # macOS / System files
 .DS_Store
 # Python stuff

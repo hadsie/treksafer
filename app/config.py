@@ -25,11 +25,24 @@ CONFIG_YAML = Path.cwd() / "config.yaml"
 
 class SignalWireConfig(BaseModel):
     type: Literal["signalwire"]
-    project_id: SecretStr
-    api_token: SecretStr
-    phone_number: str
-    enabled: bool
+    project_id: SecretStr | None = None
+    api_token: SecretStr | None = None
+    phone_number: str | None = None
+    enabled: bool = False
 
+    # require secrets only if enabled
+    @model_validator(mode="after")
+    def check_required_when_enabled(self):
+        if self.enabled:
+            missing = [
+                name for name in ("project_id", "api_token", "phone_number")
+                if getattr(self, name) in (None, "", "REPLACE WITH...")
+            ]
+            if missing:
+                raise ValueError(
+                    f"SignalWire transport enabled but missing: {', '.join(missing)}"
+                )
+        return self
 
 class CLIConfig(BaseModel):
     type: Literal["cli"]

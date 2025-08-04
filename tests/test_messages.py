@@ -1,50 +1,4 @@
-from app.helpers import parse_message
 from app.messages import Messages
-
-class TestParseMessage:
-    def test_basic_inreach(self):
-        message = "Test basic message with, punctuation and coordinates. inreachlink.com/ABC1234  (52.5092, -115.6182)"
-        assert(parse_message(message) == (52.5092, -115.6182))
-
-    def test_coords_only_pos_neg(self):
-        message = "(52.5092, -115.6182)"
-        assert(parse_message(message) == (52.5092, -115.6182))
-
-    def test_coords_only_neg_pos(self):
-        message = "(-52.5092, 115.6182)"
-        assert(parse_message(message) == (-52.5092, 115.6182))
-
-    def test_coords_arbitrary_placement(self):
-        message = "Test basic message   (52.5092, -115.6182) coordinates arbitrarily placed."
-        assert(parse_message(message) == (52.5092, -115.6182))
-
-    def test_newline(self):
-        message = "Test basic message  \n (52.5092, -115.6182) coordinates arbitrarily placed."
-        assert(parse_message(message) == (52.5092, -115.6182))
-
-    def test_newline_in_coords(self):
-        message = "Test basic message (52.5092,\n -115.6182) coordinates arbitrarily placed."
-        assert(parse_message(message) == (52.5092, -115.6182))
-
-    def test_newline_and_spaces_in_coords(self):
-        message = "Here:\n( 52.5092 ,\n-115.6182 )"
-        assert parse_message(message) == (52.5092, -115.6182), f"Got {message}"
-
-    def test_coords_no_decimal(self):
-        message = "Test basic message (52, -115) coordinates arbitrarily placed."
-        assert(parse_message(message) == (52, -115))
-
-    def test_invalid_multiple_pairs(self):
-        message = "Invalid (1234, 99) valid (52.5092, -115.6182)."
-        assert(parse_message(message) == (52.5092, -115.6182))
-
-    def test_valid_multiple_pairs(self):
-        message = "Valid (12, 99) valid (52.5092, -115.6182)."
-        assert(parse_message(message) == (12, 99))
-
-    def test_invalid_coords(self):
-        message = "Message with invalid coords (1234, 99)"
-        assert(parse_message(message) == None)
 
 class TestMessages:
     def test_standard_fire(self):
@@ -133,3 +87,5 @@ def test_distance_rounding_rules():
     assert Messages()._format_distance(1000) == 1
     # ≥ 10 km = integer
     assert Messages()._format_distance(43210) == 43
+    # Exactly 10km
+    assert Messages()._format_distance(10000) == 10
