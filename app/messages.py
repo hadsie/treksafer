@@ -3,7 +3,7 @@
 import logging
 
 from .config import get_config
-from .helpers import parse_message
+from .helpers import parse_message, get_aqi
 from .fires import FindFires
 
 _SMS_LIMIT = 159
@@ -118,22 +118,40 @@ class Messages:
         return int(km_rounded) if km_rounded == int(km_rounded) else km_rounded
 
 def handle_message(message):
+    """
+    Process an inbound message to locate nearby fires and generate appropriate responses.
+
+    This function parses the incoming message to extract GPS coordinates,
+    searches for fires near those coordinates, and formats appropriate
+    response messages based on the findings.
+
+    :param str message: The inbound message containing location information
+    :return: Formatted response message(s) about nearby fires or error messages
+    :rtype: str
+    """
     responses = Messages()
     coords = parse_message(message)
     if not coords:
         logging.warning('No GPS coords found in message.')
         logging.warning(message)
         return responses.no_gps()
+
+    settings = get_config()
+    aqi_message = ""
+    if settings.include_aqi:
+        aqi = get_aqi(coords)
+        aqi_message = f"AQI: {aqi}\n\n"
+
     findfires = FindFires(coords)
     if findfires.out_of_range():
-        return responses.outside_of_area()
+        return aqi_message + responses.outside_of_area()
 
     logging.info(message)
     fires = findfires.nearby()
     if not fires:
-        return responses.no_fires()
+        return aqi_message + responses.no_fires()
 
     fire_messages = []
     for fire in fires:
         fire_messages.append(responses.fire(fire))
-    return "\n".join(fire_messages)
+    return aqi_message + "\n\n".join(fire_messages)

@@ -25,7 +25,7 @@ def _cli_transport(message):
 def test_cli_transport_no_fires():
     message = "FIRECHECK: (49.25,-123.10)"
     response = _cli_transport(message)
-    assert response.startswith("No fires reported within")
+    assert response.find("No fires reported within") != -1
 
 @pytest.mark.smoke
 def test_cli_transport_fires_found():

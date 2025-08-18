@@ -78,6 +78,8 @@ class Settings(BaseSettings):
     env: str = os.getenv("TREKSAFER_ENV", "dev")
     fire_radius: int = 100
     download_timeout: int = 600
+    include_aqi: bool = True
+
     request_cache_timeout: int = 14400  # 4 hours.
 
     shapefiles: str = "shapefiles"

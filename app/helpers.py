@@ -1,5 +1,7 @@
 import re
+import requests
 import osmnx as ox
+
 from pyproj import Transformer
 from urllib.parse import urlparse, parse_qs, unquote_plus
 
@@ -41,6 +43,31 @@ def compass_direction(pointA, pointB):
 
     bearing = ox.bearing.calculate_bearing(pointa[0], pointa[1], pointb[0], pointb[1])
     return directions[round(bearing/22.5)]
+
+def get_aqi(coords):
+    """
+    Fetch the current US Air Quality Index (AQI) for given coordinates.
+
+    Makes a request to the Open-Meteo Air Quality API to grab the most
+    recent AQI reading.
+
+    Args:
+        coords (tuple): A tuple containing (latitude, longitude) as floats.
+
+    Returns:
+        int: The current US Air Quality Index value.
+    """
+    url = (
+        "https://air-quality-api.open-meteo.com/v1/air-quality"
+        f"?latitude={coords[0]}&longitude={coords[1]}"
+        "&hourly=pm10,pm2_5,ozone,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,us_aqi"
+    )
+
+    resp = requests.get(url)
+    data = resp.json()
+
+    # Get latest AQI
+    return data["hourly"]["us_aqi"][0]
 
 def parse_message(message):
     """Parse an SMS message for lat/long coordinates.

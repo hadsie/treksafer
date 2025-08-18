@@ -6,6 +6,9 @@ fire_radius: 50
 # The amount of time to wait for a download before giving up, in seconds.
 download_timeout: 600
 
+# Include the AQI at the specified coordinates in the response.
+include_aqi: true
+
 # Path to shapefiles
 shapefiles: "shapefiles"
 
@@ -47,7 +50,7 @@ data:
         fields:
           Name: incidentName
           Location: incidentLocation
-          Status: stageOfControl
+          Status: stageOfControlCode
   - location: CA
     filename: CA_Fire_Perimeters_{DATE}.zip
     mapping:
