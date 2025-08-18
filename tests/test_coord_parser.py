@@ -47,6 +47,14 @@ class TestParseMessage:
         message = "Message with invalid coords (1234, 99)"
         assert(parse_message(message) == None)
 
+    def test_more_coords(self):
+        assert parse_message("(49.253491, -123.017063)") == (49.253491, -123.017063)
+        assert parse_message("coords: 50.58225° N, 122.09114° W") == (50.58225, -122.09114)
+        assert parse_message("N 50.58225°, W 122.09114°") == (50.58225, -122.09114)
+        assert parse_message("33.12345° s, 18.54321° e") == (-33.12345, 18.54321)
+        assert parse_message("0.0000, 0.0000") == (0.0, 0.0)
+
+
 # --- Apple Maps share links --- #
 
 APPLE_CASES = [

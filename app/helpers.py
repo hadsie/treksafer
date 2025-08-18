@@ -6,6 +6,21 @@ from urllib.parse import urlparse, parse_qs, unquote_plus
 _LAT = r'-?\d{1,2}(?:\.\d+)?'   # up to ±90
 _LON = r'-?\d{1,3}(?:\.\d+)?'   # up to ±180
 
+_DEG_HEMI_PATTERNS = [
+    # 1) "50.58225° N, 122.09114° W"
+    re.compile(
+        r'(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lat_dir>[NS])\s*[,;]?\s*'
+        r'(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lon_dir>[EW])',
+        re.IGNORECASE | re.UNICODE
+    ),
+    # 2) "N 50.58225°, W 122.09114°"
+    re.compile(
+        r'(?P<lat_dir>[NS])\s*(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*[,;]?\s*'
+        r'(?P<lon_dir>[EW])\s*(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)\s*[°º]?',
+        re.IGNORECASE | re.UNICODE
+    ),
+]
+
 def acres_to_hectares(acres):
     return round(float(acres)/2.4710538147, 2)
 
@@ -28,7 +43,14 @@ def compass_direction(pointA, pointB):
     return directions[round(bearing/22.5)]
 
 def parse_message(message):
-    """Parse an SMS message for lat/long coordinates."""
+    """Parse an SMS message for lat/long coordinates.
+
+    Supports:
+        - Plain decimal degrees: (49.123, -123.456)
+        - Apple Maps links
+        - Google Maps links
+        - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
+    """
 
     # Check for Google or Apple map shares.
     for url_txt in re.findall(r'https?://\S+', message):
@@ -41,8 +63,10 @@ def parse_message(message):
         if coords:
             return coords
 
+
     lat_coord = r'-?\d{1,2}\.\d{1,8}|-?\d{1,2}'
     long_coord = r'-?\d{1,3}\.\d{1,8}|-?\d{1,3}'
+
     # inReach has the coordinates at the end of the message in brackets.
     m = re.search(r'\((%s),\s*(%s)\)\s*$' % (lat_coord, long_coord), message)
 
@@ -61,10 +85,36 @@ def parse_message(message):
                 long = coords[1]
                 break
 
-    if lat and long:
+    # If decimal parsing didn’t hit, try degree+hemisphere patterns.
+    if lat is None or long is None:
+        for pat in _DEG_HEMI_PATTERNS:
+            m = pat.search(message)
+            if m:
+                lat_val = float(m.group('lat'))
+                lon_val = float(m.group('lon'))
+                lat_dir = m.group('lat_dir')
+                lon_dir = m.group('lon_dir')
+                lat = _apply_hemisphere(lat_val, lat_dir, for_lat=True)
+                long = _apply_hemisphere(lon_val, lon_dir, for_lat=False)
+                # Sanity check bounds
+                if -90 <= lat <= 90 and -180 <= long <= 180:
+                    break
+                else:
+                    lat = long = None
+
+    if lat is not None and long is not None:
         return (lat, long)
 
     return None
+
+def _apply_hemisphere(value: float, hemi: str, for_lat: bool) -> float:
+    # hemisphere wins over sign if both appear (e.g., "-50 N" -> +50)
+    v = abs(value)
+    hemi = hemi.upper()
+    if for_lat:
+        return v if hemi == 'N' else -v
+    else:
+        return -v if hemi == 'W' else v
 
 def _valid_coords(lat: float, lon: float) -> bool:
     return -90 <= lat <= 90 and -180 <= lon <= 180
