@@ -1,7 +1,9 @@
+import osmnx as ox
+import pytz
 import re
 import requests
-import osmnx as ox
 
+from datetime import datetime
 from pyproj import Transformer
 from urllib.parse import urlparse, parse_qs, unquote_plus
 
@@ -60,14 +62,22 @@ def get_aqi(coords):
     url = (
         "https://air-quality-api.open-meteo.com/v1/air-quality"
         f"?latitude={coords[0]}&longitude={coords[1]}"
-        "&hourly=pm10,pm2_5,ozone,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,us_aqi"
+        "&hourly=us_aqi&timezone=America%2FLos_Angeles&forecast_days=1"
     )
 
     resp = requests.get(url)
     data = resp.json()
 
+    # Get the current "hour" in the same timezone as the JSON data is giving us.
+    api_timezone = data["timezone"]
+    current_time = datetime.now(pytz.timezone(api_timezone))
+    current_hour = current_time.strftime('%Y-%m-%dT%H:00')
+
+    # Find the index of current time in the hourly time array, and match that to the AQI array.
+    current_index = data["hourly"]["time"].index(current_hour)
+
     # Get latest AQI
-    return data["hourly"]["us_aqi"][0]
+    return data["hourly"]["us_aqi"][current_index]
 
 def parse_message(message):
     """Parse an SMS message for lat/long coordinates.
