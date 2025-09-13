@@ -31,6 +31,52 @@ from .config import get_config
 from .helpers import acres_to_hectares, compass_direction
 
 
+# Fire status filtering constants and utilities
+STATUS_LEVELS = {
+    'active': 4,
+    'managed': 3,
+    'controlled': 2,
+    'out': 1
+}
+
+def should_include_fire(fire_status_level, configured_level):
+    """
+    Determine if a fire should be included based on status levels.
+    Similar to logging levels - higher or equal levels are included.
+
+    Args:
+        fire_status_level (str): The fire's status level ('active', 'managed', etc.)
+        configured_level (str): The minimum level to include
+
+    Returns:
+        bool: True if fire should be included
+    """
+    fire_priority = STATUS_LEVELS.get(fire_status_level, 0)
+    min_priority = STATUS_LEVELS.get(configured_level, 0)
+    return fire_priority >= min_priority
+
+def fire_status_level(raw_status, status_map):
+    """
+    Map a raw fire status to a status level using the status_map.
+
+    Args:
+        raw_status (str): Raw status from shapefile (e.g., 'OUT_CNTRL')
+        status_map (dict): Mapping from levels to raw status values
+
+    Returns:
+        str: Status level ('active', 'managed', 'controlled', 'out') or 'active' if unknown
+    """
+    if not raw_status or not status_map:
+        # Default to 'active' for unknown statuses (safety first)
+        return 'active'
+
+    for level, raw_statuses in status_map.items():
+        if raw_status in raw_statuses:
+            return level
+
+    # Default to 'active' for unknown statuses (safety first)
+    return 'active'
+
 TRANSFORMS = {
     "acres_to_hectares": acres_to_hectares,
 }
@@ -103,13 +149,30 @@ class FindFires:
 
     def search(self, perimeters, mapping):
         fires = []
+        min_status_level = self.settings.fire_status_level
+        status_map = mapping.get('status_map', {}) if mapping else {}
+
         for _, row in perimeters.iterrows():
             fire_perimeter = row['geometry']
             distance = fire_perimeter.distance(self.location)
             if distance < self.distance_limit:
                 pointB = nearest_points(self.location, fire_perimeter)[1]
                 data = _normalize_row(mapping, row, self.location, pointB, distance)
-                fires.append(data)
+
+                # Apply status filtering
+                raw_status = None
+                if mapping and 'fields' in mapping and 'Status' in mapping['fields']:
+                    status_field = mapping['fields']['Status']
+                    raw_status = getattr(row, status_field, None)
+
+                # Determine if fire should be included
+                include_fire = True
+                if raw_status:
+                    fire_level = fire_status_level(raw_status, status_map)
+                    include_fire = should_include_fire(fire_level, min_status_level)
+
+                if include_fire:
+                    fires.append(data)
         return fires
 
     def nearby(self):
@@ -180,4 +243,3 @@ class FindFires:
         transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
         x, y = transformer.transform(coords[1], coords[0])
         return Point(x, y)
-

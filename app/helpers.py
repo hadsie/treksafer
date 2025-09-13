@@ -144,6 +144,7 @@ def parse_message(message):
 
     return None
 
+
 def _apply_hemisphere(value: float, hemi: str, for_lat: bool) -> float:
     # hemisphere wins over sign if both appear (e.g., "-50 N" -> +50)
     v = abs(value)

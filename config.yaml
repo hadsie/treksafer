@@ -9,6 +9,11 @@ download_timeout: 600
 # Include the AQI at the specified coordinates in the response.
 include_aqi: true
 
+# Fire status filtering (similar to logging levels)
+# Options: 'active', 'managed', 'controlled', 'out'
+# Default 'managed' means show active + managed fires only
+fire_status_level: 'managed'
+
 # Path to shapefiles
 shapefiles: "shapefiles"
 
