@@ -80,26 +80,46 @@ def get_aqi(coords):
     return data["hourly"]["us_aqi"][current_index]
 
 def parse_message(message):
-    """Parse an SMS message for lat/long coordinates.
+    """Parse an SMS message for lat/long coordinates and optional fire status commands.
 
     Supports:
         - Plain decimal degrees: (49.123, -123.456)
         - Apple Maps links
         - Google Maps links
         - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
+        - Fire status commands: 'active', 'all'
+
+    Returns:
+        tuple: ((lat, lon), fire_level_override) where:
+            - coordinates: (lat, lon) tuple or None if not found
+            - fire_level_override: 'active', 'out', or None
     """
+
+    # Step 1: Extract fire level command (if present)
+    fire_level_override = None
+
+    # Look for "active" or "all" commands (case insensitive)
+    fire_command_pattern = r'\b(active|all)\b'
+    match = re.search(fire_command_pattern, message, re.IGNORECASE)
+    if match:
+        command = match.group(1).lower()
+        if command == 'active':
+            fire_level_override = 'active'
+        elif command == 'all':
+            fire_level_override = 'out'  # 'out' level shows all fires
+
+    # Step 2: Extract coordinates (existing logic)
+    coords = None
 
     # Check for Google or Apple map shares.
     for url_txt in re.findall(r'https?://\S+', message):
         parsed = urlparse(url_txt)
-        coords = None
         if 'maps.apple.com' in parsed.netloc:
             coords = _coords_from_apple(parsed)
         elif any(domain in parsed.netloc for domain in ('google.', 'goo.gl')) and '/maps' in parsed.path:
             coords = _coords_from_google(parsed)
         if coords:
-            return coords
-
+            return (coords, fire_level_override)
 
     lat_coord = r'-?\d{1,2}\.\d{1,8}|-?\d{1,2}'
     long_coord = r'-?\d{1,3}\.\d{1,8}|-?\d{1,3}'
@@ -114,15 +134,15 @@ def parse_message(message):
     else:
         # Find a matching coordinate pair anywhere in the string.
         m = re.findall(r'\b(%s)\s*,\s*(%s)\b' % (lat_coord, long_coord), message)
-        for coords in m:
-            coords = [float(x) for x in coords]
+        for coords_match in m:
+            coords_vals = [float(x) for x in coords_match]
             # Find the first number pair that matches lat/long coords.
-            if coords[0] <= 90 and coords[0] >= -90 and coords[1] <= 180 and coords[1] >= -180:
-                lat = coords[0]
-                long = coords[1]
+            if coords_vals[0] <= 90 and coords_vals[0] >= -90 and coords_vals[1] <= 180 and coords_vals[1] >= -180:
+                lat = coords_vals[0]
+                long = coords_vals[1]
                 break
 
-    # If decimal parsing didn’t hit, try degree+hemisphere patterns.
+    # If decimal parsing didn't hit, try degree+hemisphere patterns.
     if lat is None or long is None:
         for pat in _DEG_HEMI_PATTERNS:
             m = pat.search(message)
@@ -140,7 +160,7 @@ def parse_message(message):
                     lat = long = None
 
     if lat is not None and long is not None:
-        return (lat, long)
+        return ((lat, long), fire_level_override)
 
     return None
 

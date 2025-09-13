@@ -132,11 +132,13 @@ def _normalize_row(mapping, row, location, closest_point, distance):
 class FindFires:
     """Locate fires within [fire_radius]km of a lat/lon coordinate."""
 
-    def __init__(self, coords):
+    def __init__(self, coords, user_fire_level=None):
         self.settings = get_config()
         self.distance_limit = self.settings.fire_radius * 1000
         self.location = self._to_epsg3857_point(coords)
         self.sources = self._data_sources()
+        # Use user override if provided, otherwise use config default
+        self.fire_status_level = user_fire_level or self.settings.fire_status_level
 
     def out_of_range(self) -> bool:
         """
@@ -149,7 +151,7 @@ class FindFires:
 
     def search(self, perimeters, mapping):
         fires = []
-        min_status_level = self.settings.fire_status_level
+        min_status_level = self.fire_status_level
         status_map = mapping.get('status_map', {}) if mapping else {}
 
         for _, row in perimeters.iterrows():

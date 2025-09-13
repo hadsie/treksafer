@@ -1,8 +1,10 @@
 import pytest
+from unittest.mock import Mock, patch
 from app.fires import (
     should_include_fire,
     fire_status_level,
     STATUS_LEVELS,
+    FindFires,
 )
 
 
@@ -186,3 +188,114 @@ def test_logging_level_behavior():
     assert should_include_fire('out', 'managed') == False
     assert should_include_fire('out', 'controlled') == False
     assert should_include_fire('out', 'out') == True
+
+
+@patch('app.fires.get_config')
+def test_findfires_with_user_fire_level_override(mock_get_config):
+    """Test that FindFires respects user fire level overrides."""
+    # Mock the config
+    mock_config = Mock()
+    mock_config.fire_status_level = 'managed'  # Default config level
+    mock_config.fire_radius = 100
+    mock_get_config.return_value = mock_config
+
+    coords = (49.123, -123.456)
+
+    # Test with user override 'active'
+    with patch.object(FindFires, '_data_sources', return_value=['BC']):
+        ff_active = FindFires(coords, user_fire_level='active')
+        assert ff_active.fire_status_level == 'active'
+
+    # Test with user override 'out' (shows all fires)
+    with patch.object(FindFires, '_data_sources', return_value=['BC']):
+        ff_all = FindFires(coords, user_fire_level='out')
+        assert ff_all.fire_status_level == 'out'
+
+    # Test without override (uses config default)
+    with patch.object(FindFires, '_data_sources', return_value=['BC']):
+        ff_default = FindFires(coords)
+        assert ff_default.fire_status_level == 'managed'  # config default
+
+    # Test with None override (should use config default)
+    with patch.object(FindFires, '_data_sources', return_value=['BC']):
+        ff_none = FindFires(coords, user_fire_level=None)
+        assert ff_none.fire_status_level == 'managed'  # config default
+
+
+@patch('app.fires.get_config')
+def test_findfires_backward_compatibility(mock_get_config):
+    """Test that FindFires constructor maintains backward compatibility."""
+    # Mock the config
+    mock_config = Mock()
+    mock_config.fire_status_level = 'controlled'
+    mock_config.fire_radius = 50
+    mock_get_config.return_value = mock_config
+
+    coords = (49.123, -123.456)
+
+    # Old-style constructor call (no user_fire_level parameter)
+    with patch.object(FindFires, '_data_sources', return_value=['BC']):
+        ff_old_style = FindFires(coords)
+        assert ff_old_style.fire_status_level == 'controlled'
+
+    # Should behave exactly the same as explicit None
+    with patch.object(FindFires, '_data_sources', return_value=['BC']):
+        ff_explicit_none = FindFires(coords, user_fire_level=None)
+        assert ff_explicit_none.fire_status_level == 'controlled'
+
+    # Both should use config default
+    assert ff_old_style.fire_status_level == ff_explicit_none.fire_status_level
+
+
+@patch('app.fires.get_config')
+def test_findfires_user_override_precedence(mock_get_config):
+    """Test that user override takes precedence over config default."""
+    # Mock the config with a specific default
+    mock_config = Mock()
+    mock_config.fire_status_level = 'managed'
+    mock_config.fire_radius = 75
+    mock_get_config.return_value = mock_config
+
+    coords = (49.123, -123.456)
+
+    # User override should take precedence even if different from config
+    with patch.object(FindFires, '_data_sources', return_value=['BC']):
+        ff_override = FindFires(coords, user_fire_level='out')
+        assert ff_override.fire_status_level == 'out'
+        assert ff_override.fire_status_level != mock_config.fire_status_level
+
+    # Config should still be accessible but not used for filtering
+    with patch.object(FindFires, '_data_sources', return_value=['BC']):
+        ff_override = FindFires(coords, user_fire_level='active')
+        assert ff_override.settings.fire_status_level == 'managed'  # config unchanged
+        assert ff_override.fire_status_level == 'active'  # instance uses override
+
+
+def test_findfires_user_fire_commands_integration():
+    """Test integration scenarios matching user fire commands."""
+    coords = (49.123, -123.456)
+
+    # Scenario 1: User sends "active" command (emergency evacuation)
+    # Should show only critical active fires
+    mock_config = Mock()
+    mock_config.fire_status_level = 'managed'  # Config default
+    mock_config.fire_radius = 100
+
+    with patch('app.fires.get_config', return_value=mock_config):
+        with patch.object(FindFires, '_data_sources', return_value=['BC']):
+            ff_emergency = FindFires(coords, user_fire_level='active')
+            assert ff_emergency.fire_status_level == 'active'
+
+    # Scenario 2: User sends "all" command (trip planning)
+    # Should show all fires regardless of status
+    with patch('app.fires.get_config', return_value=mock_config):
+        with patch.object(FindFires, '_data_sources', return_value=['BC']):
+            ff_planning = FindFires(coords, user_fire_level='out')
+            assert ff_planning.fire_status_level == 'out'
+
+    # Scenario 3: User sends no command (default behavior)
+    # Should use config default
+    with patch('app.fires.get_config', return_value=mock_config):
+        with patch.object(FindFires, '_data_sources', return_value=['BC']):
+            ff_default = FindFires(coords)
+            assert ff_default.fire_status_level == 'managed'
