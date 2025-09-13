@@ -39,6 +39,11 @@ data:
         Name: ALIAS
         Location: COMPLEX
         Status: STATUS
+    status_map:
+      active: ['Out of Control']
+      managed: ['Being Held']
+      controlled: ['Under Control']
+      out: []
   - location: BC
     filename: BC_Fire_Perimeters_{DATE}.zip
     mapping:
@@ -51,15 +56,25 @@ data:
           Name: incidentName
           Location: incidentLocation
           Status: stageOfControlCode
+    status_map:
+      active: ['OUT_CNTRL']
+      managed: ['HOLDING']
+      controlled: ['UNDR_CNTRL']
+      out: ['OUT']
   - location: CA
     filename: CA_Fire_Perimeters_{DATE}.zip
     mapping:
       fields:
-        Fire: fireId
-        Name: fireId
-        Location: fireArea
-        Size: fireSize
-        Status: fireStage
+        Fire: firename
+        Name: firename
+        Location: agency
+        Size: hectares
+        Status: stage_of_c
+    status_map:
+      active: ['OC']
+      managed: ['BH']
+      controlled: ['UC']
+      out: []
   - location: US
     filename: "WFIGS_Interagency_Perimeters_{DATE}.zip"
     mapping:
@@ -70,3 +85,8 @@ data:
         Size: attr_Incid
         Status: attr_Fir_2
       size_transform: acres_to_hectares
+    status_map:
+      active: ['OUT_CNTRL']
+      managed: ['Flanking', 'HOLDING']
+      controlled: ['UC']
+      out: ['OUT']

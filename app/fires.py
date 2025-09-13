@@ -123,6 +123,7 @@ class FindFires:
             for data_file in self.settings.data:
                 if data_file.location == source:
                     mapping = data_file.mapping
+                    break
             fires += self.search(fire_perimeters, mapping)
         return fires
 

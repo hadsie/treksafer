@@ -5,7 +5,7 @@ cli_connect.py — send a message to a running CLI transporter and print the res
 Defaults:
   host = 127.0.0.1
   port = 8888
-  timeout = 8s
+  timeout = 30s
 """
 
 import argparse
@@ -45,7 +45,7 @@ def main():
     parser.add_argument("message", nargs="+", help="Message to send (wrap in quotes if it has spaces).")
     parser.add_argument("--host", default="127.0.0.1", help="Host to connect to (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8888, help="Port to connect to (default: 8888)")
-    parser.add_argument("--timeout", type=float, default=8.0, help="Socket timeout in seconds (default: 8)")
+    parser.add_argument("--timeout", type=float, default=30, help="Socket timeout in seconds (default: 30)")
     parser.add_argument("--append-newline", action="store_true",
                         help="Append a newline after the message (some servers expect line-terminated input).")
     args = parser.parse_args()
