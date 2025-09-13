@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     fire_radius: int = 100
     download_timeout: int = 600
     include_aqi: bool = True
+    fire_status_level: str = 'managed'
 
     request_cache_timeout: int = 14400  # 4 hours.
 
@@ -89,6 +90,13 @@ class Settings(BaseSettings):
 
     log_file: str | None = None
     log_level: int = logging.INFO
+
+    @model_validator(mode='after')
+    def validate_fire_status_level(self):
+        valid_levels = ['active', 'managed', 'controlled', 'out']
+        if self.fire_status_level not in valid_levels:
+            raise ValueError(f"fire_status_level must be one of {valid_levels}")
+        return self
 
     def model_post_init(self, __context):
         if self.log_file is None:
