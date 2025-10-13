@@ -5,54 +5,73 @@ from app.helpers import parse_message
 class TestParseMessage:
     def test_basic_inreach(self):
         message = "Test basic message with, punctuation and coordinates. inreachlink.com/ABC1234  (52.5092, -115.6182)"
-        assert(parse_message(message) == (52.5092, -115.6182))
+        result = parse_message(message)
+        assert result["coords"] == (52.5092, -115.6182)
 
     def test_coords_only_pos_neg(self):
         message = "(52.5092, -115.6182)"
-        assert(parse_message(message) == (52.5092, -115.6182))
+        result = parse_message(message)
+        assert result["coords"] == (52.5092, -115.6182)
 
     def test_coords_only_neg_pos(self):
         message = "(-52.5092, 115.6182)"
-        assert(parse_message(message) == (-52.5092, 115.6182))
+        result = parse_message(message)
+        assert result["coords"] == (-52.5092, 115.6182)
 
     def test_coords_arbitrary_placement(self):
         message = "Test basic message   (52.5092, -115.6182) coordinates arbitrarily placed."
-        assert(parse_message(message) == (52.5092, -115.6182))
+        result = parse_message(message)
+        assert result["coords"] == (52.5092, -115.6182)
 
     def test_newline(self):
         message = "Test basic message  \n (52.5092, -115.6182) coordinates arbitrarily placed."
-        assert(parse_message(message) == (52.5092, -115.6182))
+        result = parse_message(message)
+        assert result["coords"] == (52.5092, -115.6182)
 
     def test_newline_in_coords(self):
         message = "Test basic message (52.5092,\n -115.6182) coordinates arbitrarily placed."
-        assert(parse_message(message) == (52.5092, -115.6182))
+        result = parse_message(message)
+        assert result["coords"] == (52.5092, -115.6182)
 
     def test_newline_and_spaces_in_coords(self):
         message = "Here:\n( 52.5092 ,\n-115.6182 )"
-        assert parse_message(message) == (52.5092, -115.6182), f"Got {message}"
+        result = parse_message(message)
+        assert result["coords"] == (52.5092, -115.6182), f"Got {message}"
 
     def test_coords_no_decimal(self):
         message = "Test basic message (52, -115) coordinates arbitrarily placed."
-        assert(parse_message(message) == (52, -115))
+        result = parse_message(message)
+        assert result["coords"] == (52, -115)
 
     def test_invalid_multiple_pairs(self):
         message = "Invalid (1234, 99) valid (52.5092, -115.6182)."
-        assert(parse_message(message) == (52.5092, -115.6182))
+        result = parse_message(message)
+        assert result["coords"] == (52.5092, -115.6182)
 
     def test_valid_multiple_pairs(self):
         message = "Valid (12, 99) valid (52.5092, -115.6182)."
-        assert(parse_message(message) == (12, 99))
+        result = parse_message(message)
+        assert result["coords"] == (12, 99)
 
     def test_invalid_coords(self):
         message = "Message with invalid coords (1234, 99)"
-        assert(parse_message(message) == None)
+        assert parse_message(message) == None
 
     def test_more_coords(self):
-        assert parse_message("(49.253491, -123.017063)") == (49.253491, -123.017063)
-        assert parse_message("coords: 50.58225° N, 122.09114° W") == (50.58225, -122.09114)
-        assert parse_message("N 50.58225°, W 122.09114°") == (50.58225, -122.09114)
-        assert parse_message("33.12345° s, 18.54321° e") == (-33.12345, 18.54321)
-        assert parse_message("0.0000, 0.0000") == (0.0, 0.0)
+        result1 = parse_message("(49.253491, -123.017063)")
+        assert result1["coords"] == (49.253491, -123.017063)
+
+        result2 = parse_message("coords: 50.58225° N, 122.09114° W")
+        assert result2["coords"] == (50.58225, -122.09114)
+
+        result3 = parse_message("N 50.58225°, W 122.09114°")
+        assert result3["coords"] == (50.58225, -122.09114)
+
+        result4 = parse_message("33.12345° s, 18.54321° e")
+        assert result4["coords"] == (-33.12345, 18.54321)
+
+        result5 = parse_message("0.0000, 0.0000")
+        assert result5["coords"] == (0.0, 0.0)
 
 
 # --- Apple Maps share links --- #
@@ -104,7 +123,8 @@ NEGATIVE_CASES = [
 
 @pytest.mark.parametrize("msg,expected", APPLE_CASES + GOOGLE_CASES)
 def test_parse_message_success(msg, expected):
-    assert parse_message(msg) == pytest.approx(expected)
+    result = parse_message(msg)
+    assert result["coords"] == pytest.approx(expected)
 
 
 @pytest.mark.parametrize("msg", NEGATIVE_CASES)

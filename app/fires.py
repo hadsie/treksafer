@@ -29,7 +29,7 @@ from shapely.ops import nearest_points
 
 from .config import get_config
 from .helpers import acres_to_hectares, compass_direction
-
+from .filters import apply_filters, create_fire_filters
 
 TRANSFORMS = {
     "acres_to_hectares": acres_to_hectares,
@@ -110,21 +110,41 @@ class FindFires:
                 pointB = nearest_points(self.location, fire_perimeter)[1]
                 data = _normalize_row(mapping, row, self.location, pointB, distance)
                 fires.append(data)
+
         return fires
 
-    def nearby(self):
+
+    def nearby(self, filters=None):
         fires = []
         sources_map = self.sources_map()
+
+        # Build default filters from configuration using factory function
+        default_filters = create_fire_filters(self.settings)
+
+        # Merge user filters with defaults (user filters override defaults)
+        final_filters = {**default_filters, **(filters or {})}
+
         for source in self.sources:
             if source not in sources_map:
                 continue
             fire_perimeters = gpd.read_file(sources_map[source]).to_crs(epsg=3857)
             mapping = None
-            for data_file in self.settings.data:
-                if data_file.location == source:
-                    mapping = data_file.mapping
+            data_file = None
+            for df in self.settings.data:
+                if df.location == source:
+                    mapping = df.mapping
+                    data_file = df
                     break
-            fires += self.search(fire_perimeters, mapping)
+
+            # Search fires in this source (without filtering)
+            source_fires = self.search(fire_perimeters, mapping)
+
+            # Apply generic filtering
+            source_fires = apply_filters(
+                source_fires, final_filters, data_file, self.location, self.settings
+            )
+
+            fires += source_fires
         return fires
 
     def sources_map(self):
@@ -180,4 +200,3 @@ class FindFires:
         transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
         x, y = transformer.transform(coords[1], coords[0])
         return Point(x, y)
-

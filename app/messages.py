@@ -121,8 +121,8 @@ def handle_message(message):
     """
     Process an inbound message to locate nearby fires and generate appropriate responses.
 
-    This function parses the incoming message to extract GPS coordinates,
-    searches for fires near those coordinates, and formats appropriate
+    This function parses the incoming message to extract GPS coordinates and optional
+    filters, searches for fires near those coordinates, and formats appropriate
     response messages based on the findings.
 
     :param str message: The inbound message containing location information
@@ -130,14 +130,17 @@ def handle_message(message):
     :rtype: str
     """
     responses = Messages()
-    coords = parse_message(message)
-    if not coords:
+    parsed_data = parse_message(message)
+    if not parsed_data:
         logging.warning('No GPS coords found in message.')
         logging.warning(message)
         return responses.no_gps()
 
-    settings = get_config()
+    coords = parsed_data["coords"]
+    user_filters = parsed_data["filters"]
+
     aqi_message = ""
+    settings = get_config()
     if settings.include_aqi:
         aqi = get_aqi(coords)
         aqi_message = f"AQI: {aqi}\n\n"
@@ -147,7 +150,7 @@ def handle_message(message):
         return aqi_message + responses.outside_of_area()
 
     logging.info(message)
-    fires = findfires.nearby()
+    fires = findfires.nearby(user_filters)
     if not fires:
         return aqi_message + responses.no_fires()
 

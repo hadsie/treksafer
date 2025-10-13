@@ -6,12 +6,14 @@ class TestCoordinates:
 
     def test_field(self):
         ff = FindFires(self.field)
-        fires = ff.nearby()
+        # Use 'all' filter and 100km radius to get unfiltered results like the original behavior
+        fires = ff.nearby(filters={'status': 'all', 'distance': 150})
         assert(len(fires) == 4)
 
     def test_manning(self):
         ff = FindFires(self.manning)
-        fires = ff.nearby()
+        # Use 'all' filter and 100km radius to get unfiltered results like the original behavior
+        fires = ff.nearby(filters={'status': 'all', 'distance': 25})
         assert(len(fires) == 2)
 
     def test_out_of_range(self):
