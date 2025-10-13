@@ -236,7 +236,7 @@ class TestGenericFilterSystem:
         expected_handlers = {'status', 'distance', 'size'}
         assert set(FILTER_HANDLERS.keys()) == expected_handlers
 
-    def testapply_status_filter(self):
+    def test_apply_status_filter(self):
         """Test status filter application."""
         test_fires = [
             {'Fire': 'Fire1', 'Status': 'OUT_CNTRL'},
@@ -261,7 +261,7 @@ class TestGenericFilterSystem:
         result = apply_status_filter(test_fires, 'all', MockDataFile())
         assert len(result) == 3
 
-    def testapply_distance_filter(self):
+    def test_apply_distance_filter(self):
         """Test distance filter application."""
         test_fires = [
             {'Fire': 'Fire1', 'Distance': 10000},  # 10km
@@ -281,7 +281,7 @@ class TestGenericFilterSystem:
         result = apply_distance_filter(test_fires, 200, None, settings=MockSettings())
         assert len(result) == 3  # All fires within 150km
 
-    def testapply_size_filter(self):
+    def test_apply_size_filter(self):
         """Test size filter application."""
         test_fires = [
             {'Fire': 'Fire1', 'Size': 5.5},   # Above threshold
