@@ -28,12 +28,14 @@ def test_compass_direction():
 
 def test_parse_message_inreach_brackets():
     msg = "Fire test (49.1234, -123.9876)"
-    assert parse_message(msg) == (49.1234, -123.9876)
+    result = parse_message(msg)
+    assert result["coords"] == (49.1234, -123.9876)
 
 
 def test_parse_message_anywhere():
     msg = "Fire at  49.1 , -123.9  about 2 km west."
-    assert parse_message(msg) == (49.1, -123.9)
+    result = parse_message(msg)
+    assert result["coords"] == (49.1, -123.9)
 
 
 def test_parse_message_none():

@@ -3,6 +3,18 @@
 # The radius to search for fires within (km).
 fire_radius: 50
 
+# Maximum radius a user can specify (km).
+max_radius: 150
+
+# The default fire status filter level (active, controlled, all).
+# controlled: includes active, managed, and controlled fires (excludes out)
+# active: only active fires
+# all/out: all fires including out fires
+fire_status: "controlled"
+
+# Minimum fire size to include (hectares).
+fire_size: 1
+
 # The amount of time to wait for a download before giving up, in seconds.
 download_timeout: 600
 

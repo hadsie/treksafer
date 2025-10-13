@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     """App-wide settings loaded from YAML + env vars."""
     env: str = os.getenv("TREKSAFER_ENV", "dev")
     fire_radius: int = 100
+    max_radius: int = 150
+    fire_status: str = "controlled"
+    fire_size: int = 1
     download_timeout: int = 600
     include_aqi: bool = True
 

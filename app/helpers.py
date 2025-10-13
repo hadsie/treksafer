@@ -80,14 +80,37 @@ def get_aqi(coords):
     return data["hourly"]["us_aqi"][current_index]
 
 def parse_message(message):
-    """Parse an SMS message for lat/long coordinates.
+    """Parse an SMS message for lat/long coordinates and optional filters.
 
     Supports:
         - Plain decimal degrees: (49.123, -123.456)
         - Apple Maps links
         - Google Maps links
         - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
+        - Filter keywords: "active", "all"
+        - Distance filters: "25km", "10mi"
+
+    Returns:
+        dict: {"coords": (lat, lon), "filters": dict} or None if no coords found
     """
+
+    # Extract filters from message (case insensitive, using word boundaries)
+    filters = {}
+    message_lower = message.lower()
+
+    # Status filter
+    if re.search(r'\bactive\b', message_lower):
+        filters['status'] = 'active'
+    elif re.search(r'\ball\b', message_lower):
+        filters['status'] = 'all'
+
+    # Distance filter (support km and mi) - ensure it's standalone
+    distance_match = re.search(r'(?:^|\s)(\d+)(km|mi)(?=\s|$)', message_lower)
+    if distance_match:
+        value, unit = distance_match.groups()
+        # Convert to km if needed
+        km_value = float(value) if unit == 'km' else float(value) * 1.609344
+        filters['distance'] = km_value
 
     # Check for Google or Apple map shares.
     for url_txt in re.findall(r'https?://\S+', message):
@@ -98,7 +121,7 @@ def parse_message(message):
         elif any(domain in parsed.netloc for domain in ('google.', 'goo.gl')) and '/maps' in parsed.path:
             coords = _coords_from_google(parsed)
         if coords:
-            return coords
+            return {"coords": coords, "filters": filters}
 
 
     lat_coord = r'-?\d{1,2}\.\d{1,8}|-?\d{1,2}'
@@ -122,7 +145,7 @@ def parse_message(message):
                 long = coords[1]
                 break
 
-    # If decimal parsing didn’t hit, try degree+hemisphere patterns.
+    # If decimal parsing didn't hit, try degree+hemisphere patterns.
     if lat is None or long is None:
         for pat in _DEG_HEMI_PATTERNS:
             m = pat.search(message)
@@ -140,7 +163,7 @@ def parse_message(message):
                     lat = long = None
 
     if lat is not None and long is not None:
-        return (lat, long)
+        return {"coords": (lat, long), "filters": filters}
 
     return None
 
