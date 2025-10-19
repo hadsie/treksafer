@@ -167,9 +167,9 @@ class FindFires:
         Return list of ISO country codes or Canadian province codes whose
         polygon centroids lie within self.distance_limit of the query point.
         """
-        countries_filepath = "shapefiles/World_Countries_(Generalized)_-573431906301700955.zip"
+        countries_filepath = "boundaries/countries.zip"
         countries = gpd.read_file(countries_filepath)
-        canada_provinces_filepath = "shapefiles/Canada_Provincial_boundaries_generalized_-3595751168909660783.zip"
+        canada_provinces_filepath = "boundaries/canada_provinces.zip"
         canada_provinces = gpd.read_file(canada_provinces_filepath)
 
         sources = []
