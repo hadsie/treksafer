@@ -26,6 +26,36 @@ Currently all active fires within a 50km radius of your GPS location are returne
 
 ---
 
+## Filter Options
+
+You can customize your fire search with optional filters in your message:
+
+### Status Filters
+- **`active`** - Only active/out of control fires
+- **`all`** - All fires including extinguished ones
+- **Default** - Active, managed, and controlled fires (excludes extinguished)
+
+### Distance Filters
+- **`25km`** or **`10mi`** - Custom search radius (max 150km)
+- **Default** - 50km radius
+
+### Coordinate Formats Supported
+- Decimal degrees: `(49.123, -123.456)`
+- Hemisphere notation: `50.58225° N, 122.09114° W`
+- Apple Maps and Google Maps share links
+- InReach automatic format: `fires (lat, lon)`
+
+### Example Usage
+```
+Basic: fires
+With status filter: fires active
+With distance: fires 25km
+Combined filters: fires active 10mi
+With coordinates: (49.2827, -123.1207) active 25km
+```
+
+---
+
 ## Todo
 
 1. Currently wildfire data is pulled in manually / periodically, not at the time of the request. Pulling closer live data at the time of the request is a must have for fires of note.
