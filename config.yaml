@@ -102,3 +102,14 @@ data:
       managed: ['Flanking', 'HOLDING']
       controlled: ['UC']
       out: ['OUT']
+
+# Avalanche forecast settings
+avalanche_distance_buffer: 20  # Distance buffer for avalanche provider selection (km)
+
+avalanche:
+  providers:
+    CA:
+      class: AvalancheCanadaProvider
+      api_url: https://api.avalanche.ca/forecasts/en/
+      cache_timeout: 3600
+      forecast_cutoff_hour: 16  # When to switch to tomorrow's forecast

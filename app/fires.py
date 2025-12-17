@@ -84,7 +84,7 @@ def _normalize_row(mapping, row, location, closest_point, distance):
 
 
 class FindFires:
-    """Locate fires within [fire_radius]km of a lat/lon coordinate."""
+    """Locate fires within [radius]km of a lat/lon coordinate."""
 
     def __init__(self, coords):
         self.settings = get_config()

@@ -5,6 +5,7 @@ import logging
 from .config import get_config
 from .helpers import parse_message, get_aqi
 from .fires import FindFires
+from .avalanche import AvalancheReport
 
 _SMS_LIMIT = 159
 
@@ -117,16 +118,70 @@ class Messages:
         # Strip the trailing “.0” if the number is an integer
         return int(km_rounded) if km_rounded == int(km_rounded) else km_rounded
 
-def handle_message(message):
-    """
-    Process an inbound message to locate nearby fires and generate appropriate responses.
+def handle_fire_request(coords, user_filters):
+    """Handle fire information requests.
 
-    This function parses the incoming message to extract GPS coordinates and optional
-    filters, searches for fires near those coordinates, and formats appropriate
-    response messages based on the findings.
+    Args:
+        coords: Tuple of (latitude, longitude)
+        user_filters: Dictionary of user-specified filters
+
+    Returns:
+        str: Formatted fire report with AQI
+    """
+    responses = Messages()
+
+    # Get AQI if configured
+    aqi_message = ""
+    settings = get_config()
+    if settings.include_aqi:
+        aqi = get_aqi(coords)
+        aqi_message = f"AQI: {aqi}\n\n"
+
+    # Find fires
+    findfires = FindFires(coords)
+    if findfires.out_of_range():
+        return aqi_message + responses.outside_of_area()
+
+    fires = findfires.nearby(user_filters)
+    if not fires:
+        return aqi_message + responses.no_fires()
+
+    # Format response
+    fire_messages = []
+    for fire in fires:
+        fire_messages.append(responses.fire(fire))
+    return aqi_message + "\n\n".join(fire_messages)
+
+
+def handle_avalanche_request(coords, avalanche_filters):
+    """Handle avalanche forecast requests.
+
+    Args:
+        coords: Tuple of (latitude, longitude)
+        avalanche_filters: Dict with 'forecast' key: 'current'|'today'|'tomorrow'|'all'
+
+    Returns:
+        str: Formatted avalanche forecast
+    """
+    responses = Messages()
+    avalanche = AvalancheReport(coords)
+
+    if avalanche.out_of_range():
+        return avalanche.outside_of_area_msg()
+
+    forecast = avalanche.get_forecast(avalanche_filters)
+    return forecast
+
+
+def handle_message(message):
+    """Route message to appropriate data handler.
+
+    This function parses the incoming message to extract GPS coordinates,
+    determines the data type (fire/avalanche), and routes to the appropriate
+    handler function.
 
     :param str message: The inbound message containing location information
-    :return: Formatted response message(s) about nearby fires or error messages
+    :return: Formatted response message(s) or error messages
     :rtype: str
     """
     responses = Messages()
@@ -138,23 +193,24 @@ def handle_message(message):
 
     coords = parsed_data["coords"]
     user_filters = parsed_data["filters"]
+    data_type = parsed_data.get("data_type", "auto")
+    avalanche_filters = parsed_data.get("avalanche_filters", {})
 
-    aqi_message = ""
-    settings = get_config()
-    if settings.include_aqi:
-        aqi = get_aqi(coords)
-        aqi_message = f"AQI: {aqi}\n\n"
+    # Auto-detect data type based on availability
+    if data_type == "auto":
+        avalanche = AvalancheReport(coords)
+        if avalanche.has_data():
+            data_type = "avalanche"
+        else:
+            data_type = "fire"
 
-    findfires = FindFires(coords)
-    if findfires.out_of_range():
-        return aqi_message + responses.outside_of_area()
+    logging.info(f"Message: {message}")
+    logging.info(f"Data type: {data_type}")
 
-    logging.info(message)
-    fires = findfires.nearby(user_filters)
-    if not fires:
-        return aqi_message + responses.no_fires()
-
-    fire_messages = []
-    for fire in fires:
-        fire_messages.append(responses.fire(fire))
-    return aqi_message + "\n\n".join(fire_messages)
+    # Route to appropriate handler
+    if data_type == "avalanche":
+        return handle_avalanche_request(coords, avalanche_filters)
+    elif data_type == "fire":
+        return handle_fire_request(coords, user_filters)
+    else:
+        return f"Unknown data type: {data_type}"

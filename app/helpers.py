@@ -89,9 +89,11 @@ def parse_message(message):
         - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
         - Filter keywords: "active", "all"
         - Distance filters: "25km", "10mi"
+        - Data type keywords: "avalanche", "fire"
+        - Forecast time keywords: "today", "tomorrow"
 
     Returns:
-        dict: {"coords": (lat, lon), "filters": dict} or None if no coords found
+        dict: {"coords": (lat, lon), "filters": dict, "data_type": str, "forecast_time": str} or None if no coords found
     """
 
     # Extract filters from message (case insensitive, using word boundaries)
@@ -112,6 +114,24 @@ def parse_message(message):
         km_value = float(value) if unit == 'km' else float(value) * 1.609344
         filters['distance'] = km_value
 
+    # Data type detection (left-side word boundary only to match plurals)
+    data_type = "auto"
+    if re.search(r'\bavalanche', message_lower):
+        data_type = "avalanche"
+    elif re.search(r'\bfire', message_lower):
+        data_type = "fire"
+
+    # Avalanche forecast filters (similar to fire status filters)
+    avalanche_filters = {}
+    if re.search(r'\bcurrent\b', message_lower):
+        avalanche_filters['forecast'] = 'current'
+    elif re.search(r'\btoday\b', message_lower):
+        avalanche_filters['forecast'] = 'today'
+    elif re.search(r'\btomorrow\b', message_lower):
+        avalanche_filters['forecast'] = 'tomorrow'
+    elif re.search(r'\ball\b', message_lower):
+        avalanche_filters['forecast'] = 'all'
+
     # Check for Google or Apple map shares.
     for url_txt in re.findall(r'https?://\S+', message):
         parsed = urlparse(url_txt)
@@ -121,7 +141,7 @@ def parse_message(message):
         elif any(domain in parsed.netloc for domain in ('google.', 'goo.gl')) and '/maps' in parsed.path:
             coords = _coords_from_google(parsed)
         if coords:
-            return {"coords": coords, "filters": filters}
+            return {"coords": coords, "filters": filters, "data_type": data_type, "avalanche_filters": avalanche_filters}
 
 
     lat_coord = r'-?\d{1,2}\.\d{1,8}|-?\d{1,2}'
@@ -163,7 +183,12 @@ def parse_message(message):
                     lat = long = None
 
     if lat is not None and long is not None:
-        return {"coords": (lat, long), "filters": filters}
+        return {
+            "coords": (lat, long),
+            "filters": filters,
+            "data_type": data_type,
+            "avalanche_filters": avalanche_filters
+        }
 
     return None
 

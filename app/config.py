@@ -12,7 +12,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Literal, List, Union
+from typing import Any, Dict, Literal, List, Union, Optional
 
 import yaml
 from dotenv import load_dotenv
@@ -63,6 +63,24 @@ class EmailConfig(BaseModel):
 TransportConfig = Union[SignalWireConfig, CLIConfig]
 
 
+# ---- Avalanche configuration models ---- #
+
+class AvalancheProviderConfig(BaseModel):
+    """Configuration for a single avalanche forecast provider."""
+    class_name: str = Field(alias='class')
+    api_url: str
+    cache_timeout: int = 3600
+    forecast_cutoff_hour: int = 16
+
+    class Config:
+        populate_by_name = True
+
+
+class AvalancheConfig(BaseModel):
+    """Avalanche forecast configuration."""
+    providers: Dict[str, AvalancheProviderConfig]
+
+
 # ---- Core settings model ---- #
 
 class DataFile(BaseModel):
@@ -84,6 +102,10 @@ class Settings(BaseSettings):
     include_aqi: bool = True
 
     request_cache_timeout: int = 14400  # 4 hours.
+
+    # Avalanche forecast configuration
+    avalanche: Optional[AvalancheConfig] = None
+    avalanche_distance_buffer: int = 20  # Distance buffer for avalanche provider selection (km)
 
     shapefiles: str = "shapefiles"
     data: List[DataFile] = []
