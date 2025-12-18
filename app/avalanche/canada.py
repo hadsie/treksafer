@@ -24,6 +24,7 @@ class AvalancheCanadaProvider(AvalancheProvider):
     def _load_subregions(self):
         """Load subregion shapefile once on initialization."""
         try:
+            # https://github.com/avalanche-canada/forecast-polygons/blob/main/canadian_subregions.shp.zip
             return gpd.read_file('boundaries/canadian_subregions.shp.zip')
         except FileNotFoundError as e:
             logging.warning(f"Avalanche subregion shapefile not found: {e}")

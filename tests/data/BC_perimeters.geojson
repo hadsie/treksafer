@@ -1,0 +1,207 @@
+{
+  "type": "FeatureCollection",
+  "name": "perimeters",
+  "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_TEST_001",
+        "NAME": "Kamloops_Base",
+        "DATE": "2025-06-15",
+        "AREA_HA": 50.0,
+        "DESC": "Standalone perimeter near Kamloops."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-120.50499311172119, 50.496823990382744],
+          [-120.49500688827881, 50.496823990382744],
+          [-120.49500688827881, 50.503176009617256],
+          [-120.50499311172119, 50.503176009617256],
+          [-120.50499311172119, 50.496823990382744]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_MP_001",
+        "NAME": "Manning_West",
+        "DATE": "2025-07-01",
+        "AREA_HA": 120.0,
+        "DESC": "Manning Park test A. Does not overlap its sibling; within ~25 km."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-120.84, 49.04],
+          [-120.78, 49.04],
+          [-120.78, 49.09],
+          [-120.84, 49.09],
+          [-120.84, 49.04]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_MP_002",
+        "NAME": "Manning_East",
+        "DATE": "2025-07-01",
+        "AREA_HA": 90.0,
+        "DESC": "Manning Park test B. Non-overlapping with F_MP_001; ~20–22 km apart."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-120.6, 49.06],
+          [-120.54, 49.06],
+          [-120.54, 49.11],
+          [-120.6, 49.11],
+          [-120.6, 49.06]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_NE_001",
+        "NAME": "NE_Overlap_1",
+        "DATE": "2025-07-10",
+        "AREA_HA": 300.0,
+        "DESC": "NE BC cluster #1; overlaps with NE_Overlap_2/3/4."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.1, 58.15],
+          [-120.98, 58.15],
+          [-120.98, 58.25],
+          [-121.1, 58.25],
+          [-121.1, 58.15]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_NE_002",
+        "NAME": "NE_Overlap_2",
+        "DATE": "2025-07-10",
+        "AREA_HA": 260.0,
+        "DESC": "NE BC cluster #2; overlaps with #1/#3/#4."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.06, 58.18],
+          [-120.94, 58.18],
+          [-120.94, 58.28],
+          [-121.06, 58.28],
+          [-121.06, 58.18]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_NE_003",
+        "NAME": "NE_Overlap_3",
+        "DATE": "2025-07-10",
+        "AREA_HA": 200.0,
+        "DESC": "NE BC cluster #3; overlaps with #1/#2/#4."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.02, 58.12],
+          [-120.9, 58.12],
+          [-120.9, 58.22],
+          [-121.02, 58.22],
+          [-121.02, 58.12]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_NE_004",
+        "NAME": "NE_Overlap_4",
+        "DATE": "2025-07-10",
+        "AREA_HA": 180.0,
+        "DESC": "NE BC cluster #4; overlaps with #1/#2/#3 (heaviest in the center)."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.04, 58.14],
+          [-120.92, 58.14],
+          [-120.92, 58.24],
+          [-121.04, 58.24],
+          [-121.04, 58.14]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_SE_001",
+        "NAME": "SE_Border_Near",
+        "DATE": "2025-07-15",
+        "AREA_HA": 140.0,
+        "DESC": "Perimeter inside BC with edge within ~10 km of the SE BC border."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-114.88, 49.08],
+          [-114.82, 49.08],
+          [-114.82, 49.13],
+          [-114.88, 49.13],
+          [-114.88, 49.08]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_CR_001",
+        "NAME": "Central_Rockies_Cross",
+        "DATE": "2025-07-20",
+        "AREA_HA": 220.0,
+        "DESC": "Central Rockies perimeter that intentionally crosses from BC into Alberta (for cross-border logic)."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-118.2, 53.05],
+          [-118.02, 53.05],
+          [-118.02, 53.15],
+          [-118.2, 53.15],
+          [-118.2, 53.05]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_ID": "F_CR_002",
+        "NAME": "Central_Rockies_NearAB",
+        "DATE": "2025-07-20",
+        "AREA_HA": 160.0,
+        "DESC": "About 100 km north of F_CR_001. Eastern edge within ~10 km of AB border but remains fully in BC."
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-118.26, 54.02],
+          [-118.12, 54.02],
+          [-118.12, 54.09],
+          [-118.26, 54.09],
+          [-118.26, 54.02]
+        ]]
+      }
+    }
+  ]
+}

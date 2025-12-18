@@ -1,0 +1,35 @@
+{
+  "dateIssued": "2025-01-15T14:00:00Z",
+  "dangerRatings": [
+    {
+      "date": {
+        "value": "2025-01-15T08:00:00Z"
+      },
+      "ratings": {
+        "alp": {
+          "rating": {
+            "display": "Considerable"
+          }
+        },
+        "tln": {
+          "rating": {
+            "display": "Moderate"
+          }
+        },
+        "btl": {
+          "rating": {
+            "display": "Low"
+          }
+        }
+      }
+    }
+  ],
+  "problems": [
+    {
+      "type": "Plaque de tempête"
+    },
+    {
+      "type": "Plaque à vent"
+    }
+  ]
+}

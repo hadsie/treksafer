@@ -1,0 +1,101 @@
+{
+  "report": {
+    "id": "2025-01-15-sea-to-sky",
+    "title": "Sea to Sky",
+    "dateIssued": "2025-01-15T16:00:00Z",
+    "timezone": "America/Vancouver",
+    "dangerRatings": [
+      {
+        "date": {
+          "value": "2025-01-15T08:00:00Z"
+        },
+        "ratings": {
+          "alp": {
+            "rating": {
+              "display": "Considerable"
+            }
+          },
+          "tln": {
+            "rating": {
+              "display": "Moderate"
+            }
+          },
+          "btl": {
+            "rating": {
+              "display": "Low"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-01-16T08:00:00Z"
+        },
+        "ratings": {
+          "alp": {
+            "rating": {
+              "display": "High"
+            }
+          },
+          "tln": {
+            "rating": {
+              "display": "Considerable"
+            }
+          },
+          "btl": {
+            "rating": {
+              "display": "Moderate"
+            }
+          }
+        }
+      }
+    ],
+    "problems": [
+      {
+        "type": {
+          "display": "Storm Slab"
+        },
+        "data": {
+          "elevations": [
+            {"display": "Alpine"},
+            {"display": "Treeline"}
+          ],
+          "aspects": [
+            {"value": "N"},
+            {"value": "NE"},
+            {"value": "E"}
+          ],
+          "likelihood": {
+            "display": "Likely"
+          },
+          "expectedSize": {
+            "min": "1.5",
+            "max": "2.5"
+          }
+        }
+      },
+      {
+        "type": {
+          "display": "Wind Slab"
+        },
+        "data": {
+          "elevations": [
+            {"display": "Alpine"}
+          ],
+          "aspects": [
+            {"value": "NE"},
+            {"value": "E"},
+            {"value": "SE"}
+          ],
+          "likelihood": {
+            "display": "Possible"
+          },
+          "expectedSize": {
+            "min": "1.0",
+            "max": "2.0"
+          }
+        }
+      }
+    ]
+  }
+}
