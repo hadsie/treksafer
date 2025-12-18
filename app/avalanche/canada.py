@@ -6,12 +6,12 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 import geopandas as gpd
-from pyproj import Transformer
 from requests import RequestException
 from shapely.geometry import Point
 
 from .base import AvalancheProvider
 from ..config import get_config, AvalancheProviderConfig
+from ..helpers import coords_to_point_meters
 
 
 class AvalancheCanadaProvider(AvalancheProvider):
@@ -71,9 +71,7 @@ class AvalancheCanadaProvider(AvalancheProvider):
             return None
 
         # Convert coordinates to EPSG:3857 (meters)
-        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-        x, y = transformer.transform(coords[1], coords[0])
-        point_meters = Point(x, y)
+        point_meters = coords_to_point_meters(coords)
 
         # Convert polygons to EPSG:3857 and calculate distances
         gdf_meters = self.subregions_gdf.to_crs(epsg=3857)

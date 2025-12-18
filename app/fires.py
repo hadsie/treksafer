@@ -17,18 +17,17 @@ Design notes
 """
 from __future__ import annotations
 
+import logging
 import re
 from functools import lru_cache
 from pathlib import Path
 
 import geopandas as gpd
 import requests
-from pyproj import Transformer
-from shapely.geometry import Point
 from shapely.ops import nearest_points
 
 from .config import get_config
-from .helpers import acres_to_hectares, compass_direction
+from .helpers import acres_to_hectares, compass_direction, coords_to_point_meters
 from .filters import apply_filters, create_fire_filters
 
 TRANSFORMS = {
@@ -70,12 +69,13 @@ def _normalize_row(mapping, row, location, closest_point, distance):
             row_dict = {field: getattr(row, field, None) for field in field_names}
             url = api_config["url"].format(**row_dict)
             # Note: These requests are cached for 4 hours (unless set otherwise in the config yaml)
+            # @todo: Make timeout configurable via settings
             response = requests.get(url, timeout=30).json()
             for data_key, api_field in api_config["fields"].items():
                 raw_value = response.get(api_field)
                 data[data_key] = _apply_transform(data_key, raw_value, mapping)
-        except Exception as e:
-            print(f"[WARN] Failed to fetch API data for fire {data.get('Fire', 'unknown')}: {e}")
+        except (requests.RequestException, KeyError, ValueError) as e:
+            logging.warning(f"Failed to fetch API data for fire {data.get('Fire', 'unknown')}: {e}")
 
     # Strip None values
     data = {k: v for k, v in data.items() if v is not None}
@@ -89,7 +89,7 @@ class FindFires:
     def __init__(self, coords):
         self.settings = get_config()
         self.distance_limit = self.settings.fire_radius * 1000
-        self.location = self._to_epsg3857_point(coords)
+        self.location = coords_to_point_meters(coords)
         self.sources = self._data_sources()
 
     def out_of_range(self) -> bool:
@@ -114,6 +114,12 @@ class FindFires:
         return fires
 
 
+    @staticmethod
+    @lru_cache(maxsize=16)
+    def _load_shapefile(filepath):
+        """Load and cache shapefile with CRS transformation."""
+        return gpd.read_file(filepath).to_crs(epsg=3857)
+
     def nearby(self, filters=None):
         fires = []
         sources_map = self.sources_map()
@@ -127,7 +133,7 @@ class FindFires:
         for source in self.sources:
             if source not in sources_map:
                 continue
-            fire_perimeters = gpd.read_file(sources_map[source]).to_crs(epsg=3857)
+            fire_perimeters = self._load_shapefile(str(sources_map[source]))
             mapping = None
             data_file = None
             for df in self.settings.data:
@@ -184,19 +190,3 @@ class FindFires:
             if distance <= self.distance_limit:
                 sources.append(row.postal)
         return sources
-
-    @staticmethod
-    def _to_epsg3857_point(coords):
-        """
-        Transforms given coordinates in EPSG:4326 (lat, long) format to meters for
-        spacial operations.
-
-        Parameters:
-            coords (tuple): A tuple of latitude and longitude.
-
-        Returns:
-            shapely.geometry.Point: The converted point.
-        """
-        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-        x, y = transformer.transform(coords[1], coords[0])
-        return Point(x, y)

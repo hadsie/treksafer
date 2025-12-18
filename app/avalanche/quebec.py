@@ -6,12 +6,12 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 import geopandas as gpd
-from pyproj import Transformer
 from requests import RequestException
 from shapely.geometry import Point
 
 from .base import AvalancheProvider
 from ..config import get_config, AvalancheProviderConfig
+from ..helpers import coords_to_point_meters
 
 
 class AvalancheQuebecProvider(AvalancheProvider):
@@ -53,16 +53,13 @@ class AvalancheQuebecProvider(AvalancheProvider):
             return None  # Exact match
 
         # Calculate distance to Quebec border
-        point = Point(coords[1], coords[0])
         quebec = self.province_gdf[self.province_gdf['postal'] == 'QC']
 
         if quebec.empty:
             return float('inf')
 
         # Convert to meters for distance calculation
-        transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-        x, y = transformer.transform(coords[1], coords[0])
-        point_meters = Point(x, y)
+        point_meters = coords_to_point_meters(coords)
 
         quebec_meters = quebec.to_crs(epsg=3857)
         distance_m = quebec_meters.iloc[0]['geometry'].distance(point_meters)

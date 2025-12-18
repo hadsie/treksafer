@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from datetime import timedelta
+from pathlib import Path
 from typing import Optional, Dict, Any
 
 import requests_cache
@@ -26,8 +27,12 @@ class AvalancheProvider(ABC):
         self.forecast_cutoff_hour = config.forecast_cutoff_hour
         self.api_base = config.api_url
 
+        # Ensure cache directory exists
+        cache_dir = Path('cache')
+        cache_dir.mkdir(exist_ok=True)
+
         self.session = requests_cache.CachedSession(
-            cache_name=f'cache/avalanche_{self.__class__.__name__}',
+            cache_name=str(cache_dir / f'avalanche_{self.__class__.__name__}'),
             expire_after=timedelta(seconds=self.cache_timeout),
             allowable_methods=['GET'],
             stale_if_error=True
@@ -64,6 +69,7 @@ class AvalancheProvider(ABC):
     def _request(self, url: str) -> requests_cache.Response:
         """Make cached HTTP request."""
         try:
+            # @todo: Make timeout configurable via settings
             return self.session.get(url, timeout=30)
         except RequestException as e:
             logging.error(f"Avalanche API request failed: {e}")

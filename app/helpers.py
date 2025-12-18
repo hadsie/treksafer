@@ -5,6 +5,7 @@ import requests
 
 from datetime import datetime
 from pyproj import Transformer
+from shapely.geometry import Point
 from urllib.parse import urlparse, parse_qs, unquote_plus
 
 _LAT = r'-?\d{1,2}(?:\.\d+)?'   # up to ±90
@@ -27,6 +28,19 @@ _DEG_HEMI_PATTERNS = [
 
 def acres_to_hectares(acres):
     return round(float(acres)/2.4710538147, 2)
+
+def coords_to_point_meters(coords):
+    """Convert WGS84 coordinates to EPSG:3857 point for distance calculations.
+
+    Args:
+        coords: Tuple of (latitude, longitude) in WGS84 format
+
+    Returns:
+        shapely.geometry.Point in EPSG:3857 (meters)
+    """
+    transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+    x, y = transformer.transform(coords[1], coords[0])
+    return Point(x, y)
 
 def compass_direction(pointA, pointB):
     """
