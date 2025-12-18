@@ -110,6 +110,13 @@ avalanche:
   providers:
     CA:
       class: AvalancheCanadaProvider
-      api_url: https://api.avalanche.ca/forecasts/en/
+      api_url: https://api.avalanche.ca/forecasts/
       cache_timeout: 3600
-      forecast_cutoff_hour: 16  # When to switch to tomorrow's forecast
+      forecast_cutoff_hour: 16
+      language: en
+    QC:
+      class: AvalancheQuebecProvider
+      api_url: https://www.avalanchequebec.ca/wp-json/avqc/v1/bulletinavalanche
+      cache_timeout: 3600
+      forecast_cutoff_hour: 16
+      language: en

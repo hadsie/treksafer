@@ -71,6 +71,7 @@ class AvalancheProviderConfig(BaseModel):
     api_url: str
     cache_timeout: int = 3600
     forecast_cutoff_hour: int = 16
+    language: str = 'en'
 
     class Config:
         populate_by_name = True
