@@ -1,0 +1,199 @@
+{
+  "type": "FeatureCollection",
+  "name": "perimeters",
+  "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "attr_Fir_6": "WA-OKS-000234",
+        "attr_Inc_2": "Okanogan_Border_WA",
+        "attr_Inc_4": "Okanogan-Wenatchee National Forest",
+        "attr_Incid": 432.0,
+        "attr_Fir_2": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "3-BORDER SCENARIO: WA fire in NE corner, within 10km of BC/AB border"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-117.22, 48.96],
+          [-117.14, 48.96],
+          [-117.14, 49.02],
+          [-117.22, 49.02],
+          [-117.22, 48.96]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "attr_Fir_6": "WA-OKS-000189",
+        "attr_Inc_2": "Pasayten_Small",
+        "attr_Inc_4": "Pasayten Wilderness",
+        "attr_Incid": 185.0,
+        "attr_Fir_2": "HOLDING",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Small fire being held in Pasayten Wilderness"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-120.25, 48.75],
+          [-120.18, 48.75],
+          [-120.18, 48.82],
+          [-120.25, 48.82],
+          [-120.25, 48.75]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "attr_Fir_6": "WA-CTL-000567",
+        "attr_Inc_2": "Chelan_Medium",
+        "attr_Inc_4": "Chelan County",
+        "attr_Incid": 618.0,
+        "attr_Fir_2": "Flanking",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Medium fire with flanking status in Chelan County"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-120.65, 48.05],
+          [-120.52, 48.05],
+          [-120.52, 48.18],
+          [-120.65, 48.18],
+          [-120.65, 48.05]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "attr_Fir_6": "WA-SNO-000423",
+        "attr_Inc_2": "Snoqualmie_Tiny",
+        "attr_Inc_4": "Snoqualmie National Forest",
+        "attr_Incid": 1.2,
+        "attr_Fir_2": "UC",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "Tiny fire under control (1.2 acres = 0.49 ha, below 1ha threshold)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.55, 47.42],
+          [-121.53, 47.42],
+          [-121.53, 47.44],
+          [-121.55, 47.44],
+          [-121.55, 47.42]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "attr_Fir_6": "WA-YAK-000789",
+        "attr_Inc_2": "Yakima_Large",
+        "attr_Inc_4": "Yakima County",
+        "attr_Incid": 1235.0,
+        "attr_Fir_2": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "Large active fire in Yakima County (1235 acres = 500 ha)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-120.95, 46.65],
+          [-120.75, 46.65],
+          [-120.75, 46.85],
+          [-120.95, 46.85],
+          [-120.95, 46.65]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "attr_Fir_6": "WA-SPO-000156",
+        "attr_Inc_2": "Spokane_Out",
+        "attr_Inc_4": "Spokane County",
+        "attr_Incid": 247.0,
+        "attr_Fir_2": "OUT",
+        "fill": "#00FF00",
+        "stroke": "#00CC00",
+        "fill-opacity": 0.6,
+        "DESC": "Fire marked as OUT in Spokane area"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-117.55, 47.65],
+          [-117.45, 47.65],
+          [-117.45, 47.75],
+          [-117.55, 47.75],
+          [-117.55, 47.65]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "attr_Fir_6": "ID-CDA-000234",
+        "attr_Inc_2": "Coeur_dAlene_Border",
+        "attr_Inc_4": "Idaho Panhandle",
+        "attr_Incid": 395.0,
+        "attr_Fir_2": "HOLDING",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Fire near WA/ID border, being held"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-116.85, 47.48],
+          [-116.75, 47.48],
+          [-116.75, 47.58],
+          [-116.85, 47.58],
+          [-116.85, 47.48]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "attr_Fir_6": "MT-GLA-000345",
+        "attr_Inc_2": "Glacier_North_Border",
+        "attr_Inc_4": "Glacier County",
+        "attr_Incid": 520.0,
+        "attr_Fir_2": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "Fire just north of Glacier National Park in Montana"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-113.95, 48.82],
+          [-113.80, 48.82],
+          [-113.80, 48.92],
+          [-113.95, 48.92],
+          [-113.95, 48.82]
+        ]]
+      }
+    }
+  ]
+}

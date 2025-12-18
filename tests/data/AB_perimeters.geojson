@@ -1,0 +1,199 @@
+{
+  "type": "FeatureCollection",
+  "name": "perimeters",
+  "crs": { "type": "name", "properties": { "name": "EPSG:4326" } },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUMBE": "HWF-089-2025",
+        "AREA": 75.0,
+        "ALIAS": "Banff_Small",
+        "COMPLEX": "Banff National Park",
+        "STATUS": "Under Control",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "Small controlled fire in Banff area"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-115.58, 51.18],
+          [-115.52, 51.18],
+          [-115.52, 51.24],
+          [-115.58, 51.24],
+          [-115.58, 51.18]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUMBE": "HWF-090-2025",
+        "AREA": 220.0,
+        "ALIAS": "Kananaskis_Medium",
+        "COMPLEX": "Kananaskis",
+        "STATUS": "Being Held",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Medium fire being held in Kananaskis"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-115.15, 50.85],
+          [-115.05, 50.85],
+          [-115.05, 50.95],
+          [-115.15, 50.95],
+          [-115.15, 50.85]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUMBE": "LWF-134-2025",
+        "AREA": 0.8,
+        "ALIAS": "Calgary_Tiny",
+        "COMPLEX": "Calgary Forest",
+        "STATUS": "Under Control",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "Tiny fire below 1ha threshold near Calgary"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-114.12, 51.05],
+          [-114.10, 51.05],
+          [-114.10, 51.07],
+          [-114.12, 51.07],
+          [-114.12, 51.05]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUMBE": "PWF-156-2025",
+        "AREA": 520.0,
+        "ALIAS": "Grande_Prairie_Large",
+        "COMPLEX": "Grande Prairie",
+        "STATUS": "Out of Control",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "Large active fire near Grande Prairie"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-118.95, 55.15],
+          [-118.75, 55.15],
+          [-118.75, 55.35],
+          [-118.95, 55.35],
+          [-118.95, 55.15]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUMBE": "LWF-178-2025",
+        "AREA": 2.5,
+        "ALIAS": "Medicine_Hat_Small",
+        "COMPLEX": "Cypress Hills",
+        "STATUS": "Under Control",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "Small controlled fire in southern AB"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-110.05, 49.68],
+          [-110.00, 49.68],
+          [-110.00, 49.73],
+          [-110.05, 49.73],
+          [-110.05, 49.68]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUMBE": "CWF-201-2025",
+        "AREA": 155.0,
+        "ALIAS": "Hinton_Cross_Border",
+        "COMPLEX": "Hinton",
+        "STATUS": "Being Held",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Fire that crosses from AB into BC (matches BC Central_Rockies_Cross)"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-118.02, 53.08],
+          [-117.85, 53.08],
+          [-117.85, 53.18],
+          [-118.02, 53.18],
+          [-118.02, 53.08]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUMBE": "PWF-205-2025",
+        "AREA": 340.0,
+        "ALIAS": "Jasper_NE_Town",
+        "COMPLEX": "Jasper National Park",
+        "STATUS": "Out of Control",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "Fire NE of Jasper town, bottom right corner touches Jasper townsite"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-118.08, 52.88],
+          [-117.95, 52.88],
+          [-117.95, 52.98],
+          [-118.08, 52.98],
+          [-118.08, 52.88]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUMBE": "SWF-212-2025",
+        "AREA": 210.0,
+        "ALIAS": "Waterton_East",
+        "COMPLEX": "Waterton Lakes",
+        "STATUS": "Being Held",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Fire just east of Waterton National Park"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-113.85, 49.03],
+          [-113.72, 49.03],
+          [-113.72, 49.12],
+          [-113.85, 49.12],
+          [-113.85, 49.03]
+        ]]
+      }
+    }
+  ]
+}

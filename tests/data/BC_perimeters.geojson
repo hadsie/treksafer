@@ -6,11 +6,15 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_TEST_001",
+        "FIRE_NUM": "C10784",
+        "FIRE_YEAR": 2025,
         "NAME": "Kamloops_Base",
-        "DATE": "2025-06-15",
-        "AREA_HA": 50.0,
-        "DESC": "Standalone perimeter near Kamloops."
+        "FIRE_SZ_HA": 50.0,
+        "STATUS": "HOLDING",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Standalone fire near Kamloops, ~50km from test center (49.0, -121.0)"
       },
       "geometry": {
         "type": "Polygon",
@@ -26,11 +30,15 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_MP_001",
+        "FIRE_NUM": "C10801",
+        "FIRE_YEAR": 2025,
         "NAME": "Manning_West",
-        "DATE": "2025-07-01",
-        "AREA_HA": 120.0,
-        "DESC": "Manning Park test A. Does not overlap its sibling; within ~25 km."
+        "FIRE_SZ_HA": 120.0,
+        "STATUS": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "Manning Park test A, ~5km from center"
       },
       "geometry": {
         "type": "Polygon",
@@ -46,11 +54,15 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_MP_002",
+        "FIRE_NUM": "C10802",
+        "FIRE_YEAR": 2025,
         "NAME": "Manning_East",
-        "DATE": "2025-07-01",
-        "AREA_HA": 90.0,
-        "DESC": "Manning Park test B. Non-overlapping with F_MP_001; ~20–22 km apart."
+        "FIRE_SZ_HA": 90.0,
+        "STATUS": "UNDR_CNTRL",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "Manning Park test B, ~10-15km from center"
       },
       "geometry": {
         "type": "Polygon",
@@ -66,11 +78,207 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_NE_001",
+        "FIRE_NUM": "C20145",
+        "FIRE_YEAR": 2025,
+        "NAME": "Hope_VeryClose",
+        "FIRE_SZ_HA": 0.5,
+        "STATUS": "OUT",
+        "fill": "#00FF00",
+        "stroke": "#00CC00",
+        "fill-opacity": 0.6,
+        "DESC": "Very small fire very close to test center, ~3km"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.03, 48.98],
+          [-121.01, 48.98],
+          [-121.01, 49.00],
+          [-121.03, 49.00],
+          [-121.03, 48.98]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "C20146",
+        "FIRE_YEAR": 2025,
+        "NAME": "Skagit_Close",
+        "FIRE_SZ_HA": 1.5,
+        "STATUS": "HOLDING",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Small fire at ~12km from center"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.15, 49.08],
+          [-121.12, 49.08],
+          [-121.12, 49.11],
+          [-121.15, 49.11],
+          [-121.15, 49.08]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "C20147",
+        "FIRE_YEAR": 2025,
+        "NAME": "Fraser_Medium",
+        "FIRE_SZ_HA": 25.0,
+        "STATUS": "UNDR_CNTRL",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "Medium fire at ~30km from center"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.35, 49.15],
+          [-121.28, 49.15],
+          [-121.28, 49.22],
+          [-121.35, 49.22],
+          [-121.35, 49.15]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "C20148",
+        "FIRE_YEAR": 2025,
+        "NAME": "Chilliwack_Large",
+        "FIRE_SZ_HA": 250.0,
+        "STATUS": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "Large fire at ~45km from center"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.65, 49.05],
+          [-121.52, 49.05],
+          [-121.52, 49.18],
+          [-121.65, 49.18],
+          [-121.65, 49.05]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "C20149",
+        "FIRE_YEAR": 2025,
+        "NAME": "Abbotsford_Tiny",
+        "FIRE_SZ_HA": 0.3,
+        "STATUS": "OUT",
+        "fill": "#00FF00",
+        "stroke": "#00CC00",
+        "fill-opacity": 0.6,
+        "DESC": "Tiny fire below 1ha threshold, ~60km from center"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.25, 49.02],
+          [-122.23, 49.02],
+          [-122.23, 49.04],
+          [-122.25, 49.04],
+          [-122.25, 49.02]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "C20150",
+        "FIRE_YEAR": 2025,
+        "NAME": "Harrison_FarMedium",
+        "FIRE_SZ_HA": 75.0,
+        "STATUS": "HOLDING",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Medium fire at ~70km from center"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-121.95, 49.45],
+          [-121.85, 49.45],
+          [-121.85, 49.55],
+          [-121.95, 49.55],
+          [-121.95, 49.45]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "C20151",
+        "FIRE_YEAR": 2025,
+        "NAME": "Lillooet_VeryFar",
+        "FIRE_SZ_HA": 500.0,
+        "STATUS": "UNDR_CNTRL",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "Very large fire at ~145km from center, near max_radius"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.15, 50.65],
+          [-121.95, 50.65],
+          [-121.95, 50.85],
+          [-122.15, 50.85],
+          [-122.15, 50.65]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "C20152",
+        "FIRE_YEAR": 2025,
+        "NAME": "PrinceGeorge_OutOfRange",
+        "FIRE_SZ_HA": 300.0,
+        "STATUS": "HOLDING",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Large fire beyond max_radius, ~700km from center"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-122.85, 53.85],
+          [-122.65, 53.85],
+          [-122.65, 54.05],
+          [-122.85, 54.05],
+          [-122.85, 53.85]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "N60784",
+        "FIRE_YEAR": 2025,
         "NAME": "NE_Overlap_1",
-        "DATE": "2025-07-10",
-        "AREA_HA": 300.0,
-        "DESC": "NE BC cluster #1; overlaps with NE_Overlap_2/3/4."
+        "FIRE_SZ_HA": 300.0,
+        "STATUS": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "NE BC cluster #1; overlaps with NE_Overlap_2/3/4"
       },
       "geometry": {
         "type": "Polygon",
@@ -86,11 +294,15 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_NE_002",
+        "FIRE_NUM": "N60785",
+        "FIRE_YEAR": 2025,
         "NAME": "NE_Overlap_2",
-        "DATE": "2025-07-10",
-        "AREA_HA": 260.0,
-        "DESC": "NE BC cluster #2; overlaps with #1/#3/#4."
+        "FIRE_SZ_HA": 260.0,
+        "STATUS": "UNDR_CNTRL",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "NE BC cluster #2; overlaps with #1/#3/#4"
       },
       "geometry": {
         "type": "Polygon",
@@ -106,11 +318,15 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_NE_003",
+        "FIRE_NUM": "N60786",
+        "FIRE_YEAR": 2025,
         "NAME": "NE_Overlap_3",
-        "DATE": "2025-07-10",
-        "AREA_HA": 200.0,
-        "DESC": "NE BC cluster #3; overlaps with #1/#2/#4."
+        "FIRE_SZ_HA": 200.0,
+        "STATUS": "UNDR_CNTRL",
+        "fill": "#FFFF00",
+        "stroke": "#CCCC00",
+        "fill-opacity": 0.6,
+        "DESC": "NE BC cluster #3; overlaps with #1/#2/#4"
       },
       "geometry": {
         "type": "Polygon",
@@ -126,11 +342,15 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_NE_004",
+        "FIRE_NUM": "N60787",
+        "FIRE_YEAR": 2025,
         "NAME": "NE_Overlap_4",
-        "DATE": "2025-07-10",
-        "AREA_HA": 180.0,
-        "DESC": "NE BC cluster #4; overlaps with #1/#2/#3 (heaviest in the center)."
+        "FIRE_SZ_HA": 180.0,
+        "STATUS": null,
+        "fill": "#888888",
+        "stroke": "#666666",
+        "fill-opacity": 0.6,
+        "DESC": "NE BC cluster #4; overlaps with #1/#2/#3 (heaviest in center) - null status for edge case testing"
       },
       "geometry": {
         "type": "Polygon",
@@ -146,11 +366,15 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_SE_001",
+        "FIRE_NUM": "S40234",
+        "FIRE_YEAR": 2025,
         "NAME": "SE_Border_Near",
-        "DATE": "2025-07-15",
-        "AREA_HA": 140.0,
-        "DESC": "Perimeter inside BC with edge within ~10 km of the SE BC border."
+        "FIRE_SZ_HA": 140.0,
+        "STATUS": "HOLDING",
+        "fill": "#FFA500",
+        "stroke": "#CC8400",
+        "fill-opacity": 0.6,
+        "DESC": "Fire inside BC with edge within ~10 km of SE BC border"
       },
       "geometry": {
         "type": "Polygon",
@@ -166,40 +390,96 @@
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_CR_001",
-        "NAME": "Central_Rockies_Cross",
-        "DATE": "2025-07-20",
-        "AREA_HA": 220.0,
-        "DESC": "Central Rockies perimeter that intentionally crosses from BC into Alberta (for cross-border logic)."
+        "FIRE_NUM": "C52789",
+        "FIRE_YEAR": 2025,
+        "NAME": "Jasper_BC_Side",
+        "FIRE_SZ_HA": 350.0,
+        "STATUS": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "3-BORDER SCENARIO: BC fire near Jasper, edge within 5km of AB border"
       },
       "geometry": {
         "type": "Polygon",
         "coordinates": [[
-          [-118.2, 53.05],
-          [-118.02, 53.05],
-          [-118.02, 53.15],
-          [-118.2, 53.15],
-          [-118.2, 53.05]
+          [-120.15, 52.85],
+          [-120.05, 52.85],
+          [-120.05, 52.95],
+          [-120.15, 52.95],
+          [-120.15, 52.85]
         ]]
       }
     },
     {
       "type": "Feature",
       "properties": {
-        "FIRE_ID": "F_CR_002",
-        "NAME": "Central_Rockies_NearAB",
-        "DATE": "2025-07-20",
-        "AREA_HA": 160.0,
-        "DESC": "About 100 km north of F_CR_001. Eastern edge within ~10 km of AB border but remains fully in BC."
+        "FIRE_NUM": "N49123",
+        "FIRE_YEAR": 2025,
+        "NAME": "Okanagan_Border_BC",
+        "FIRE_SZ_HA": 175.0,
+        "STATUS": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "3-BORDER SCENARIO: BC fire in NE corner near WA/AB borders"
       },
       "geometry": {
         "type": "Polygon",
         "coordinates": [[
-          [-118.26, 54.02],
-          [-118.12, 54.02],
-          [-118.12, 54.09],
-          [-118.26, 54.09],
-          [-118.26, 54.02]
+          [-117.12, 49.02],
+          [-117.04, 49.02],
+          [-117.04, 49.08],
+          [-117.12, 49.08],
+          [-117.12, 49.02]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "C53001",
+        "FIRE_YEAR": 2025,
+        "NAME": "Mount_Robson_Border",
+        "FIRE_SZ_HA": 280.0,
+        "STATUS": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "Mount Robson Provincial Park fire, eastern edge bumps against BC/AB border"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-119.30, 53.05],
+          [-119.20, 53.05],
+          [-119.20, 53.15],
+          [-119.30, 53.15],
+          [-119.30, 53.05]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "FIRE_NUM": "S49001",
+        "FIRE_YEAR": 2025,
+        "NAME": "Akamina_Kishinena_Border",
+        "FIRE_SZ_HA": 190.0,
+        "STATUS": "OUT_CNTRL",
+        "fill": "#FF0000",
+        "stroke": "#8B0000",
+        "fill-opacity": 0.6,
+        "DESC": "Akamina-Kishinena Provincial Park fire, eastern edge bumps against BC/AB border"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-114.15, 49.00],
+          [-114.05, 49.00],
+          [-114.05, 49.08],
+          [-114.15, 49.08],
+          [-114.15, 49.00]
         ]]
       }
     }
