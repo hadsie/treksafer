@@ -79,8 +79,8 @@ class AvalancheQuebecProvider(AvalancheProvider):
     def get_forecast(self, coords: tuple) -> Optional[Dict[str, Any]]:
         """Get forecast from Avalanche Quebec API."""
         try:
-            # Language as query parameter
-            url = f"{self.api_base}?lang={self.config.language}"
+            # Replace {lang} template with actual language
+            url = self.api_base.format(lang=self.config.language)
             response = self._request(url)
 
             if response.status_code == 200:

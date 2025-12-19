@@ -17,30 +17,42 @@ from app.config import get_config, AvalancheProviderConfig
 
 @pytest.fixture
 def canada_config():
-    """Fixture for Canada provider configuration."""
-    return AvalancheProviderConfig(
-        **{
-            'class': 'AvalancheCanadaProvider',
-            'api_url': 'https://api.avalanche.ca/forecasts/',
-            'cache_timeout': 3600,
-            'forecast_cutoff_hour': 16,
-            'language': 'en'
-        }
-    )
+    """Fixture for Canada provider configuration from settings."""
+    settings = get_config()
+    # Get CA provider config from settings
+    provider_config = settings.avalanche.providers.get('CA')
+    if provider_config is None:
+        # Fallback if not in config (shouldn't happen in normal operation)
+        return AvalancheProviderConfig(
+            **{
+                'class': 'AvalancheCanadaProvider',
+                'api_url': 'https://api.avalanche.ca/forecasts/',
+                'cache_timeout': 3600,
+                'forecast_cutoff_hour': 16,
+                'language': 'en'
+            }
+        )
+    return provider_config
 
 
 @pytest.fixture
 def quebec_config():
-    """Fixture for Quebec provider configuration."""
-    return AvalancheProviderConfig(
-        **{
-            'class': 'AvalancheQuebecProvider',
-            'api_url': 'https://www.avalanchequebec.ca/wp-json/avqc/v1/bulletinavalanche',
-            'cache_timeout': 3600,
-            'forecast_cutoff_hour': 16,
-            'language': 'en'
-        }
-    )
+    """Fixture for Quebec provider configuration from settings."""
+    settings = get_config()
+    # Get QC provider config from settings
+    provider_config = settings.avalanche.providers.get('QC')
+    if provider_config is None:
+        # Fallback if not in config (shouldn't happen in normal operation)
+        return AvalancheProviderConfig(
+            **{
+                'class': 'AvalancheQuebecProvider',
+                'api_url': 'https://www.avalanchequebec.ca/wp-json/avqc/v1/bulletinavalanche',
+                'cache_timeout': 3600,
+                'forecast_cutoff_hour': 16,
+                'language': 'en'
+            }
+        )
+    return provider_config
 
 
 @pytest.fixture
@@ -131,7 +143,8 @@ class TestAvalancheCanadaProvider:
         provider = AvalancheCanadaProvider(canada_config)
         coords = (50.1163, -122.9574)
 
-        expected_url = f"{canada_config.api_url}en/products/point?lat={coords[0]}&long={coords[1]}"
+        # URL now comes from config template with {lang} replaced
+        expected_url = f"{canada_config.api_url.format(lang=canada_config.language)}?lat={coords[0]}&long={coords[1]}"
 
         # Mock the _request method to capture the URL
         with patch.object(provider, '_request') as mock_request:
@@ -142,21 +155,23 @@ class TestAvalancheCanadaProvider:
             provider.get_forecast(coords)
             mock_request.assert_called_once_with(expected_url)
 
-    def test_language_url_construction_fr(self):
+    def test_language_url_construction_fr(self, canada_config):
         """Test URL construction with French language."""
-        config = AvalancheProviderConfig(
+        # Create a modified config with French language
+        fr_config = AvalancheProviderConfig(
             **{
-                'class': 'AvalancheCanadaProvider',
-                'api_url': 'https://api.avalanche.ca/forecasts/',
-                'cache_timeout': 3600,
-                'forecast_cutoff_hour': 16,
-                'language': 'fr'
+                'class': canada_config.class_name,
+                'api_url': canada_config.api_url,
+                'cache_timeout': canada_config.cache_timeout,
+                'forecast_cutoff_hour': canada_config.forecast_cutoff_hour,
+                'language': 'fr'  # Only change language
             }
         )
-        provider = AvalancheCanadaProvider(config)
+        provider = AvalancheCanadaProvider(fr_config)
         coords = (50.1163, -122.9574)
 
-        expected_url = f"{config.api_url}fr/products/point?lat={coords[0]}&long={coords[1]}"
+        # URL now comes from config template with {lang} replaced
+        expected_url = f"{fr_config.api_url.format(lang='fr')}?lat={coords[0]}&long={coords[1]}"
 
         with patch.object(provider, '_request') as mock_request:
             mock_response = Mock()
@@ -231,7 +246,8 @@ class TestAvalancheQuebecProvider:
         provider = AvalancheQuebecProvider(quebec_config)
         coords = (49.0, -66.0)
 
-        expected_url = f"{quebec_config.api_url}?lang=en"
+        # URL now comes from config template with {lang} replaced
+        expected_url = quebec_config.api_url.format(lang=quebec_config.language)
 
         with patch.object(provider, '_request') as mock_request:
             mock_response = Mock()
@@ -241,21 +257,23 @@ class TestAvalancheQuebecProvider:
             provider.get_forecast(coords)
             mock_request.assert_called_once_with(expected_url)
 
-    def test_language_query_param_fr(self):
+    def test_language_query_param_fr(self, quebec_config):
         """Test query parameter construction with French."""
-        config = AvalancheProviderConfig(
+        # Create a modified config with French language
+        fr_config = AvalancheProviderConfig(
             **{
-                'class': 'AvalancheQuebecProvider',
-                'api_url': 'https://www.avalanchequebec.ca/wp-json/avqc/v1/bulletinavalanche',
-                'cache_timeout': 3600,
-                'forecast_cutoff_hour': 16,
-                'language': 'fr'
+                'class': quebec_config.class_name,
+                'api_url': quebec_config.api_url,
+                'cache_timeout': quebec_config.cache_timeout,
+                'forecast_cutoff_hour': quebec_config.forecast_cutoff_hour,
+                'language': 'fr'  # Only change language
             }
         )
-        provider = AvalancheQuebecProvider(config)
+        provider = AvalancheQuebecProvider(fr_config)
         coords = (49.0, -66.0)
 
-        expected_url = f"{config.api_url}?lang=fr"
+        # URL now comes from config template with {lang} replaced
+        expected_url = fr_config.api_url.format(lang='fr')
 
         with patch.object(provider, '_request') as mock_request:
             mock_response = Mock()
@@ -320,18 +338,9 @@ class TestAvalancheReport:
         with patch('app.avalanche.report.get_config') as mock_config:
             mock_settings = Mock()
             mock_settings.avalanche_distance_buffer = 20
-            mock_settings.avalanche = Mock()
-            mock_settings.avalanche.providers = {
-                'CA': AvalancheProviderConfig(
-                    **{
-                        'class': 'AvalancheCanadaProvider',
-                        'api_url': 'https://api.avalanche.ca/forecasts/',
-                        'cache_timeout': 3600,
-                        'forecast_cutoff_hour': 16,
-                        'language': 'en'
-                    }
-                )
-            }
+            # Get actual config and use it
+            actual_config = get_config()
+            mock_settings.avalanche = actual_config.avalanche
             mock_config.return_value = mock_settings
 
             report = AvalancheReport(coords)

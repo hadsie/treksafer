@@ -139,8 +139,9 @@ class AvalancheCanadaProvider(AvalancheProvider):
     def get_forecast(self, coords: tuple) -> Optional[Dict[str, Any]]:
         """Get forecast from Avalanche Canada API."""
         try:
-            # Use language from config in URL path
-            url = f"{self.api_base}{self.config.language}/products/point?lat={coords[0]}&long={coords[1]}"
+            # Replace {lang} template with actual language
+            base_url = self.api_base.format(lang=self.config.language)
+            url = f"{base_url}?lat={coords[0]}&long={coords[1]}"
             response = self._request(url)
 
             if response.status_code == 200:
