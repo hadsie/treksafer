@@ -22,6 +22,7 @@ Combine markers and test names as needed:
 
 ```bash
 pytest -m "not smoke" -k test_format_distance
+pytest -k test_avalanche
 ```
 
 Run a single test file with verbose output:
@@ -29,6 +30,12 @@ Run a single test file with verbose output:
 ```bash
 pytest tests/test_coords.py -v
 ```
+
+To run tests in a non-test environment:
+```bash
+TREKSAFER_ENV=prod pytest -m "smoke"
+```
+
 
 # Wildfire test data
 
@@ -89,3 +96,10 @@ The script creates shapefile zip archives in `tests/shapefiles/{location}/` usin
 5. Regenerate shapefiles: `python tests/compile_test_data.py --clean`
 
 # Avalanche test data
+
+We use mocked API responses to test avalanche forecast parsing and provider selection. The test data is a copy of real API responses from Avalanche Canada and Avalanche Quebec.
+
+## Test Data Files
+
+ - `avcan_Brandywine-Garibaldi-Homathko-Spearhead-Tantalus_sample.json`: Simulates the Avalanche Canada API response structure for the Sea to Sky region in Dec 2025.
+ - `avalanche_quebec_sample.json`: Simulates the Avalanche Quebec API response structure for the Chic-Chocs region.

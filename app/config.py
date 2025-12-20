@@ -16,7 +16,7 @@ from typing import Any, Dict, Literal, List, Union, Optional
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.types import SecretStr
 from pydantic_settings import BaseSettings
 
@@ -67,14 +67,13 @@ TransportConfig = Union[SignalWireConfig, CLIConfig]
 
 class AvalancheProviderConfig(BaseModel):
     """Configuration for a single avalanche forecast provider."""
+    model_config = ConfigDict(populate_by_name=True)
+
     class_name: str = Field(alias='class')
     api_url: str
     cache_timeout: int = 3600
     forecast_cutoff_hour: int = 16
     language: str = 'en'
-
-    class Config:
-        populate_by_name = True
 
 
 class AvalancheConfig(BaseModel):

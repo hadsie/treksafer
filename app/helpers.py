@@ -8,6 +8,8 @@ from pyproj import Transformer
 from shapely.geometry import Point
 from urllib.parse import urlparse, parse_qs, unquote_plus
 
+from .config import get_config
+
 _LAT = r'-?\d{1,2}(?:\.\d+)?'   # up to ±90
 _LON = r'-?\d{1,3}(?:\.\d+)?'   # up to ±180
 
@@ -111,6 +113,7 @@ def parse_message(message):
     """
 
     # Extract filters from message (case insensitive, using word boundaries)
+    settings = get_config()
     filters = {}
     message_lower = message.lower()
 
@@ -127,6 +130,8 @@ def parse_message(message):
         # Convert to km if needed
         km_value = float(value) if unit == 'km' else float(value) * 1.609344
         filters['distance'] = km_value
+    else:
+        filters['distance'] = settings.fire_radius
 
     # Data type detection (left-side word boundary only to match plurals)
     data_type = "auto"

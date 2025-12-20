@@ -18,11 +18,14 @@ fire_size: 1
 # The amount of time to wait for a download before giving up, in seconds.
 download_timeout: 600
 
+# Avalanche forecast settings
+avalanche_distance_buffer: 20  # Distance buffer for avalanche provider selection (km)
+
 # Include the AQI at the specified coordinates in the response.
 include_aqi: true
 
 # Path to shapefiles
-shapefiles: "shapefiles"
+shapefiles: "${TREKSAFER_SHAPEFILES:-shapefiles}"
 
 # Logging
 log_file: "logs/${TREKSAFER_ENV}.log"
@@ -102,9 +105,6 @@ data:
       managed: ['Flanking', 'HOLDING']
       controlled: ['UC']
       out: ['OUT']
-
-# Avalanche forecast settings
-avalanche_distance_buffer: 20  # Distance buffer for avalanche provider selection (km)
 
 avalanche:
   providers:

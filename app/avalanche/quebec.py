@@ -19,50 +19,49 @@ class AvalancheQuebecProvider(AvalancheProvider):
 
     def __init__(self, config: AvalancheProviderConfig):
         super().__init__(config)
-        self.province_gdf = self._load_provinces()
+        self.quebec_wgs84 = None
+        self.quebec_meters = None
+        self._load_quebec()
 
-    def _load_provinces(self):
-        """Load Canadian provinces shapefile."""
+    def _load_quebec(self):
+        """Load and prepare Quebec province geodata."""
         try:
-            return gpd.read_file('boundaries/canada_provinces.zip')
+            provinces = gpd.read_file('boundaries/canada_provinces.zip')
+            quebec = provinces[provinces['postal'] == 'QC']
+
+            if quebec.empty:
+                logging.warning("Quebec province not found in shapefile")
+                return
+
+            # Store in WGS84 for contains() checks
+            self.quebec_wgs84 = quebec.to_crs(epsg=4326)
+
+            # Store in meters for distance calculations
+            self.quebec_meters = quebec.to_crs(epsg=3857)
+
         except FileNotFoundError as e:
             logging.warning(f"Canada provinces shapefile not found: {e}")
-            return None
 
     def _is_in_quebec(self, coords: tuple) -> bool:
         """Check if coordinates are in Quebec province."""
-        if self.province_gdf is None:
+        if self.quebec_wgs84 is None:
             return False
 
         point = Point(coords[1], coords[0])  # lon, lat
-
-        # Find Quebec province
-        quebec = self.province_gdf[self.province_gdf['postal'] == 'QC']
-        if quebec.empty:
-            return False
-
-        return quebec.iloc[0]['geometry'].contains(point)
+        return self.quebec_wgs84.iloc[0]['geometry'].contains(point)
 
     def distance_from_region(self, coords: tuple) -> Optional[float]:
         """Calculate distance from Quebec province."""
-        if self.province_gdf is None:
+        if self.quebec_meters is None:
             return float('inf')
 
         # Check if in Quebec
         if self._is_in_quebec(coords):
             return None  # Exact match
 
-        # Calculate distance to Quebec border
-        quebec = self.province_gdf[self.province_gdf['postal'] == 'QC']
-
-        if quebec.empty:
-            return float('inf')
-
-        # Convert to meters for distance calculation
+        # Calculate distance (both already in meters)
         point_meters = coords_to_point_meters(coords)
-
-        quebec_meters = quebec.to_crs(epsg=3857)
-        distance_m = quebec_meters.iloc[0]['geometry'].distance(point_meters)
+        distance_m = self.quebec_meters.iloc[0]['geometry'].distance(point_meters)
         distance_km = distance_m / 1000
 
         # Apply limit
@@ -84,7 +83,12 @@ class AvalancheQuebecProvider(AvalancheProvider):
             response = self._request(url)
 
             if response.status_code == 200:
-                return self._parse_forecast(response.json(), coords)
+                result = self._parse_forecast(response.json(), coords)
+                if result is None:
+                    logging.warning(f"Invalid or empty JSON response from Avalanche Quebec API for coords {coords}")
+                return result
+            else:
+                logging.warning(f"Avalanche Quebec API returned status code {response.status_code} for coords {coords}")
 
         except RequestException as e:
             logging.warning(f"Network error checking Quebec avalanche data: {e}")
@@ -98,7 +102,12 @@ class AvalancheQuebecProvider(AvalancheProvider):
 
         # Parse danger ratings
         forecasts_by_date = {}
-        for rating in data.get('dangerRatings', []):
+        danger_ratings = data.get('dangerRatings', [])
+
+        if not danger_ratings:
+            logging.warning(f"Avalanche Quebec API returned empty danger ratings for coords {coords}")
+
+        for rating in danger_ratings:
             dt = datetime.strptime(rating['date']['value'], '%Y-%m-%dT%H:%M:%SZ')
             date_str = dt.strftime('%Y-%m-%d')
 

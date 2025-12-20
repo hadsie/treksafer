@@ -145,7 +145,12 @@ class AvalancheCanadaProvider(AvalancheProvider):
             response = self._request(url)
 
             if response.status_code == 200:
-                return self._parse_forecast(response.json(), coords)
+                result = self._parse_forecast(response.json(), coords)
+                if result is None:
+                    logging.warning(f"Invalid or empty JSON response from Avalanche Canada API for coords {coords}")
+                return result
+            else:
+                logging.warning(f"Avalanche Canada API returned status code {response.status_code} for coords {coords}")
 
         except RequestException as e:
             logging.warning(f"Network error checking avalanche data: {e}")
@@ -176,7 +181,12 @@ class AvalancheCanadaProvider(AvalancheProvider):
 
         # Parse all available danger ratings
         forecasts_by_date = {}
-        for rating in report.get('dangerRatings', []):
+        danger_ratings = report.get('dangerRatings', [])
+
+        if not danger_ratings:
+            logging.warning(f"Avalanche Canada API returned empty danger ratings for coords {coords}")
+
+        for rating in danger_ratings:
             dt = datetime.strptime(rating['date']['value'], '%Y-%m-%dT%H:%M:%SZ')
             date_str = dt.strftime('%Y-%m-%d')
 

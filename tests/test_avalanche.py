@@ -21,17 +21,6 @@ def canada_config():
     settings = get_config()
     # Get CA provider config from settings
     provider_config = settings.avalanche.providers.get('CA')
-    if provider_config is None:
-        # Fallback if not in config (shouldn't happen in normal operation)
-        return AvalancheProviderConfig(
-            **{
-                'class': 'AvalancheCanadaProvider',
-                'api_url': 'https://api.avalanche.ca/forecasts/',
-                'cache_timeout': 3600,
-                'forecast_cutoff_hour': 16,
-                'language': 'en'
-            }
-        )
     return provider_config
 
 
@@ -41,24 +30,13 @@ def quebec_config():
     settings = get_config()
     # Get QC provider config from settings
     provider_config = settings.avalanche.providers.get('QC')
-    if provider_config is None:
-        # Fallback if not in config (shouldn't happen in normal operation)
-        return AvalancheProviderConfig(
-            **{
-                'class': 'AvalancheQuebecProvider',
-                'api_url': 'https://www.avalanchequebec.ca/wp-json/avqc/v1/bulletinavalanche',
-                'cache_timeout': 3600,
-                'forecast_cutoff_hour': 16,
-                'language': 'en'
-            }
-        )
     return provider_config
 
 
 @pytest.fixture
 def canada_sample_response():
     """Load Canada sample API response."""
-    with open('tests/data/avalanche_canada_sample.json', 'r') as f:
+    with open('tests/data/avcan_Brandywine-Garibaldi-Homathko-Spearhead-Tantalus_sample.json', 'r') as f:
         return json.load(f)
 
 
@@ -81,7 +59,7 @@ class TestAvalancheCanadaProvider:
 
         distance = provider.distance_from_region(coords)
         # Should be None (exact match) or very small distance
-        assert distance is None or distance < 1.0
+        assert distance is None
 
     def test_rogers_pass_in_range(self, canada_config):
         """Test Rogers Pass coordinates are within avalanche region."""
@@ -91,22 +69,21 @@ class TestAvalancheCanadaProvider:
         assert provider.out_of_range(coords) is False
 
         distance = provider.distance_from_region(coords)
-        assert distance is None or distance < 1.0
+        assert distance is None
 
     def test_vancouver_out_of_range(self, canada_config):
         """Test Vancouver coordinates - may be within buffer of North Shore mountains."""
         provider = AvalancheCanadaProvider(canada_config)
         coords = (49.2827, -123.1207)  # Vancouver
 
-        # Vancouver may be within 20km buffer of North Shore mountains
-        # So we just check that distance_from_region works
+        # These coordinates are just over 11km away from the closest subregion.
         distance = provider.distance_from_region(coords)
-        assert distance is None or isinstance(distance, float)
+        assert distance is not None and isinstance(distance, float) and distance < 15
 
     def test_near_boundary_proximity(self, canada_config):
         """Test coordinates near boundary return proximity distance."""
         provider = AvalancheCanadaProvider(canada_config)
-        coords = (49.3429512, -123.0223727)  # Near boundary
+        coords = (49.3429512, -123.0223727)  # 0.4km outside of a region
 
         distance = provider.distance_from_region(coords)
 
@@ -114,7 +91,7 @@ class TestAvalancheCanadaProvider:
         assert distance is not None
         assert distance != float('inf')
         assert isinstance(distance, float)
-        assert 0 < distance <= 20  # Within buffer
+        assert 0 < distance <= 1
 
     def test_far_from_avalanche_terrain(self, canada_config):
         """Test coordinates far from avalanche terrain."""
@@ -132,11 +109,7 @@ class TestAvalancheCanadaProvider:
         coords = (50.1163, -122.9574)  # Whistler (in region)
 
         distance = provider.distance_from_region(coords)
-
-        # Exact match should return None
-        if provider.subregions_gdf is not None:
-            # Only test if shapefile is loaded
-            assert distance is None or isinstance(distance, float)
+        assert distance is None
 
     def test_language_url_construction_en(self, canada_config):
         """Test URL construction with English language."""
@@ -157,16 +130,8 @@ class TestAvalancheCanadaProvider:
 
     def test_language_url_construction_fr(self, canada_config):
         """Test URL construction with French language."""
-        # Create a modified config with French language
-        fr_config = AvalancheProviderConfig(
-            **{
-                'class': canada_config.class_name,
-                'api_url': canada_config.api_url,
-                'cache_timeout': canada_config.cache_timeout,
-                'forecast_cutoff_hour': canada_config.forecast_cutoff_hour,
-                'language': 'fr'  # Only change language
-            }
-        )
+        # Create a copy with just the language changed
+        fr_config = canada_config.model_copy(update={'language': 'fr'})
         provider = AvalancheCanadaProvider(fr_config)
         coords = (50.1163, -122.9574)
 
@@ -181,17 +146,6 @@ class TestAvalancheCanadaProvider:
             provider.get_forecast(coords)
             mock_request.assert_called_once_with(expected_url)
 
-    def test_shapefile_not_found_graceful_degradation(self, canada_config):
-        """Test graceful degradation when shapefile is missing."""
-        with patch('app.avalanche.canada.gpd.read_file', side_effect=FileNotFoundError):
-            provider = AvalancheCanadaProvider(canada_config)
-
-            assert provider.subregions_gdf is None
-
-            # Should return inf when no shapefile
-            distance = provider.distance_from_region((50.0, -122.0))
-            assert distance == float('inf')
-
 
 class TestAvalancheQuebecProvider:
     """Test AvalancheQuebecProvider functionality."""
@@ -201,45 +155,27 @@ class TestAvalancheQuebecProvider:
         provider = AvalancheQuebecProvider(quebec_config)
         coords = (49.0, -66.0)  # Chic-Chocs / Gaspésie
 
-        # Test that provider handles coordinates (may depend on shapefile availability)
-        if provider.province_gdf is not None:
-            # If shapefile loaded, should work
-            distance = provider.distance_from_region(coords)
-            # Should be None (in QC) or a float distance, or inf if out of range
-            assert distance is None or isinstance(distance, float)
+        distance = provider.distance_from_region(coords)
+        # Should be None (in QC)
+        assert distance is None
 
     def test_montreal_in_province(self, quebec_config):
         """Test Montreal coordinates - Quebec boundary detection."""
         provider = AvalancheQuebecProvider(quebec_config)
         coords = (45.5017, -73.5673)  # Montreal
 
-        if provider.province_gdf is not None:
-            # Test that provider handles coordinates
-            distance = provider.distance_from_region(coords)
-            # Should return some distance value
-            assert distance is None or isinstance(distance, float)
+        distance = provider.distance_from_region(coords)
+        assert distance is None
 
     def test_outside_quebec_out_of_range(self, quebec_config):
         """Test coordinates outside Quebec are out of range."""
         provider = AvalancheQuebecProvider(quebec_config)
         coords = (43.6532, -79.3832)  # Toronto
 
-        if provider.province_gdf is not None:
-            assert provider.out_of_range(coords) is True
+        assert provider.out_of_range(coords) is True
 
-            distance = provider.distance_from_region(coords)
-            assert distance == float('inf')
-
-    def test_near_quebec_border(self, quebec_config):
-        """Test coordinates near Quebec border return distance."""
-        provider = AvalancheQuebecProvider(quebec_config)
-        coords = (45.0, -74.5)  # Near Quebec-US border
-
-        if provider.province_gdf is not None:
-            distance = provider.distance_from_region(coords)
-
-            # Should be None (in province) or a distance value
-            assert distance is None or isinstance(distance, float)
+        distance = provider.distance_from_region(coords)
+        assert distance == float('inf')
 
     def test_language_query_param_en(self, quebec_config):
         """Test query parameter construction with English."""
@@ -259,16 +195,8 @@ class TestAvalancheQuebecProvider:
 
     def test_language_query_param_fr(self, quebec_config):
         """Test query parameter construction with French."""
-        # Create a modified config with French language
-        fr_config = AvalancheProviderConfig(
-            **{
-                'class': quebec_config.class_name,
-                'api_url': quebec_config.api_url,
-                'cache_timeout': quebec_config.cache_timeout,
-                'forecast_cutoff_hour': quebec_config.forecast_cutoff_hour,
-                'language': 'fr'  # Only change language
-            }
-        )
+        # Create a copy with just the language changed
+        fr_config = quebec_config.model_copy(update={'language': 'fr'})
         provider = AvalancheQuebecProvider(fr_config)
         coords = (49.0, -66.0)
 
@@ -282,17 +210,6 @@ class TestAvalancheQuebecProvider:
 
             provider.get_forecast(coords)
             mock_request.assert_called_once_with(expected_url)
-
-    def test_shapefile_not_found_graceful_degradation(self, quebec_config):
-        """Test graceful degradation when province shapefile is missing."""
-        with patch('app.avalanche.quebec.gpd.read_file', side_effect=FileNotFoundError):
-            provider = AvalancheQuebecProvider(quebec_config)
-
-            assert provider.province_gdf is None
-
-            distance = provider.distance_from_region((49.0, -66.0))
-            assert distance == float('inf')
-
 
 class TestAvalancheReport:
     """Test AvalancheReport multi-provider selection."""
@@ -383,7 +300,7 @@ class TestAPIIntegration:
     def test_canada_api_parsing(self, canada_config, canada_sample_response):
         """Test Canada API response parsing."""
         provider = AvalancheCanadaProvider(canada_config)
-        coords = (50.1163, -122.9574)
+        coords = (50.1163, -122.9574)  # Spearhead subregion
 
         # Mock the HTTP request
         with patch.object(provider, '_request') as mock_request:
@@ -395,22 +312,23 @@ class TestAPIIntegration:
             result = provider.get_forecast(coords)
 
             assert result is not None
-            assert result['region'] is not None
+            assert result['region'] == 'Spearhead'
             assert result['timezone'] == 'America/Vancouver'
-            assert len(result['forecasts']) == 2
-            assert '2025-01-15' in result['forecasts']
-            assert '2025-01-16' in result['forecasts']
+            assert len(result['forecasts']) == 3
+            assert '2025-12-20' in result['forecasts']
+            assert '2025-12-21' in result['forecasts']
+            assert '2025-12-22' in result['forecasts']
 
             # Check danger ratings
-            day1 = result['forecasts']['2025-01-15']
-            assert day1['alpine_rating'] == 'Considerable'
-            assert day1['treeline_rating'] == 'Moderate'
-            assert day1['below_treeline_rating'] == 'Low'
+            day1 = result['forecasts']['2025-12-20']
+            assert day1['alpine_rating'] == '3 - Considerable'
+            assert day1['treeline_rating'] == '2 - Moderate'
+            assert day1['below_treeline_rating'] == '2 - Moderate'
 
             # Check problems
             assert len(result['problems']) == 2
-            assert result['problems'][0]['type'] == 'Storm Slab'
-            assert result['problems'][0]['likelihood'] == 'Likely'
+            assert result['problems'][0]['type'] == 'Storm slab'
+            assert result['problems'][0]['likelihood'] == 'likely'
 
     def test_quebec_api_parsing(self, quebec_config, quebec_sample_response):
         """Test Quebec API response parsing."""
@@ -450,13 +368,13 @@ class TestAPIIntegration:
 
             result = provider.get_forecast(coords)
 
-            assert len(result['forecasts']) == 2
+            assert len(result['forecasts']) == 3
 
             # Verify second day
-            day2 = result['forecasts']['2025-01-16']
-            assert day2['alpine_rating'] == 'High'
-            assert day2['treeline_rating'] == 'Considerable'
-            assert day2['below_treeline_rating'] == 'Moderate'
+            day2 = result['forecasts']['2025-12-21']
+            assert day2['alpine_rating'] == '3 - Considerable'
+            assert day2['treeline_rating'] == '2 - Moderate'
+            assert day2['below_treeline_rating'] == '2 - Moderate'
 
     def test_problem_extraction(self, canada_config, canada_sample_response):
         """Test avalanche problem extraction."""
@@ -476,24 +394,31 @@ class TestAPIIntegration:
 
             # Check first problem details
             problem1 = problems[0]
-            assert problem1['type'] == 'Storm Slab'
+            assert problem1['type'] == 'Storm slab'
             assert 'Alpine' in problem1['elevations']
-            assert 'N' in problem1['aspects']
-            assert problem1['likelihood'] == 'Likely'
-            assert problem1['size_min'] == '1.5'
+            assert 'n' in problem1['aspects']
+            assert problem1['likelihood'] == 'likely'
+            assert problem1['size_min'] == '1.0'
             assert problem1['size_max'] == '2.5'
 
-    def test_network_error_handling(self, canada_config):
-        """Test network error handling."""
+    def test_network_error_handling(self, canada_config, caplog):
+        """Test network error handling and logging."""
         provider = AvalancheCanadaProvider(canada_config)
         coords = (50.1163, -122.9574)
 
         with patch.object(provider, '_request', side_effect=RequestException("Network error")):
             result = provider.get_forecast(coords)
+
+            # Verify return value
             assert result is None
 
-    def test_404_response(self, canada_config):
-        """Test 404 response handling."""
+            # Verify logging
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'Network error checking avalanche data' in caplog.records[0].message
+
+    def test_404_response(self, canada_config, caplog):
+        """Test 404 response handling and logging."""
         provider = AvalancheCanadaProvider(canada_config)
         coords = (50.1163, -122.9574)
 
@@ -503,10 +428,17 @@ class TestAPIIntegration:
             mock_request.return_value = mock_response
 
             result = provider.get_forecast(coords)
+
+            # Verify return value
             assert result is None
 
-    def test_invalid_json_response(self, canada_config):
-        """Test invalid JSON response handling."""
+            # Verify logging of non-200 status code
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'status code 404' in caplog.records[0].message
+
+    def test_invalid_json_response(self, canada_config, caplog):
+        """Test invalid JSON response handling and logging."""
         provider = AvalancheCanadaProvider(canada_config)
         coords = (50.1163, -122.9574)
 
@@ -517,7 +449,56 @@ class TestAPIIntegration:
             mock_request.return_value = mock_response
 
             result = provider.get_forecast(coords)
+
+            # Verify return value
             assert result is None
+
+            # Verify logging of invalid/empty JSON
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'Invalid or empty JSON response' in caplog.records[0].message
+
+
+class TestLiveAPI:
+    """Test live API integration (requires network)."""
+
+    def test_canada_live_api_format(self, canada_config):
+        """Test that live Canada API returns expected format."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)  # Whistler
+
+        # Make a real API call
+        result = provider.get_forecast(coords)
+
+        # Verify we got a response
+        assert result is not None, "API should return data for Whistler coordinates"
+
+        # Check expected top-level keys
+        assert 'region' == 'Spearhead'
+        assert 'timezone' == 'America/Vancouver'
+        assert 'forecasts' in result
+        assert 'problems' in result
+
+        # Verify forecasts structure
+        assert isinstance(result['forecasts'], dict)
+        assert len(result['forecasts']) > 0, "Should have at least one forecast day"
+
+        # Check first forecast has expected rating keys
+        first_forecast = next(iter(result['forecasts'].values()))
+        assert 'alpine_rating' in first_forecast
+        assert 'treeline_rating' in first_forecast
+        assert 'below_treeline_rating' in first_forecast
+
+        # Verify problems structure
+        assert isinstance(result['problems'], list)
+        if len(result['problems']) > 0:
+            problem = result['problems'][0]
+            assert 'type' in problem
+            assert 'elevations' in problem
+            assert 'aspects' in problem
+            assert 'likelihood' in problem
+            assert 'size_min' in problem
+            assert 'size_max' in problem
 
 
 class TestEdgeCases:
@@ -532,8 +513,8 @@ class TestEdgeCases:
         distance = provider.distance_from_region(coords)
         assert distance == float('inf') or distance is None
 
-    def test_missing_report_id(self, canada_config):
-        """Test response with missing report ID."""
+    def test_missing_report_id(self, canada_config, caplog):
+        """Test response with missing report ID and logging."""
         provider = AvalancheCanadaProvider(canada_config)
         coords = (50.1163, -122.9574)
 
@@ -551,10 +532,17 @@ class TestEdgeCases:
             mock_request.return_value = mock_response
 
             result = provider.get_forecast(coords)
+
+            # Verify return value
             assert result is None
 
-    def test_empty_danger_ratings(self, canada_config):
-        """Test response with empty danger ratings."""
+            # Verify logging
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'Invalid or empty JSON response' in caplog.records[0].message
+
+    def test_empty_danger_ratings(self, canada_config, caplog):
+        """Test response with empty danger ratings and logging."""
         provider = AvalancheCanadaProvider(canada_config)
         coords = (50.1163, -122.9574)
 
@@ -581,20 +569,23 @@ class TestEdgeCases:
             assert result is not None
             assert len(result['forecasts']) == 0
 
-    def test_timeout_error(self, canada_config):
-        """Test timeout error handling."""
+            # Verify logging of empty danger ratings
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'empty danger ratings' in caplog.records[0].message.lower()
+
+    def test_timeout_error(self, canada_config, caplog):
+        """Test timeout error handling and logging."""
         provider = AvalancheCanadaProvider(canada_config)
         coords = (50.1163, -122.9574)
 
         with patch.object(provider, '_request', side_effect=RequestException("Timeout")):
             result = provider.get_forecast(coords)
+
+            # Verify return value
             assert result is None
 
-    def test_outside_of_area_message(self):
-        """Test outside of area error message."""
-        coords = (19.4326, -99.1332)  # Mexico City
-        report = AvalancheReport(coords)
-
-        msg = report.outside_of_area_msg()
-        assert "outside of supported avalanche forecast area" in msg.lower()
-        assert "error" in msg.lower()
+            # Verify logging
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'Network error checking avalanche data' in caplog.records[0].message

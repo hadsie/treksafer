@@ -88,7 +88,7 @@ class FindFires:
 
     def __init__(self, coords):
         self.settings = get_config()
-        self.distance_limit = self.settings.fire_radius * 1000
+        self.distance_limit = self.settings.max_radius * 1000
         self.location = coords_to_point_meters(coords)
         self.sources = self._data_sources()
 
