@@ -28,7 +28,7 @@ from shapely.ops import nearest_points
 
 from .config import get_config
 from .helpers import acres_to_hectares, compass_direction, coords_to_point_meters
-from .filters import apply_filters, create_fire_filters
+from .filters import apply_filters
 
 TRANSFORMS = {
     "acres_to_hectares": acres_to_hectares,
@@ -125,7 +125,11 @@ class FindFires:
         sources_map = self.sources_map()
 
         # Build default filters from configuration using factory function
-        default_filters = create_fire_filters(self.settings)
+        default_filters = {
+            'status': self.settings.fire_status,
+            'distance': self.settings.fire_radius,
+            'size': self.settings.fire_size
+        }
 
         # Merge user filters with defaults (user filters override defaults)
         final_filters = {**default_filters, **(filters or {})}

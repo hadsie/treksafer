@@ -15,6 +15,13 @@ STATUS_LEVELS = {
     'out': 4          # Out/extinguished
 }
 
+# Filter handler registry
+FILTER_HANDLERS = {
+    'status': apply_status_filter,
+    'distance': apply_distance_filter,
+    'size': apply_size_filter
+}
+
 
 def get_allowed_statuses(status_map, filter_level):
     """
@@ -30,6 +37,7 @@ def get_allowed_statuses(status_map, filter_level):
     max_level = STATUS_LEVELS.get(filter_level)
     if not max_level:
         # Invalid filter_level - return empty set (exclude all)
+        # @todo add logging - use default.
         return set()
 
     # Include all categories up to the specified level
@@ -47,6 +55,7 @@ def apply_status_filter(items, status_filter, data_file, **kwargs):
         return items
 
     if not data_file or not hasattr(data_file, 'status_map'):
+        # @todo add logging
         return items
 
     allowed_statuses = get_allowed_statuses(data_file.status_map, status_filter)
@@ -91,14 +100,6 @@ def apply_size_filter(items, min_size_ha, data_file, **kwargs):
     return filtered_items
 
 
-# Generic filter handler registry
-FILTER_HANDLERS = {
-    'status': apply_status_filter,
-    'distance': apply_distance_filter,
-    'size': apply_size_filter
-}
-
-
 def apply_filters(items, filters, data_file, location, settings):
     """
     Apply multiple filters to items generically.
@@ -120,16 +121,6 @@ def apply_filters(items, filters, data_file, location, settings):
             )
 
     return items
-
-
-# Factory functions for creating domain-specific filter configurations
-def create_fire_filters(settings):
-    """Create default filter configuration for fires."""
-    return {
-        'status': settings.fire_status,
-        'size': settings.fire_size
-    }
-
 
 def create_avalanche_filters(settings):
     """Create default filter configuration for avalanches (future use)."""

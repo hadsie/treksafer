@@ -1,10 +1,10 @@
 # Config for TrekSafer
 
-# The radius to search for fires within (km).
-fire_radius: 50
-
 # Maximum radius a user can specify (km).
 max_radius: 150
+
+# The radius to search for fires within (km).
+fire_radius: 50
 
 # The default fire status filter level (active, controlled, all).
 # controlled: includes active, managed, and controlled fires (excludes out)

@@ -87,6 +87,7 @@ class DataFile(BaseModel):
     location: str
     filename: str
     mapping: Dict[str, Any]
+    status_map: Dict[str, List[str]]
 
 
 class Settings(BaseSettings):

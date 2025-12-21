@@ -2,6 +2,7 @@
 
 import pytest
 from app.fires import FindFires
+from app.config import get_config
 
 
 class TestFireLocationBasics:
@@ -70,17 +71,17 @@ class TestOverlappingPerimeters:
 class TestFilterBehavior:
     """Test filtering behavior at different locations."""
 
-    def test_active_filter_reduces_results(self):
+    def test_active_filter_reduces_results(self, mock_bc_fire_api):
         """Test that active filter reduces or maintains result count."""
         # In manning park. 3 fires, 1 holding, 1 out of control, 1 out.
         coords = (49.078353, -121.012207)
         ff = FindFires(coords)
 
-        all_fires = ff.nearby(filters={'status': 'all', 'distance': 30})
-        active_fires = ff.nearby(filters={'status': 'active', 'distance': 30})
+        all_fires = ff.nearby(filters={'status': 'all', 'distance': 30, 'size': 0})
+        active_fires = ff.nearby(filters={'status': 'active', 'distance': 30, 'size': 0})
 
         # Active filter should never increase results
-        assert len(active_fires) <= len(all_fires)
+        assert len(active_fires) < len(all_fires)
 
     def test_distance_filter_reduces_results(self):
         """Test that smaller distance reduces or maintains results."""
@@ -91,7 +92,7 @@ class TestFilterBehavior:
         fires_50km = ff.nearby(filters={'status': 'all', 'distance': 50})
 
         # Smaller radius should never increase results
-        assert len(fires_25km) <= len(fires_50km)
+        assert len(fires_25km) < len(fires_50km)
 
     def test_combined_filters(self):
         """Test combining multiple filters."""
@@ -102,8 +103,19 @@ class TestFilterBehavior:
         all_fires = ff.nearby(filters={'status': 'all', 'distance': 150})
         filtered_fires = ff.nearby(filters={'status': 'active', 'distance': 50})
 
-        assert len(filtered_fires) <= len(all_fires)
+        assert len(filtered_fires) < len(all_fires)
 
+    def test_max_radius(self):
+        """Test that max_radius is enforced."""
+        coords = (49.078353, -121.012207)
+        config = get_config()
+        ff = FindFires(coords)
+
+        # Test that combining filters reduces results
+        all_fires = ff.nearby(filters={'status': 'all', 'distance': config.max_radius})
+        outside_of_max_fires = ff.nearby(filters={'status': 'all', 'distance': config.max_radius * 1000})
+
+        assert len(filtered_fires) == len(all_fires)
 
 class TestEdgeCases:
     """Test edge cases and out of range scenarios."""
