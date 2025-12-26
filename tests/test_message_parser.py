@@ -220,32 +220,32 @@ class TestFilterExtraction:
     def test_active_status_filter(self):
         """'active' keyword sets status filter."""
         result = parse_message("(49.25, -123.01) active")
-        assert result["filters"]["status"] == "active"
+        assert result["fire_filters"]["status"] == "active"
 
     def test_all_status_filter(self):
         """'all' keyword sets status filter."""
         result = parse_message("(49.25, -123.01) all")
-        assert result["filters"]["status"] == "all"
+        assert result["fire_filters"]["status"] == "all"
 
     def test_status_case_insensitive(self):
         """Status filters are case-insensitive."""
         result = parse_message("(49.25, -123.01) ACTIVE")
-        assert result["filters"]["status"] == "active"
+        assert result["fire_filters"]["status"] == "active"
 
     def test_distance_filter_kilometers(self):
         """Distance with 'km' unit."""
         result = parse_message("(49.25, -123.01) 25km")
-        assert result["filters"]["distance"] == 25
+        assert result["fire_filters"]["distance"] == 25
 
     def test_distance_filter_miles(self):
         """Distance with 'mi' unit converts to km."""
         result = parse_message("(49.25, -123.01) 10mi")
-        assert result["filters"]["distance"] == pytest.approx(16.09344)
+        assert result["fire_filters"]["distance"] == pytest.approx(16.09344)
 
     def test_distance_filter_with_spaces(self):
         """Distance filter handles spacing variations."""
         result = parse_message("(49.25, -123.01)  50km  ")
-        assert result["filters"]["distance"] == 50
+        assert result["fire_filters"]["distance"] == 50
 
     def test_data_type_fire(self):
         """'fire' keyword sets data type."""
@@ -295,8 +295,8 @@ class TestFilterExtraction:
     def test_multiple_filters_combined(self):
         """Multiple filters in one message."""
         result = parse_message("(49.25, -123.01) active 25km fire")
-        assert result["filters"]["status"] == "active"
-        assert result["filters"]["distance"] == 25
+        assert result["fire_filters"]["status"] == "active"
+        assert result["fire_filters"]["distance"] == 25
         assert result["data_type"] == "fire"
 
 
@@ -307,14 +307,14 @@ class TestReturnValueStructure:
         """Result dict contains all expected keys."""
         result = parse_message("(49.25, -123.01)")
         assert "coords" in result
-        assert "filters" in result
+        assert "fire_filters" in result
         assert "data_type" in result
         assert "avalanche_filters" in result
 
     def test_filters_is_dict(self):
         """Filters are returned as dict."""
         result = parse_message("(49.25, -123.01)")
-        assert isinstance(result["filters"], dict)
+        assert isinstance(result["fire_filters"], dict)
 
     def test_avalanche_filters_is_dict(self):
         """Avalanche filters are returned as dict."""
@@ -330,8 +330,8 @@ class TestIntegration:
         message = "Emergency! Active fires near me. inreachlink.com/ABC (49.25, -123.01) 50km"
         result = parse_message(message)
         assert result["coords"] == (49.25, -123.01)
-        assert result["filters"]["status"] == "active"
-        assert result["filters"]["distance"] == 50
+        assert result["fire_filters"]["status"] == "active"
+        assert result["fire_filters"]["distance"] == 50
 
     def test_map_link_with_data_type(self):
         """Map link with data type keyword."""
@@ -345,8 +345,8 @@ class TestIntegration:
         message = "50.58° N, 122.09° W active fire 25km"
         result = parse_message(message)
         assert result["coords"] == (50.58, -122.09)
-        assert result["filters"]["status"] == "active"
-        assert result["filters"]["distance"] == 25
+        assert result["fire_filters"]["status"] == "active"
+        assert result["fire_filters"]["distance"] == 25
         assert result["data_type"] == "fire"
 
     def test_complex_natural_language(self):
@@ -354,8 +354,8 @@ class TestIntegration:
         message = "Hi, I'm at (49.25, -123.01) and want to know about active fires within 30km"
         result = parse_message(message)
         assert result["coords"] == (49.25, -123.01)
-        assert result["filters"]["status"] == "active"
-        assert result["filters"]["distance"] == 30
+        assert result["fire_filters"]["status"] == "active"
+        assert result["fire_filters"]["distance"] == 30
         assert result["data_type"] == "fire"
 
     def test_avalanche_forecast_request(self):

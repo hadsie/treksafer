@@ -16,11 +16,8 @@ class Messages:
     def outside_of_area(self):
         return 'TrekSafer ERROR: GPS coordinates outside of supported fire perimeter area. No data available.'
 
-    def no_fires(self):
-        # @todo - Pull the 100 value from settings.
-        settings = get_config()
-        radius = settings.fire_radius
-        return f'No fires reported within a {radius}km radius of your location.'
+    def no_fires(self, distance):
+        return f'No fires reported within {distance}km of your location.'
 
     def fires(self, fires):
         messages = []
@@ -118,12 +115,12 @@ class Messages:
         # Strip the trailing “.0” if the number is an integer
         return int(km_rounded) if km_rounded == int(km_rounded) else km_rounded
 
-def handle_fire_request(coords, user_filters):
+def handle_fire_request(coords, fire_filters):
     """Handle fire information requests.
 
     Args:
         coords: Tuple of (latitude, longitude)
-        user_filters: Dictionary of user-specified filters
+        fire_filters: Dictionary of fire-specific filters
 
     Returns:
         str: Formatted fire report with AQI
@@ -138,13 +135,14 @@ def handle_fire_request(coords, user_filters):
         aqi_message = f"AQI: {aqi}\n\n" if aqi else ''
 
     # Find fires
-    findfires = FindFires(coords)
+    findfires = FindFires(coords, fire_filters)
     if findfires.out_of_range():
         return aqi_message + responses.outside_of_area()
 
-    fires = findfires.nearby(user_filters)
+    fires = findfires.nearby()
     if not fires:
-        return aqi_message + responses.no_fires()
+        distance = min(findfires.filters['distance'], settings.max_radius)
+        return aqi_message + responses.no_fires(distance)
 
     # Format response
     fire_messages = []
@@ -192,7 +190,7 @@ def handle_message(message):
         return responses.no_gps()
 
     coords = parsed_data["coords"]
-    user_filters = parsed_data["filters"]
+    fire_filters = parsed_data["fire_filters"]
     data_type = parsed_data.get("data_type", "auto")
     avalanche_filters = parsed_data.get("avalanche_filters", {})
 
@@ -211,6 +209,6 @@ def handle_message(message):
     if data_type == "avalanche":
         return handle_avalanche_request(coords, avalanche_filters)
     elif data_type == "fire":
-        return handle_fire_request(coords, user_filters)
+        return handle_fire_request(coords, fire_filters)
     else:
         return f"Unknown data type: {data_type}"

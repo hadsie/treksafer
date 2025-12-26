@@ -169,7 +169,7 @@ def parse_message(message):
     if coords:
         return {
             "coords": coords,
-            "filters": filters,
+            "fire_filters": filters,
             "data_type": data_type,
             "avalanche_filters": avalanche_filters
         }

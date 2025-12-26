@@ -11,8 +11,8 @@ class TestFireLocationBasics:
     def test_lillooet_bc(self, mock_bc_fire_api):
         """Test Lillooet, BC - known fire location."""
         coords = (50.7021714,-121.9725246)
-        ff = FindFires(coords)
-        fires = ff.nearby(filters={'status': 'all', 'distance': 20})
+        ff = FindFires(coords, filters={'status': 'all', 'distance': 20})
+        fires = ff.nearby()
 
         assert len(fires) == 1
         assert ff.out_of_range() is False
@@ -20,8 +20,8 @@ class TestFireLocationBasics:
     def test_manning_park_bc(self, mock_bc_fire_api):
         """Test Manning Park, BC - known fire location."""
         coords = (49.064646, -120.7919022)
-        ff = FindFires(coords)
-        fires = ff.nearby(filters={'status': 'all', 'distance': 50})
+        ff = FindFires(coords, filters={'status': 'all', 'distance': 50})
+        fires = ff.nearby()
 
         assert len(fires) == 3
         assert ff.out_of_range() is False
@@ -34,8 +34,8 @@ class TestBorderCases:
         """Test BC/AB border west of Jasper - should find fires from both provinces."""
         # Coordinates on BC border west of Jasper
         coords = (53.012807, -118.649372)
-        ff = FindFires(coords)
-        fires = ff.nearby(filters={'status': 'all', 'distance': 70})
+        ff = FindFires(coords, filters={'status': 'all', 'distance': 70})
+        fires = ff.nearby()
 
         # Should find fires from both AB and BC
         assert len(fires) == 2
@@ -44,8 +44,8 @@ class TestBorderCases:
     def test_waterton_lakes_park(self):
         """Test Waterton Lakes National Park - multiple nearby fires."""
         coords = (49.0500, -113.9103)  # Waterton townsite
-        ff = FindFires(coords)
-        fires = ff.nearby(filters={'status': 'all', 'distance': 50})
+        ff = FindFires(coords, filters={'status': 'all', 'distance': 50})
+        fires = ff.nearby()
 
         assert len(fires) == 3
         assert ff.out_of_range() is False
@@ -57,9 +57,9 @@ class TestOverlappingPerimeters:
     def test_overlapping_fires(self, mock_bc_fire_api):
         """Test coordinates in overlapping fire perimeters."""
         coords = (58.164245, -121.038954)
-        ff = FindFires(coords)
         # Distance = 0 as the coordinates are directly in a perimeter.
-        fires = ff.nearby(filters={'status': 'all', 'distance': 0})
+        ff = FindFires(coords, filters={'status': 'all', 'distance': 0})
+        fires = ff.nearby()
 
         # Should find multiple overlapping fires
         assert len(fires) == 2
@@ -75,10 +75,12 @@ class TestFilterBehavior:
         """Test that active filter reduces or maintains result count."""
         # In manning park. 3 fires, 1 holding, 1 out of control, 1 out.
         coords = (49.078353, -121.012207)
-        ff = FindFires(coords)
 
-        all_fires = ff.nearby(filters={'status': 'all', 'distance': 30, 'size': 0})
-        active_fires = ff.nearby(filters={'status': 'active', 'distance': 30, 'size': 0})
+        ff_all = FindFires(coords, filters={'status': 'all', 'distance': 30, 'size': 0})
+        all_fires = ff_all.nearby()
+
+        ff_active = FindFires(coords, filters={'status': 'active', 'distance': 30, 'size': 0})
+        active_fires = ff_active.nearby()
 
         # Active filter should never increase results
         assert len(active_fires) < len(all_fires)
@@ -86,10 +88,12 @@ class TestFilterBehavior:
     def test_distance_filter_reduces_results(self, mock_bc_fire_api):
         """Test that smaller distance reduces or maintains results."""
         coords = (49.064646, -120.7919022)
-        ff = FindFires(coords)
 
-        fires_25km = ff.nearby(filters={'status': 'all', 'distance': 25})
-        fires_50km = ff.nearby(filters={'status': 'all', 'distance': 50})
+        ff_25 = FindFires(coords, filters={'status': 'all', 'distance': 25})
+        fires_25km = ff_25.nearby()
+
+        ff_50 = FindFires(coords, filters={'status': 'all', 'distance': 50})
+        fires_50km = ff_50.nearby()
 
         # Smaller radius should never increase results
         assert len(fires_25km) < len(fires_50km)
@@ -97,11 +101,13 @@ class TestFilterBehavior:
     def test_combined_filters(self, mock_bc_fire_api):
         """Test combining multiple filters."""
         coords = (51.398720, -116.491640)
-        ff = FindFires(coords)
 
         # Test that combining filters reduces results
-        all_fires = ff.nearby(filters={'status': 'all', 'distance': 150})
-        filtered_fires = ff.nearby(filters={'status': 'active', 'distance': 50})
+        ff_all = FindFires(coords, filters={'status': 'all', 'distance': 150})
+        all_fires = ff_all.nearby()
+
+        ff_filtered = FindFires(coords, filters={'status': 'active', 'distance': 50})
+        filtered_fires = ff_filtered.nearby()
 
         assert len(filtered_fires) < len(all_fires)
 
@@ -109,11 +115,13 @@ class TestFilterBehavior:
         """Test that max_radius is enforced."""
         coords = (49.078353, -121.012207)
         config = get_config()
-        ff = FindFires(coords)
 
         # Test that combining filters reduces results
-        all_fires = ff.nearby(filters={'status': 'all', 'distance': config.max_radius})
-        outside_of_max_fires = ff.nearby(filters={'status': 'all', 'distance': config.max_radius * 1000})
+        ff_max = FindFires(coords, filters={'status': 'all', 'distance': config.max_radius})
+        all_fires = ff_max.nearby()
+
+        ff_beyond = FindFires(coords, filters={'status': 'all', 'distance': config.max_radius * 1000})
+        outside_of_max_fires = ff_beyond.nearby()
 
         assert len(outside_of_max_fires) == len(all_fires)
 

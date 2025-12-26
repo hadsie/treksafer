@@ -64,8 +64,8 @@ def test_cli_transport_smoke():
     # In test environment, verify exact content based on config
     if settings.env == "test":
         expected_radius = min(settings.fire_radius, settings.max_radius)
-        assert f"No fires reported within a {expected_radius}km radius" in response, \
-            f"Expected message about {expected_radius}km radius, got: {response}"
+        assert f"No fires reported within {expected_radius}km" in response, \
+            f"Expected message about {expected_radius}km, got: {response}"
 
     print(f"\n✅ CLI transport smoke test passed")
     print(f"   Response: {response[:100]}...")
@@ -101,7 +101,7 @@ def test_signalwire_transport_smoke():
     print(f"1. Send this SMS to {sw_config.phone_number}:")
     print("   FIRECHECK: (49.25,-123.10)")
     print("\n2. Expected response should contain:")
-    print(f"   'No fires reported within a {settings.fire_radius}km radius'")
+    print(f"   'No fires reported within {settings.fire_radius}km of your location'")
     print("\n3. Or try a location with known fires:")
     print("   FIRECHECK: (51.398720, -116.491640)")
     print("   (This should return fire information)")

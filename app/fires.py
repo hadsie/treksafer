@@ -122,11 +122,19 @@ def _normalize_row(data_file, row, location, closest_point, distance) -> dict:
 class FindFires:
     """Locate fires within [radius]km of a lat/lon coordinate."""
 
-    def __init__(self, coords):
+    def __init__(self, coords, filters=None):
         self.settings = get_config()
         self.distance_limit = self.settings.max_radius * 1000
         self.location = coords_to_point_meters(coords)
         self.sources = self._data_sources()
+
+        # Build filters with defaults
+        default_filters = {
+            'status': self.settings.fire_status,
+            'distance': self.settings.fire_radius,
+            'size': self.settings.fire_size
+        }
+        self.filters = {**default_filters, **(filters or {})}
 
     def out_of_range(self) -> bool:
         """
@@ -162,19 +170,9 @@ class FindFires:
         """Load and cache shapefile with CRS transformation."""
         return gpd.read_file(filepath).to_crs(epsg=3857)
 
-    def nearby(self, filters=None):
+    def nearby(self):
         fires = []
         sources_map = self.sources_map()
-
-        # Build default filters from configuration using factory function
-        default_filters = {
-            'status': self.settings.fire_status,
-            'distance': self.settings.fire_radius,
-            'size': self.settings.fire_size
-        }
-
-        # Merge user filters with defaults (user filters override defaults)
-        final_filters = {**default_filters, **(filters or {})}
 
         for source in self.sources:
             if source not in sources_map:
@@ -183,7 +181,7 @@ class FindFires:
             # Grab the matching data file settings
             data_file = next((df for df in self.settings.data if df.location == source), None)
             if data_file:
-                fires += self.search(fire_perimeters, final_filters, data_file)
+                fires += self.search(fire_perimeters, self.filters, data_file)
 
         return fires
 
