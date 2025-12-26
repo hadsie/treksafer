@@ -135,7 +135,7 @@ def handle_fire_request(coords, user_filters):
     settings = get_config()
     if settings.include_aqi:
         aqi = get_aqi(coords)
-        aqi_message = f"AQI: {aqi}\n\n"
+        aqi_message = f"AQI: {aqi}\n\n" if aqi else ''
 
     # Find fires
     findfires = FindFires(coords)

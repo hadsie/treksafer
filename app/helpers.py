@@ -1,3 +1,4 @@
+import logging
 import osmnx as ox
 import pytz
 import re
@@ -73,43 +74,55 @@ def get_aqi(coords):
         coords (tuple): A tuple containing (latitude, longitude) as floats.
 
     Returns:
-        int: The current US Air Quality Index value.
+        int or None: The current US Air Quality Index value, or None if unavailable.
     """
-    url = (
-        "https://air-quality-api.open-meteo.com/v1/air-quality"
-        f"?latitude={coords[0]}&longitude={coords[1]}"
-        "&hourly=us_aqi&timezone=America%2FLos_Angeles&forecast_days=1"
-    )
+    try:
+        url = (
+            "https://air-quality-api.open-meteo.com/v1/air-quality"
+            f"?latitude={coords[0]}&longitude={coords[1]}"
+            "&hourly=us_aqi&timezone=America%2FLos_Angeles&forecast_days=1"
+        )
 
-    resp = requests.get(url)
-    data = resp.json()
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()  # Raise for 4xx/5xx errors
+        data = resp.json()
 
-    # Get the current "hour" in the same timezone as the JSON data is giving us.
-    api_timezone = data["timezone"]
-    current_time = datetime.now(pytz.timezone(api_timezone))
-    current_hour = current_time.strftime('%Y-%m-%dT%H:00')
+        # Get the current "hour" in the same timezone as the JSON data is giving us.
+        api_timezone = data["timezone"]
+        current_time = datetime.now(pytz.timezone(api_timezone))
+        current_hour = current_time.strftime('%Y-%m-%dT%H:00')
 
-    # Find the index of current time in the hourly time array, and match that to the AQI array.
-    current_index = data["hourly"]["time"].index(current_hour)
+        # Find the index of current time in the hourly time array, and match that to the AQI array.
+        current_index = data["hourly"]["time"].index(current_hour)
 
-    # Get latest AQI
-    return data["hourly"]["us_aqi"][current_index]
+        # Get latest AQI
+        return data["hourly"]["us_aqi"][current_index]
+
+    except requests.RequestException as e:
+        logging.warning(f"Failed to fetch AQI data: network error - {e}")
+        return None
+    except (KeyError, ValueError, IndexError) as e:
+        logging.warning(f"Failed to parse AQI data: {e}")
+        return None
 
 def parse_message(message):
     """Parse an SMS message for lat/long coordinates and optional filters.
 
     Supports:
-        - Plain decimal degrees: (49.123, -123.456)
-        - Apple Maps links
-        - Google Maps links
-        - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
+        - Various coordinate formats, see coords_from_message().
         - Filter keywords: "active", "all"
         - Distance filters: "25km", "10mi"
         - Data type keywords: "avalanche", "fire"
-        - Forecast time keywords: "today", "tomorrow"
+        - Forecast time keywords: "today", "tomorrow", "all"
 
     Returns:
-        dict: {"coords": (lat, lon), "filters": dict, "data_type": str, "forecast_time": str} or None if no coords found
+        dict: {
+            "coords": (lat, lon),
+            "filters": dict,
+            "data_type": str,
+            "forecast_time": str
+        }
+        or None if no coords found
     """
 
     # Extract filters from message (case insensitive, using word boundaries)
@@ -151,59 +164,11 @@ def parse_message(message):
     elif re.search(r'\ball\b', message_lower):
         avalanche_filters['forecast'] = 'all'
 
-    # Check for Google or Apple map shares.
-    for url_txt in re.findall(r'https?://\S+', message):
-        parsed = urlparse(url_txt)
-        coords = None
-        if 'maps.apple.com' in parsed.netloc:
-            coords = _coords_from_apple(parsed)
-        elif any(domain in parsed.netloc for domain in ('google.', 'goo.gl')) and '/maps' in parsed.path:
-            coords = _coords_from_google(parsed)
-        if coords:
-            return {"coords": coords, "filters": filters, "data_type": data_type, "avalanche_filters": avalanche_filters}
+    coords = coords_from_message(message)
 
-
-    lat_coord = r'-?\d{1,2}\.\d{1,8}|-?\d{1,2}'
-    long_coord = r'-?\d{1,3}\.\d{1,8}|-?\d{1,3}'
-
-    # inReach has the coordinates at the end of the message in brackets.
-    m = re.search(r'\((%s),\s*(%s)\)\s*$' % (lat_coord, long_coord), message)
-
-    lat = long = None
-    if m != None and len(m.groups()) == 2:
-        lat = float(m.group(1))
-        long = float(m.group(2))
-    else:
-        # Find a matching coordinate pair anywhere in the string.
-        m = re.findall(r'\b(%s)\s*,\s*(%s)\b' % (lat_coord, long_coord), message)
-        for coords in m:
-            coords = [float(x) for x in coords]
-            # Find the first number pair that matches lat/long coords.
-            if coords[0] <= 90 and coords[0] >= -90 and coords[1] <= 180 and coords[1] >= -180:
-                lat = coords[0]
-                long = coords[1]
-                break
-
-    # If decimal parsing didn't hit, try degree+hemisphere patterns.
-    if lat is None or long is None:
-        for pat in _DEG_HEMI_PATTERNS:
-            m = pat.search(message)
-            if m:
-                lat_val = float(m.group('lat'))
-                lon_val = float(m.group('lon'))
-                lat_dir = m.group('lat_dir')
-                lon_dir = m.group('lon_dir')
-                lat = _apply_hemisphere(lat_val, lat_dir, for_lat=True)
-                long = _apply_hemisphere(lon_val, lon_dir, for_lat=False)
-                # Sanity check bounds
-                if -90 <= lat <= 90 and -180 <= long <= 180:
-                    break
-                else:
-                    lat = long = None
-
-    if lat is not None and long is not None:
+    if coords:
         return {
-            "coords": (lat, long),
+            "coords": coords,
             "filters": filters,
             "data_type": data_type,
             "avalanche_filters": avalanche_filters
@@ -211,8 +176,72 @@ def parse_message(message):
 
     return None
 
+def coords_from_message(message: str) -> tuple[float, float]|None:
+    """Extract latitude, longitude coordinates from a plain text message.
+
+    Supports:
+        - Plain decimal degrees: (49.123, -123.456)
+        - Apple Maps links
+        - Google Maps links
+        - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
+
+    Returns:
+      tuple of (lat, long) coordinates, or None if no valid patterns were found.
+    """
+
+    # Check for Google or Apple map shares.
+    for url_txt in re.findall(r'https?://\S+', message):
+        parsed = urlparse(url_txt)
+        coords = False
+        if 'maps.apple.com' in parsed.netloc:
+            coords = _coords_from_apple(parsed)
+        elif any(domain in parsed.netloc for domain in ('google.', 'goo.gl')) and '/maps' in parsed.path:
+            coords = _coords_from_google(parsed)
+        if coords:
+            return coords
+
+    lat_coord = r'-?\d{1,2}\.\d{1,8}|-?\d{1,2}'
+    long_coord = r'-?\d{1,3}\.\d{1,8}|-?\d{1,3}'
+
+    # inReach has the coordinates at the end of the message in brackets.
+    m = re.search(r'\((%s),\s*(%s)\)\s*$' % (lat_coord, long_coord), message)
+
+    if m != None and len(m.groups()) == 2:
+        lat = float(m.group(1))
+        lon = float(m.group(2))
+        if _valid_coords(lat, lon):
+            return lat, lon
+    else:
+        # Find a matching coordinate pair anywhere in the string.
+        m = re.findall(r'\b(%s)\s*,\s*(%s)\b' % (lat_coord, long_coord), message)
+        for coords in m:
+            coords = [float(x) for x in coords]
+            # Find the first number pair that matches lat/long coords.
+            if _valid_coords(coords[0], coords[1]):
+                return tuple(coords)
+
+    # If decimal parsing didn't hit, try degree+hemisphere patterns.
+    for pattern in _DEG_HEMI_PATTERNS:
+        m = pattern.search(message)
+        if m:
+            lat_val = float(m.group('lat'))
+            lon_val = float(m.group('lon'))
+            lat_dir = m.group('lat_dir')
+            lon_dir = m.group('lon_dir')
+            lat = _apply_hemisphere(lat_val, lat_dir, for_lat=True)
+            lon = _apply_hemisphere(lon_val, lon_dir, for_lat=False)
+            # Sanity check bounds
+            if _valid_coords(lat, lon):
+                return lat, lon
+
+    return None
+
 def _apply_hemisphere(value: float, hemi: str, for_lat: bool) -> float:
-    # hemisphere wins over sign if both appear (e.g., "-50 N" -> +50)
+    """Apply hemisphere direction to coordinate value.
+
+    Hemisphere letter takes precedence over sign (e.g., "-50 N" becomes +50).
+    Uses absolute value first to strip any existing sign, then applies direction.
+    """
     v = abs(value)
     hemi = hemi.upper()
     if for_lat:
@@ -235,18 +264,25 @@ def _coords_from_apple(url):
     return None
 
 def _coords_from_google(url):
-    # URL format: maps.google.com/@lat,lon,zoom
+    """Extract coordinates from Google Maps URL.
+
+    Tries multiple parsing strategies in order:
+    1. Path-based: maps.google.com/@lat,lon,zoom
+    2. Query-based: ...?q=lat,lon or ...?query=lat,lon
+    """
+    # Attempt 1: Path format (@lat,lon)
     m = re.search(r'@(' + _LAT + r'),(' + _LON + r')', url.path)
     if m and _valid_coords(*(float(x) for x in m.groups())):
         return float(m.group(1)), float(m.group(2))
 
     qs = parse_qs(url.query)
 
-    # Attempt 2 ...?q=lat,lon or ...?query=lat,lon
+    # Attempt 2: Query parameters (q= or query=)
     for key in ('q', 'query'):
         if key in qs:
             first = unquote_plus(qs[key][0])
             m = re.match(r'\s*(' + _LAT + r')\s*,\s*(' + _LON + r')\s*$', first)
             if m and _valid_coords(*(float(x) for x in m.groups())):
                 return float(m.group(1)), float(m.group(2))
+
     return None

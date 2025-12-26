@@ -7,6 +7,8 @@ filter types with a consistent interface.
 """
 from __future__ import annotations
 
+import logging
+
 # Filter priority levels (lower numbers = more urgent/restrictive)
 STATUS_LEVELS = {
     'active': 1,      # Active/out of control
@@ -15,72 +17,19 @@ STATUS_LEVELS = {
     'out': 4          # Out/extinguished
 }
 
-# Filter handler registry
-FILTER_HANDLERS = {
-    'status': apply_status_filter,
-    'distance': apply_distance_filter,
-    'size': apply_size_filter
-}
-
-
-def get_allowed_statuses(status_map, filter_level):
-    """
-    Extract allowed status codes using STATUS_LEVELS ordering.
-
-    Args:
-        status_map (dict): Status mapping for the specific data source
-        filter_level (str): Filter level ('active', 'controlled', etc.)
-
-    Returns:
-        set: Set of allowed status codes for the filter level
-    """
-    max_level = STATUS_LEVELS.get(filter_level)
-    if not max_level:
-        # Invalid filter_level - return empty set (exclude all)
-        # @todo add logging - use default.
-        return set()
-
-    # Include all categories up to the specified level
-    allowed = []
-    for category, level in STATUS_LEVELS.items():
-        if level <= max_level:
-            allowed.extend(status_map.get(category, []))
-
-    return set(allowed)
-
 
 def apply_status_filter(items, status_filter, data_file, **kwargs):
     """Apply status filtering to items."""
     if status_filter == 'all':
         return items
 
-    if not data_file or not hasattr(data_file, 'status_map'):
-        # @todo add logging
+    # Get max level for the filter
+    max_level = STATUS_LEVELS.get(status_filter)
+    if not max_level:
+        logging.error(f"Invalid status filter '{status_filter}'. Valid filters: {', '.join(STATUS_LEVELS.keys())}")
         return items
 
-    allowed_statuses = get_allowed_statuses(data_file.status_map, status_filter)
-    return [item for item in items if item.get('Status') in allowed_statuses]
-
-
-def apply_distance_filter(items, distance_km, data_file, **kwargs):
-    """Apply distance filtering to items."""
-    location = kwargs.get('location')
-    settings = kwargs.get('settings')
-
-    if not settings:
-        return items
-
-    # Cap distance at max_radius
-    max_distance_km = min(distance_km, settings.max_radius)
-    distance_limit = max_distance_km * 1000  # Convert to meters
-
-    filtered_items = []
-    for item in items:
-        # Note: item already has Distance in meters from normalization
-        if item.get('Distance', float('inf')) <= distance_limit:
-            filtered_items.append(item)
-
-    return filtered_items
+    return [item for item in items if item.get('Status', float('inf')) <= max_level]
 
 
 def apply_size_filter(items, min_size_ha, data_file, **kwargs):
@@ -98,6 +47,13 @@ def apply_size_filter(items, min_size_ha, data_file, **kwargs):
         # If no size info, exclude item (safer default)
 
     return filtered_items
+
+
+# Filter handler registry (defined after functions to avoid NameError)
+FILTER_HANDLERS = {
+    'status': apply_status_filter,
+    'size': apply_size_filter
+}
 
 
 def apply_filters(items, filters, data_file, location, settings):

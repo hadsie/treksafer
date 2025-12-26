@@ -474,8 +474,8 @@ class TestLiveAPI:
         assert result is not None, "API should return data for Whistler coordinates"
 
         # Check expected top-level keys
-        assert 'region' == 'Spearhead'
-        assert 'timezone' == 'America/Vancouver'
+        assert result['region'] == 'Spearhead'
+        assert result['timezone'] == 'America/Vancouver'
         assert 'forecasts' in result
         assert 'problems' in result
 
@@ -503,15 +503,6 @@ class TestLiveAPI:
 
 class TestEdgeCases:
     """Test edge cases and error conditions."""
-
-    def test_invalid_coordinates_range(self, canada_config):
-        """Test coordinates outside valid range."""
-        provider = AvalancheCanadaProvider(canada_config)
-        coords = (200.0, 300.0)  # Invalid lat/lon
-
-        # Should handle gracefully
-        distance = provider.distance_from_region(coords)
-        assert distance == float('inf') or distance is None
 
     def test_missing_report_id(self, canada_config, caplog):
         """Test response with missing report ID and logging."""

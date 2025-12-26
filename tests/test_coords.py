@@ -8,7 +8,7 @@ from app.config import get_config
 class TestFireLocationBasics:
     """Basic fire finding at known locations."""
 
-    def test_lillooet_bc(self):
+    def test_lillooet_bc(self, mock_bc_fire_api):
         """Test Lillooet, BC - known fire location."""
         coords = (50.7021714,-121.9725246)
         ff = FindFires(coords)
@@ -17,7 +17,7 @@ class TestFireLocationBasics:
         assert len(fires) == 1
         assert ff.out_of_range() is False
 
-    def test_manning_park_bc(self):
+    def test_manning_park_bc(self, mock_bc_fire_api):
         """Test Manning Park, BC - known fire location."""
         coords = (49.064646, -120.7919022)
         ff = FindFires(coords)
@@ -30,7 +30,7 @@ class TestFireLocationBasics:
 class TestBorderCases:
     """Test coordinates near provincial/national borders."""
 
-    def test_jasper_bc_border(self):
+    def test_jasper_bc_border(self, mock_bc_fire_api):
         """Test BC/AB border west of Jasper - should find fires from both provinces."""
         # Coordinates on BC border west of Jasper
         coords = (53.012807, -118.649372)
@@ -54,7 +54,7 @@ class TestBorderCases:
 class TestOverlappingPerimeters:
     """Test locations with overlapping fire perimeters."""
 
-    def test_overlapping_fires(self):
+    def test_overlapping_fires(self, mock_bc_fire_api):
         """Test coordinates in overlapping fire perimeters."""
         coords = (58.164245, -121.038954)
         ff = FindFires(coords)
@@ -83,7 +83,7 @@ class TestFilterBehavior:
         # Active filter should never increase results
         assert len(active_fires) < len(all_fires)
 
-    def test_distance_filter_reduces_results(self):
+    def test_distance_filter_reduces_results(self, mock_bc_fire_api):
         """Test that smaller distance reduces or maintains results."""
         coords = (49.064646, -120.7919022)
         ff = FindFires(coords)
@@ -94,7 +94,7 @@ class TestFilterBehavior:
         # Smaller radius should never increase results
         assert len(fires_25km) < len(fires_50km)
 
-    def test_combined_filters(self):
+    def test_combined_filters(self, mock_bc_fire_api):
         """Test combining multiple filters."""
         coords = (51.398720, -116.491640)
         ff = FindFires(coords)
@@ -105,7 +105,7 @@ class TestFilterBehavior:
 
         assert len(filtered_fires) < len(all_fires)
 
-    def test_max_radius(self):
+    def test_max_radius(self, mock_bc_fire_api):
         """Test that max_radius is enforced."""
         coords = (49.078353, -121.012207)
         config = get_config()
@@ -115,7 +115,7 @@ class TestFilterBehavior:
         all_fires = ff.nearby(filters={'status': 'all', 'distance': config.max_radius})
         outside_of_max_fires = ff.nearby(filters={'status': 'all', 'distance': config.max_radius * 1000})
 
-        assert len(filtered_fires) == len(all_fires)
+        assert len(outside_of_max_fires) == len(all_fires)
 
 class TestEdgeCases:
     """Test edge cases and out of range scenarios."""
@@ -130,12 +130,13 @@ class TestEdgeCases:
         fires = ff.nearby()
         assert len(fires) == 0
 
-    def test_out_of_range_arctic(self):
-        """Test coordinates far north (no fire data coverage)."""
+    def test_northern_canada(self):
+        """Test coordinates far north."""
         coords = (75.0, -100.0)
         ff = FindFires(coords)
 
-        assert ff.out_of_range() is True
+        # All of Canada has coverage.
+        assert ff.out_of_range() is False
 
         fires = ff.nearby()
         assert len(fires) == 0
@@ -154,12 +155,15 @@ class TestEdgeCases:
 class TestDataSources:
     """Test that correct data sources are selected."""
 
-    def test_bc_coordinates_use_bc_data(self):
+    def test_bc_coordinates_use_bc_data(self, mock_bc_fire_api):
         """Test that BC coordinates select BC data source."""
         coords = (49.064646, -120.7919022)  # Manning Park, BC
         ff = FindFires(coords)
 
         assert 'BC' in ff.sources
+        assert 'CA' in ff.sources
+
+        assert 'AB' not in ff.sources   # AB is further than max_radius away.
 
     def test_ab_coordinates_use_ab_data(self):
         """Test that AB coordinates select AB data source."""
@@ -167,11 +171,14 @@ class TestDataSources:
         ff = FindFires(coords)
 
         assert 'AB' in ff.sources
+        assert 'BC' in ff.sources
+        assert 'CA' in ff.sources
+        assert 'US' not in ff.sources # US is further than max_radius away.
 
     def test_border_coordinates_use_multiple_sources(self):
         """Test that border coordinates select multiple data sources."""
         coords = (52.8737, -118.0814)  # BC/AB border
         ff = FindFires(coords)
 
-        # Should include both BC and AB sources
-        assert len(ff.sources) >= 2
+        # Should include BC, AB, and CA sources
+        assert len(ff.sources) == 3
