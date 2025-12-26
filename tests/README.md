@@ -4,19 +4,44 @@ This directory contains all unit and integration tests for the project. Tests ar
 
 ## Running the test suite
 
+### Unit Tests (Default)
+
 From the project root:
 
 ```bash
 pytest
 ```
 
-This will run all unit tests and skip the transport smoke tests.
+This runs all unit tests and automatically skips smoke tests. Unit tests use mocks and don't require running services.
 
-To explicitly run smoke tests (e.g., end-to-end transport tests or integration with live services):
+### Smoke Tests
 
+Smoke tests verify the transport layer works end-to-end with real configuration. They should be run after deployment to staging/production.
+
+**Requirements:**
+- CLI smoke test: App must be running (`python -m app`)
+- SignalWire smoke test: Valid credentials in `config.yaml`
+
+**Run smoke tests:**
 ```bash
-pytest -m smoke
+# Run with verbose output and show print statements
+pytest -m smoke -v -s
+
+# Run in specific environment
+TREKSAFER_ENV=prod pytest -m smoke -v -s
 ```
+
+**What smoke tests do:**
+- **CLI Transport:** Connects to running CLI server, sends test message, verifies response
+- **SignalWire Transport:** Verifies initialization with real config, prints manual test instructions
+
+**Expected behavior:**
+- Tests will **skip** if transport is not enabled in config
+- Tests will **skip** if transport service is not running
+- Tests will **pass** if transport works correctly
+- Tests will **fail** if transport errors occur
+
+### Other pytest commands
 
 Combine markers and test names as needed:
 
@@ -29,11 +54,6 @@ Run a single test file with verbose output:
 
 ```bash
 pytest tests/test_coords.py -v
-```
-
-To run tests in a non-test environment:
-```bash
-TREKSAFER_ENV=prod pytest -m "smoke"
 ```
 
 
