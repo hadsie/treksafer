@@ -24,7 +24,6 @@ class AvalancheProvider(ABC):
         """
         self.config = config
         self.cache_timeout = config.cache_timeout
-        self.forecast_cutoff_hour = config.forecast_cutoff_hour
         self.api_base = config.api_url
 
         # Ensure cache directory exists

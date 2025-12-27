@@ -113,7 +113,7 @@ def parse_message(message):
         - Filter keywords: "active", "all"
         - Distance filters: "25km", "10mi"
         - Data type keywords: "avalanche", "fire"
-        - Forecast time keywords: "today", "tomorrow", "all"
+        - Forecast time keywords: "current", "tomorrow", "all"
 
     Returns:
         dict: {
@@ -157,8 +157,6 @@ def parse_message(message):
     avalanche_filters = {}
     if re.search(r'\bcurrent\b', message_lower):
         avalanche_filters['forecast'] = 'current'
-    elif re.search(r'\btoday\b', message_lower):
-        avalanche_filters['forecast'] = 'today'
     elif re.search(r'\btomorrow\b', message_lower):
         avalanche_filters['forecast'] = 'tomorrow'
     elif re.search(r'\ball\b', message_lower):

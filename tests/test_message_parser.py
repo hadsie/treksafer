@@ -277,11 +277,6 @@ class TestFilterExtraction:
         result = parse_message("(49.25, -123.01) current")
         assert result["avalanche_filters"]["forecast"] == "current"
 
-    def test_avalanche_forecast_today(self):
-        """'today' sets avalanche forecast filter."""
-        result = parse_message("(49.25, -123.01) today")
-        assert result["avalanche_filters"]["forecast"] == "today"
-
     def test_avalanche_forecast_tomorrow(self):
         """'tomorrow' sets avalanche forecast filter."""
         result = parse_message("(49.25, -123.01) tomorrow")

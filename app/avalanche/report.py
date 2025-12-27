@@ -110,7 +110,7 @@ class AvalancheReport:
         """Get formatted avalanche forecast.
 
         Args:
-            avalanche_filters: Dict with 'forecast' key: 'current'|'today'|'tomorrow'|'all'
+            avalanche_filters: Dict with 'forecast' key: 'current'|'tomorrow'|'all'
 
         Returns:
             Formatted forecast string or None
@@ -135,7 +135,7 @@ class AvalancheReport:
 
         Args:
             forecast_data: Full forecast data with all dates
-            forecast_filter: 'current'|'today'|'tomorrow'|'all'
+            forecast_filter: 'current'|'tomorrow'|'all'
 
         Returns:
             Formatted forecast string
@@ -144,28 +144,24 @@ class AvalancheReport:
         tz = pytz.timezone(forecast_data['timezone'])
         current_time = datetime.now(tz)
 
-        # Build list of dates to show
-        if forecast_filter == 'current':
-            # Use cutoff logic
-            if current_time.hour >= self.provider.forecast_cutoff_hour:
-                dates = [(current_time + timedelta(days=1)).date()]
+        # Convert all available forecast dates to date objects
+        dates = [datetime.strptime(d, '%Y-%m-%d').date()
+                 for d in sorted(forecast_data['forecasts'].keys())]
+
+        if not dates:
+            return self.broken_forecast_msg('date')
+
+        if forecast_filter == 'tomorrow':
+            tomorrow = (current_time + timedelta(days=1)).date()
+            if tomorrow in dates:
+                dates = [tomorrow]
             else:
-                dates = [current_time.date()]
+                logging.warning(f"Tomorrow's forecast not available, using first available")
+                dates = [dates[0]]
 
-        elif forecast_filter == 'today':
-            dates = [current_time.date()]
-
-        elif forecast_filter == 'tomorrow':
-            dates = [(current_time + timedelta(days=1)).date()]
-
-        elif forecast_filter == 'all':
-            # Convert all available forecast dates to date objects
-            dates = [datetime.strptime(d, '%Y-%m-%d').date()
-                     for d in sorted(forecast_data['forecasts'].keys())]
-
-        else:
-            # Unknown filter, default to current
-            dates = [current_time.date()]
+        elif forecast_filter == 'current':
+            # Use the first available forecast date from the API
+            dates = [dates[0]]
 
         return self._format_forecast(forecast_data, dates)
 
@@ -241,3 +237,15 @@ class AvalancheReport:
 
     def outside_of_area_msg(self):
         return 'TrekSafer ERROR: GPS coordinates outside of supported avalanche forecast area. No data available.'
+
+    def broken_forecast_msg(self, reason: str) -> str:
+        """Return error message when forecast data is malformed/missing.
+
+        Args:
+            reason: Type of forecast error ('date', 'data', etc.)
+
+        Returns:
+            Error message string
+        """
+        logging.error(f"Avalanche API error - {reason}: No forecast dates available")
+        return 'TrekSafer ERROR: Unable to retrieve avalanche forecast data. Please try again later.'
