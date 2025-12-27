@@ -166,15 +166,15 @@ def parse_message(message):
 
     coords = coords_from_message(message)
 
-    if coords:
-        return {
-            "coords": coords,
-            "fire_filters": filters,
-            "data_type": data_type,
-            "avalanche_filters": avalanche_filters
-        }
+    if not coords:
+        return None
 
-    return None
+    return {
+        "coords": coords,
+        "fire_filters": filters,
+        "data_type": data_type,
+        "avalanche_filters": avalanche_filters
+    }
 
 def coords_from_message(message: str) -> tuple[float, float]|None:
     """Extract latitude, longitude coordinates from a plain text message.
@@ -206,7 +206,7 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
     # inReach has the coordinates at the end of the message in brackets.
     m = re.search(r'\((%s),\s*(%s)\)\s*$' % (lat_coord, long_coord), message)
 
-    if m != None and len(m.groups()) == 2:
+    if m is not None and len(m.groups()) == 2:
         lat = float(m.group(1))
         lon = float(m.group(2))
         if _valid_coords(lat, lon):

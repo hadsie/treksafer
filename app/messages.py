@@ -1,6 +1,7 @@
 """Parses inbound text, locates fires, and generates the responses."""
 
 import logging
+from typing import Dict, Any
 
 from .config import get_config
 from .helpers import parse_message, get_aqi
@@ -10,22 +11,22 @@ from .avalanche import AvalancheReport
 _SMS_LIMIT = 159
 
 class Messages:
-    def no_gps(self):
+    def no_gps(self) -> str:
         return 'TrekSafer ERROR: No GPS location found. Ensure device is setup to include location in sent message or manually include coordinates with "(lat, long)".'
 
-    def outside_of_area(self):
+    def outside_of_area(self) -> str:
         return 'TrekSafer ERROR: GPS coordinates outside of supported fire perimeter area. No data available.'
 
-    def no_fires(self, distance):
+    def no_fires(self, distance: float) -> str:
         return f'No fires reported within {distance}km of your location.'
 
-    def fires(self, fires):
+    def fires(self, fires: list[Dict]) -> list[str]:
         messages = []
         for fire in fires:
             messages.append(self.fire(fire))
         return messages
 
-    def fire(self, fire, size = "full"):
+    def fire(self, fire: Dict, size: str = "full") -> str:
         message = self._fire(fire, size)
         return message
 
@@ -89,12 +90,12 @@ class Messages:
         return message
 
     @staticmethod
-    def _message_length(message):
+    def _message_length(message: str) -> float:
         """Computes the byte length of a string including emojis."""
         return len(message.encode(encoding='utf_16_le'))/2
 
     @staticmethod
-    def _format_distance(meters):
+    def _format_distance(meters: float) -> int | float:
         """Return a nicely formatted distance string in km.
 
         Rules
@@ -115,7 +116,7 @@ class Messages:
         # Strip the trailing “.0” if the number is an integer
         return int(km_rounded) if km_rounded == int(km_rounded) else km_rounded
 
-def handle_fire_request(coords, fire_filters):
+def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     """Handle fire information requests.
 
     Args:
@@ -151,7 +152,7 @@ def handle_fire_request(coords, fire_filters):
     return aqi_message + "\n\n".join(fire_messages)
 
 
-def handle_avalanche_request(coords, avalanche_filters):
+def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:
     """Handle avalanche forecast requests.
 
     Args:
@@ -171,7 +172,7 @@ def handle_avalanche_request(coords, avalanche_filters):
     return forecast
 
 
-def handle_message(message):
+def handle_message(message: str) -> str:
     """Route message to appropriate data handler.
 
     This function parses the incoming message to extract GPS coordinates,

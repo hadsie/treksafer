@@ -6,11 +6,9 @@ from unittest.mock import Mock, patch, MagicMock
 from requests import RequestException
 
 from app.avalanche import (
-    AvalancheProvider,
     AvalancheCanadaProvider,
     AvalancheQuebecProvider,
     AvalancheReport,
-    AVALANCHE_PROVIDERS
 )
 from app.config import get_config, AvalancheProviderConfig
 

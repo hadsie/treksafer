@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Literal, List, Union, Optional
 
@@ -147,11 +148,8 @@ def _load_dotenv() -> None:
     load_dotenv(f".env.{env}", override=False)
     load_dotenv(".env", override=False)
 
+@lru_cache(maxsize=1)
 def get_config() -> Settings:
-    """Returns the settings object that will be used by the rest of the app."""
+    """Returns the settings object (cached after first call)."""
     _load_dotenv()
     return Settings(**_yaml_defaults())
-
-
-# Instantiate once so callers can use from app.config import settings.
-settings = get_config()

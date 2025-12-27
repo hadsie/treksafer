@@ -21,12 +21,13 @@ import logging
 import re
 from functools import lru_cache
 from pathlib import Path
+from typing import Dict, Any
 
 import geopandas as gpd
 import requests
 from shapely.ops import nearest_points
 
-from .config import get_config
+from .config import get_config, DataFile
 from .helpers import acres_to_hectares, compass_direction, coords_to_point_meters
 from .filters import apply_filters, STATUS_LEVELS
 
@@ -145,8 +146,17 @@ class FindFires:
         """
         return not bool(self.sources)
 
-    def search(self, perimeters, filters, data_file):
+    def search(self, perimeters: gpd.GeoDataFrame, filters: Dict[str, Any], data_file: DataFile) -> list[Dict[str, Any]]:
+        """Search for fires within distance limit.
 
+        Args:
+            perimeters: GeoDataFrame containing fire perimeter geometries
+            filters: Dictionary of filter criteria (distance, status, size)
+            data_file: Data file configuration for this source
+
+        Returns:
+            List of normalized fire data dictionaries
+        """
         user_distance = filters.get('distance', self.settings.fire_radius)
         search_limit = min(user_distance, self.settings.max_radius) * 1000
 
@@ -170,7 +180,12 @@ class FindFires:
         """Load and cache shapefile with CRS transformation."""
         return gpd.read_file(filepath).to_crs(epsg=3857)
 
-    def nearby(self):
+    def nearby(self) -> list[Dict[str, Any]]:
+        """Find all fires within distance limit.
+
+        Returns:
+            List of normalized fire data dictionaries
+        """
         fires = []
         sources_map = self.sources_map()
 

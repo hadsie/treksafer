@@ -6,15 +6,38 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 
 import pytz
-import requests
+from requests import RequestException
 from timezonefinder import TimezoneFinder
 
 from .base import AvalancheProvider
 from ..config import get_config
 
 
-# Provider registry - imported in __init__.py
-AVALANCHE_PROVIDERS = {}
+def _get_provider_class(class_name: str):
+    """Dynamically get avalanche provider class by name.
+
+    Args:
+        class_name: Name of the provider class (e.g., 'AvalancheCanadaProvider')
+
+    Returns:
+        The provider class
+
+    Raises:
+        ValueError: If the class name is not found
+    """
+    # Import here to avoid circular dependency
+    from .canada import AvalancheCanadaProvider
+    from .quebec import AvalancheQuebecProvider
+
+    providers = {
+        'AvalancheCanadaProvider': AvalancheCanadaProvider,
+        'AvalancheQuebecProvider': AvalancheQuebecProvider,
+    }
+
+    provider_class = providers.get(class_name)
+    if not provider_class:
+        raise ValueError(f"Unknown avalanche provider class: {class_name}")
+    return provider_class
 
 
 class AvalancheReport:
@@ -41,8 +64,11 @@ class AvalancheReport:
         best_distance = float('inf')
 
         for provider_key, provider_config in self.settings.avalanche.providers.items():
-            provider_class = AVALANCHE_PROVIDERS.get(provider_key)
-            if not provider_class:
+            try:
+                # Get provider class dynamically from config
+                provider_class = _get_provider_class(provider_config.class_name)
+            except ValueError as e:
+                logging.warning(f"Skipping provider {provider_key}: {e}")
                 continue
 
             # Instantiate provider
@@ -76,7 +102,7 @@ class AvalancheReport:
         try:
             forecast = self.provider.get_forecast(self.coords)
             return forecast is not None
-        except requests.RequestException as e:
+        except RequestException as e:
             logging.warning(f"Network error checking avalanche data: {e}")
             return False
 

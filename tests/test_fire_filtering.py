@@ -19,7 +19,7 @@ class TestMessageParsingWithFilters:
         # Check only the fields we care about
         assert result["coords"] == (49.123, -123.456)
         # parse_message adds default distance from config, so check for that
-        assert "distance" in result["filters"]
+        assert "distance" in result["fire_filters"]
 
     def test_coordinates_with_active_filter(self):
         """Test coordinate parsing with 'active' filter."""
@@ -27,7 +27,7 @@ class TestMessageParsingWithFilters:
         result = parse_message(message)
 
         assert result["coords"] == (49.123, -123.456)
-        assert result["filters"]["status"] == "active"
+        assert result["fire_filters"]["status"] == "active"
 
     def test_coordinates_with_all_filter(self):
         """Test coordinate parsing with 'all' filter."""
@@ -35,7 +35,7 @@ class TestMessageParsingWithFilters:
         result = parse_message(message)
 
         assert result["coords"] == (49.123, -123.456)
-        assert result["filters"]["status"] == "all"
+        assert result["fire_filters"]["status"] == "all"
 
     def test_coordinates_with_distance_filter_km(self):
         """Test coordinate parsing with distance filter in km."""
@@ -43,7 +43,7 @@ class TestMessageParsingWithFilters:
         result = parse_message(message)
 
         assert result["coords"] == (49.123, -123.456)
-        assert result["filters"]["distance"] == 25.0
+        assert result["fire_filters"]["distance"] == 25.0
 
     def test_coordinates_with_distance_filter_mi(self):
         """Test coordinate parsing with distance filter in miles."""
@@ -51,7 +51,7 @@ class TestMessageParsingWithFilters:
         result = parse_message(message)
 
         assert result["coords"] == (49.123, -123.456)
-        assert result["filters"]["distance"] == 16.09344  # 10 * 1.609344
+        assert result["fire_filters"]["distance"] == 16.09344  # 10 * 1.609344
 
     def test_coordinates_with_multiple_filters(self):
         """Test coordinate parsing with both status and distance filters."""
@@ -59,52 +59,52 @@ class TestMessageParsingWithFilters:
         result = parse_message(message)
 
         assert result["coords"] == (49.123, -123.456)
-        assert result["filters"]["status"] == "active"
-        assert result["filters"]["distance"] == 50.0
+        assert result["fire_filters"]["status"] == "active"
+        assert result["fire_filters"]["distance"] == 50.0
 
     def test_filter_keyword_word_boundaries(self):
         """Test that filter detection uses word boundaries."""
         # Should NOT match 'active' in 'radioactive'
         message = "(49.123, -123.456) radioactive"
         result = parse_message(message)
-        assert "status" not in result["filters"]
+        assert "status" not in result["fire_filters"]
 
         # Should NOT match 'all' in 'ball'
         message = "(49.123, -123.456) ball"
         result = parse_message(message)
-        assert "status" not in result["filters"]
+        assert "status" not in result["fire_filters"]
 
     def test_distance_filter_word_boundaries(self):
         """Test that distance filter uses word boundaries."""
         # Should match standalone distance
         message = "(49.123, -123.456) 25km"
         result = parse_message(message)
-        assert result["filters"]["distance"] == 25.0
+        assert result["fire_filters"]["distance"] == 25.0
 
         # Should NOT match distance in larger number (but default distance will be added)
         message = "(49.123, -123.456) call 1-800-225km-help"
         result = parse_message(message)
         # parse_message adds default distance from config, so just check it's the default
-        assert result["filters"]["distance"] == 50  # default from config
+        assert result["fire_filters"]["distance"] == 50  # default from config
 
     def test_filter_case_insensitive(self):
         """Test that filter detection is case insensitive."""
         message = "(49.123, -123.456) ACTIVE 25KM"
         result = parse_message(message)
-        assert result["filters"]["status"] == "active"
-        assert result["filters"]["distance"] == 25.0
+        assert result["fire_filters"]["status"] == "active"
+        assert result["fire_filters"]["distance"] == 25.0
 
         message = "(49.123, -123.456) All 10MI"
         result = parse_message(message)
-        assert result["filters"]["status"] == "all"
-        assert result["filters"]["distance"] == 16.09344
+        assert result["fire_filters"]["status"] == "all"
+        assert result["fire_filters"]["distance"] == 16.09344
 
     def test_multiple_filter_keywords_precedence(self):
         """Test precedence when multiple filter keywords are present."""
         # 'active' should take precedence over 'all'
         message = "(49.123, -123.456) active all"
         result = parse_message(message)
-        assert result["filters"]["status"] == "active"
+        assert result["fire_filters"]["status"] == "active"
 
     def test_no_coordinates_found(self):
         """Test when no coordinates are found."""

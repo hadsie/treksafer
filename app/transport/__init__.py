@@ -35,7 +35,7 @@ def get_transports(settings: Settings) -> List[BaseTransport]:
     for cfg in settings.transports:
         if not cfg.enabled:
             continue
-        factory = TRANSPORT_FACTORIES[cfg.type]
+        factory = TRANSPORT_FACTORIES.get(cfg.type)
         if factory is None:
             raise ValueError(f"Unsupported transport type '{cfg.type}' in config.")
         instances.append(factory(cfg))
