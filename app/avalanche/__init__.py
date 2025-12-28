@@ -7,7 +7,7 @@ Usage:
         print(forecast)
 """
 from .base import AvalancheProvider
-from .canada import AvalancheCanadaProvider
+from .avcan import AvalancheCanadaProvider
 from .quebec import AvalancheQuebecProvider
 from .report import AvalancheReport
 

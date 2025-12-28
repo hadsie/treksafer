@@ -1,0 +1,140 @@
+{
+  "id": "26c49a95-d1a4-42eb-806b-e461e635d584_ff27f89a78600ce8622e02e807bc89b31d7f1876832b9dc0ceab5b43cab072e5",
+  "slug": "26c49a95-d1a4-42eb-806b-e461e635d584_ff27f89a78600ce8622e02e807bc89b31d7f1876832b9dc0ceab5b43cab072e5",
+  "url": "https://avalanche.ca/forecasts/26c49a95-d1a4-42eb-806b-e461e635d584_ff27f89a78600ce8622e02e807bc89b31d7f1876832b9dc0ceab5b43cab072e5",
+  "type": "avalancheforecast",
+  "area": {
+    "id": "ff27f89a78600ce8622e02e807bc89b31d7f1876832b9dc0ceab5b43cab072e5",
+    "name": "ff27f89a78600ce8622e02e807bc89b31d7f1876832b9dc0ceab5b43cab072e5",
+    "bbox": null
+  },
+  "report": {
+    "id": "26c49a95-d1a4-42eb-806b-e461e635d584_ff27f89a78600ce8622e02e807bc89b31d7f1876832b9dc0ceab5b43cab072e5",
+    "forecaster": "Avalanche Canada",
+    "dateIssued": "2025-12-06T00:00:00.000Z",
+    "validUntil": "2026-03-02T00:00:00.000Z",
+    "timezone": "America/Vancouver",
+    "title": "Haines Pass",
+    "highlights": "<p>Avalanche Canada will resume forecasting for Haines Pass on March 1, 2026. Until then, check the <a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://alaskasnow.org/haines-forecast/#/chilkat-pass/\">Haines Avalanche Center</a> for information.</p>",
+    "confidence": {
+      "rating": {
+        "value": "noRating",
+        "display": "No Rating"
+      }
+    },
+    "summaries": [
+      {
+        "type": {
+          "value": "weather-summary",
+          "display": "Weather Summary"
+        },
+        "content": " <p>More details can be found in the <a href =\"https://www.avalanche.ca/weather/forecast\">Mountain Weather Forecast</a>.</p>"
+      }
+    ],
+    "dangerRatings": [
+      {
+        "date": {
+          "value": "2025-12-07T00:00:00Z",
+          "display": "Saturday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-12-08T00:00:00Z",
+          "display": "Sunday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-12-09T00:00:00Z",
+          "display": "Monday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "norating",
+              "display": "No Rating"
+            }
+          }
+        }
+      }
+    ],
+    "problems": [],
+    "terrainAndTravelAdvice": [],
+    "message": null,
+    "season": null,
+    "comment": null,
+    "isFullTranslation": false
+  },
+  "version": 1,
+  "owner": {
+    "value": "avalanche-canada",
+    "display": "Avalanche Canada",
+    "isExternal": false,
+    "url": "https://avalanche.ca/en"
+  },
+  "media": {
+    "images": []
+  }
+}

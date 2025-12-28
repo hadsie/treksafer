@@ -199,9 +199,9 @@ class AvalancheCanadaProvider(AvalancheProvider):
                     logging.warning(f"Invalid avalanche band found in API response: {key}")
 
             forecasts_by_date[day_name] = {
-                'alpine_rating': ratings.get('alp', 'No Rating'),
-                'treeline_rating': ratings.get('tln', 'No Rating'),
-                'below_treeline_rating': ratings.get('btl', 'No Rating'),
+                'alpine_rating': self._get_rating('alp', ratings),
+                'treeline_rating': self._get_rating('tln', ratings),
+                'below_treeline_rating': self._get_rating('btl', ratings),
             }
 
         # Extract avalanche problems (these typically apply to all forecast days)
@@ -238,3 +238,13 @@ class AvalancheCanadaProvider(AvalancheProvider):
             'problems': problems,
             'url': data.get('url', '')
         }
+
+    def _get_rating(self, elevation: str, ratings: Dict) -> str:
+        """Return the rating string
+
+        Normalizes by stripping out leading '# - ' such as in '2 - Moderate'.
+        """
+        rating = ratings.get(elevation , 'No Rating')
+        # This will work as long as there's never a '-' in the actual term but
+        # no "# - " prefixing the string.
+        return rating.split('-', 1)[-1].strip()

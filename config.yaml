@@ -19,7 +19,7 @@ fire_size: 1
 download_timeout: 600
 
 # Avalanche forecast settings
-avalanche_distance_buffer: 20  # Distance buffer for avalanche provider selection (km)
+avalanche_distance_buffer: 5  # Distance buffer for avalanche provider selection (km)
 
 # Include the AQI at the specified coordinates in the response.
 include_aqi: true
@@ -108,9 +108,14 @@ data:
 
 avalanche:
   providers:
-    CA:
+    AvalancheCanada:
       class: AvalancheCanadaProvider
       api_url: https://api.avalanche.ca/forecasts/{lang}/products/point
+      cache_timeout: 3600
+      language: en
+    NationalAvalancheCenter:
+      class: NationalAvalancheProvider
+      api_url: https://api.avalanche.org/v2/public/product?type=forecast&center_id={center}&zone_id={zone}
       cache_timeout: 3600
       language: en
 #    QC:

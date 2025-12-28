@@ -1,0 +1,140 @@
+{
+  "id": "820de8f0-8866-4b25-b1fe-ed840de8be38_2b27cc579bf40b0d3360a5ffe527102213d07f32526775c4e2f0af58e02f8d3d",
+  "slug": "820de8f0-8866-4b25-b1fe-ed840de8be38_2b27cc579bf40b0d3360a5ffe527102213d07f32526775c4e2f0af58e02f8d3d",
+  "url": "https://avalanche.ca/forecasts/820de8f0-8866-4b25-b1fe-ed840de8be38_2b27cc579bf40b0d3360a5ffe527102213d07f32526775c4e2f0af58e02f8d3d",
+  "type": "avalancheforecast",
+  "area": {
+    "id": "2b27cc579bf40b0d3360a5ffe527102213d07f32526775c4e2f0af58e02f8d3d",
+    "name": "2b27cc579bf40b0d3360a5ffe527102213d07f32526775c4e2f0af58e02f8d3d",
+    "bbox": null
+  },
+  "report": {
+    "id": "820de8f0-8866-4b25-b1fe-ed840de8be38_2b27cc579bf40b0d3360a5ffe527102213d07f32526775c4e2f0af58e02f8d3d",
+    "forecaster": "Avalanche Canada",
+    "dateIssued": "2025-10-01T18:30:00.000Z",
+    "validUntil": "2026-01-23T19:30:00.000Z",
+    "timezone": "America/St_Johns",
+    "title": "Corner Brook-Gros Morne-Northern Peninsula",
+    "highlights": "<p>Factor avalanches into your trip plan and carry avalanche safety gear. <a target=\"_blank\" rel=\"noreferrer noopener\" class=\"fui-Link ___1q1shib f2hkw1w f3rmtva f1ewtqcl fyind8e f1k6fduh f1w7gpdv fk6fouc fjoy568 figsok6 f1s184ao f1mk8lai fnbmjn9 f1o700av f13mvf36 f1cmlufx f9n3di6 f1ids18y f1tx3yz7 f1deo86v f1eh06m1 f1iescvh fhgqx19 f1olyrje f1p93eir f1nev41a f1h8hb77 f1lqvz6u f10aw75t fsle3fq f17ae5zn\" href=\"https://avalanche.ca/early-season-conditions\">Learn about early season conditions</a>. Avalanche forecasts begin January 23.</p>",
+    "confidence": {
+      "rating": {
+        "value": "noRating",
+        "display": "No Rating"
+      }
+    },
+    "summaries": [
+      {
+        "type": {
+          "value": "weather-summary",
+          "display": "Weather Summary"
+        },
+        "content": " <p>More details can be found in the <a href =\"https://www.avalanche.ca/weather/forecast\">Mountain Weather Forecast</a>.</p>"
+      }
+    ],
+    "dangerRatings": [
+      {
+        "date": {
+          "value": "2025-10-02T18:30:00Z",
+          "display": "Thursday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-10-03T18:30:00Z",
+          "display": "Friday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-10-04T18:30:00Z",
+          "display": "Saturday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          }
+        }
+      }
+    ],
+    "problems": [],
+    "terrainAndTravelAdvice": [],
+    "message": null,
+    "season": null,
+    "comment": null,
+    "isFullTranslation": false
+  },
+  "version": 1,
+  "owner": {
+    "value": "avalanche-canada",
+    "display": "Avalanche Canada",
+    "isExternal": false,
+    "url": "https://avalanche.ca/en"
+  },
+  "media": {
+    "images": []
+  }
+}

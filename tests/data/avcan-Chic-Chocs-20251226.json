@@ -1,0 +1,263 @@
+{
+  "id": "723f6b7e-03ba-42e3-beba-ac6cca6bdc9c_03eb3e06c31ffda095ce133e8c6974197efdccd29c7723d078ef27742ff6a762",
+  "slug": "723f6b7e-03ba-42e3-beba-ac6cca6bdc9c_03eb3e06c31ffda095ce133e8c6974197efdccd29c7723d078ef27742ff6a762",
+  "url": "https://avalanche.ca/forecasts/723f6b7e-03ba-42e3-beba-ac6cca6bdc9c_03eb3e06c31ffda095ce133e8c6974197efdccd29c7723d078ef27742ff6a762",
+  "type": "avalancheforecast",
+  "area": {
+    "id": "03eb3e06c31ffda095ce133e8c6974197efdccd29c7723d078ef27742ff6a762",
+    "name": "03eb3e06c31ffda095ce133e8c6974197efdccd29c7723d078ef27742ff6a762",
+    "bbox": null
+  },
+  "report": {
+    "id": "723f6b7e-03ba-42e3-beba-ac6cca6bdc9c_03eb3e06c31ffda095ce133e8c6974197efdccd29c7723d078ef27742ff6a762",
+    "forecaster": "Avalanche Qu\u00e9bec",
+    "dateIssued": "2025-12-26T22:00:00.000Z",
+    "validUntil": "2025-12-29T23:00:00.000Z",
+    "timezone": "America/New_York",
+    "title": "Chic-Chocs",
+    "highlights": "<p>The weather will be cold, dry, and windy for the weekend. Even though the avalanche danger is low, be on the lookout for blowing snow, as wind slabs that are forming are always more reactive.</p>",
+    "confidence": {
+      "rating": {
+        "value": "moderate",
+        "display": "Moderate"
+      },
+      "statements": [
+        "Uncertainty is due to the speed, direction, or duration of the wind and its effect on the snowpack.",
+        "Uncertainty is due to the limited number of field observations."
+      ]
+    },
+    "summaries": [
+      {
+        "type": {
+          "value": "avalanche-summary",
+          "display": "Avalanche Summary"
+        },
+        "content": " <p>No avalanche activity was observed or reported.</p><p>If you head into the backcountry, thanks for sharing your observations on the<a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://avalanche.ca/fr/mountain-information-network/submit\">&nbsp;</a><a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://avalanche.ca/mountain-information-network/submit\">Mountain Information Network</a>&nbsp;(MIN).</p>"
+      },
+      {
+        "type": {
+          "value": "snowpack-summary",
+          "display": "Snowpack Summary"
+        },
+        "content": " <p>15 to 30 cm of light snow covers the refrozen crust from December 20. There is considerable spatial variability in areas affected by wind, ranging from bare rocky slopes to wind-blown snow accumulations.</p><p>Conditions remain typical for early season: there are numerous obstacles on the ground.</p><p></p>"
+      },
+      {
+        "type": {
+          "value": "weather-summary",
+          "display": "Weather Summary"
+        },
+        "content": " <p>Cold and windy conditions on the ridges for the weekend, with light northwesterly winds and gusts reaching extreme levels at times.</p><p><strong>WEATHER FOR THE CHIC-CHOCS RIDGES AND SUMMITS</strong></p><p><strong>Friday evening and night:</strong> Mostly cloudy. Wind from the north at 6 to 12 mph. Low of -18.</p><p><strong>Saturday:</strong> Mostly cloudy. Wind from the northwest at 6 to 12 mph, gusting to 25 mph. Low of -18.</p><p><strong>Sunday:</strong> Alternating sun and clouds. Northwest wind 10 to 20 km/h with gusts up to 60 km/h. High -12.</p><p><strong>Monday:</strong> Alternating sun and clouds. Northwest wind 10 to 20 km/h. High -7.</p><p>For more details, see the&nbsp;<a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://avalanchequebec.ca/prevision-meteo-alpine/\">Chic-Chocs alpine weather forecast</a>.</p>"
+      }
+    ],
+    "dangerRatings": [
+      {
+        "date": {
+          "value": "2025-12-27T22:00:00Z",
+          "display": "Saturday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-12-28T22:00:00Z",
+          "display": "Sunday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-12-29T22:00:00Z",
+          "display": "Monday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "earlyseason",
+              "display": "Early Season"
+            }
+          }
+        }
+      }
+    ],
+    "problems": [
+      {
+        "type": {
+          "value": "windslab",
+          "display": "Wind slab"
+        },
+        "comment": "<p>Wind slabs will continue to form throughout the weekend. Be aware of wind-driven snow when traveling in avalanche terrain.</p>",
+        "factors": [
+          {
+            "type": {
+              "value": "elevation",
+              "display": "What Elevation?"
+            },
+            "graphic": {
+              "id": "elevation-0-1-1_en",
+              "url": "https://assets.avalanche.ca/images/Elevation/Elevation-0-1-1_EN.png",
+              "alt": " Treeline, Alpine"
+            }
+          },
+          {
+            "type": {
+              "value": "aspect",
+              "display": "Which Slopes?"
+            },
+            "graphic": {
+              "id": "aspect-0-0-1-1-1-1-0-0_en",
+              "url": "https://assets.avalanche.ca/images/Compass/compass-0-0-1-1-1-1-0-0_EN.png",
+              "alt": " East, Southeast, south, Southwest"
+            }
+          },
+          {
+            "type": {
+              "value": "likelihood",
+              "display": "Chances of Avalanches?"
+            },
+            "graphic": {
+              "id": "likelihood-possible_unlikely_en",
+              "url": "https://assets.avalanche.ca/images/Likelihood/Likelihood-2_EN.png",
+              "alt": " Unlikely - Possible"
+            }
+          },
+          {
+            "type": {
+              "value": "size",
+              "display": "Expected Size?"
+            },
+            "graphic": {
+              "id": "size-1-2_en",
+              "url": "https://assets.avalanche.ca/images/size/Size-1-2_EN.png",
+              "alt": " Small - Small"
+            }
+          }
+        ],
+        "data": {
+          "elevations": [
+            {
+              "value": "alp",
+              "display": "Alpine"
+            },
+            {
+              "value": "tln",
+              "display": "Treeline"
+            }
+          ],
+          "aspects": [
+            {
+              "value": "s",
+              "display": "s"
+            },
+            {
+              "value": "se",
+              "display": "Southeast"
+            },
+            {
+              "value": "e",
+              "display": "East"
+            },
+            {
+              "value": "sw",
+              "display": "Southwest"
+            }
+          ],
+          "aspectElevations": [
+            "s_alp",
+            "se_alp",
+            "e_alp",
+            "e_tln",
+            "se_tln",
+            "s_tln",
+            "sw_alp",
+            "sw_tln"
+          ],
+          "likelihood": {
+            "value": "possible_unlikely",
+            "display": "possible_unlikely"
+          },
+          "expectedSize": {
+            "min": "1.0",
+            "max": "1.5"
+          }
+        }
+      }
+    ],
+    "terrainAndTravelAdvice": [
+      "Small avalanches can have serious consequences in extreme terrain. Carefully evaluate your line for slabs before you commit to it.",
+      "Wind slabs are most reactive during their formation."
+    ],
+    "message": null,
+    "season": null,
+    "comment": null,
+    "isFullTranslation": true
+  },
+  "version": 1,
+  "owner": {
+    "value": "avalanche-quebec",
+    "display": "Avalanche Qu\u00e9bec",
+    "isExternal": false,
+    "url": "https://avalanchequebec.ca"
+  },
+  "media": {
+    "images": []
+  }
+}

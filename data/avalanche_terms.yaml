@@ -1,0 +1,35 @@
+AvalancheCanada:
+  likelihood:
+    "possible_unlikely": "UnLkly/Poss"
+    "likely_possible": "Poss/Lkly"
+    "veryLikely_likely": "Lkly/VLkly"
+    "veryLikely": "VLkly"
+    "certain_veryLikely": "VLkly/Certain"
+
+default:
+  problem_type:
+    "Storm slab": "StormSlb"
+    "Wind slab": "WindSlb"
+    "Persistent slab": "PrsistSlb"
+    "Deep persistent slab": "DeepPerSlb"
+    "Wet slab": "WetSlb"
+    "Cornices": "Cornice"
+    "Loose wet": "LooseWet"
+    "Wet loose": "LooseWet"
+    "Loose dry": "LooseDry"
+    "Dry Loose": "LooseDry"
+
+  danger_rating:
+    "Extreme": "E"
+    "High": "H"
+    "Considerable": "C"
+    "Moderate": "M"
+    "Low": "L"
+    "Early Season": "ES"
+    "No Rating": "N/A"
+
+  likelihood:
+    "unlikely": "UnLkly"
+    "possible": "Poss"
+    "likely": "Lkly"
+    "certain": "Certain"

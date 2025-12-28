@@ -106,7 +106,7 @@ class Settings(BaseSettings):
 
     # Avalanche forecast configuration
     avalanche: Optional[AvalancheConfig] = None
-    avalanche_distance_buffer: int = 20  # Distance buffer for avalanche provider selection (km)
+    avalanche_distance_buffer: int = 5  # Distance buffer for avalanche provider selection (km)
 
     shapefiles: str = "shapefiles"
     data: List[DataFile] = []

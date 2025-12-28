@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import logging
+import yaml
 from datetime import datetime, timedelta
+from functools import cache
 from typing import Optional, Dict, Any
 
 import pytz
@@ -11,6 +13,25 @@ from timezonefinder import TimezoneFinder
 
 from .base import AvalancheProvider
 from ..config import get_config
+
+
+@cache
+def _get_abbrev_cache() -> Dict[str, Dict[str, str]]:
+    """Build and cache flattened, case-insensitive lookup cache.
+
+    Returns:
+        Dict with keys like "AvalancheCanada:problem_type" mapping to
+        uppercase term -> abbreviation dicts
+    """
+    with open('data/avalanche_terms.yaml', 'r') as f:
+        terms = yaml.safe_load(f)
+
+    result = {}
+    for provider, term_types in terms.items():
+        for term_type, mappings in term_types.items():
+            cache_key = f"{provider}:{term_type}"
+            result[cache_key] = {k.upper(): v for k, v in mappings.items()}
+    return result
 
 
 def _get_provider_class(class_name: str):
@@ -26,7 +47,7 @@ def _get_provider_class(class_name: str):
         ValueError: If the class name is not found
     """
     # Import here to avoid circular dependency
-    from .canada import AvalancheCanadaProvider
+    from .avcan import AvalancheCanadaProvider
     from .quebec import AvalancheQuebecProvider
 
     providers = {
@@ -140,6 +161,36 @@ class AvalancheReport:
             return self._format_forecast_abbrev(forecast_data, dates)
         else:
             return self._format_forecast_full(forecast_data, dates)
+
+    def _get_abbreviation(self, term_type: str, value: str) -> str:
+        """Get abbreviation for a term (case-insensitive).
+
+        Args:
+            term_type: 'problem_type', 'likelihood', or 'danger_rating'
+            value: Raw value from API
+
+        Returns:
+            Abbreviated string, or original value if not found
+        """
+        cache = _get_abbrev_cache()
+        provider_key = self.provider.__class__.__name__.replace('Provider', '')
+        value_upper = value.upper()
+
+        # Try provider-specific first
+        provider_cache_key = f"{provider_key}:{term_type}"
+        result = cache.get(provider_cache_key, {}).get(value_upper)
+        if result:
+            return result
+
+        # Fall back to default
+        default_cache_key = f"default:{term_type}"
+        result = cache.get(default_cache_key, {}).get(value_upper)
+        if result:
+            return result
+
+        # Not found - log and return original
+        logging.error(f"Avalanche API error - Unknown {term_type}: {value}")
+        return value
 
     def _apply_filter(self, forecast_data: Dict[str, Any], forecast_filter: str) -> list:
         """Apply forecast filter to select day names.
@@ -272,9 +323,9 @@ class AvalancheReport:
             day_abbrev = day_name[:3]
 
             # Abbreviated danger ratings
-            alp = self._abbrev_danger_rating(day_forecast['alpine_rating'])
-            tl = self._abbrev_danger_rating(day_forecast['treeline_rating'])
-            btl = self._abbrev_danger_rating(day_forecast['below_treeline_rating'])
+            alp = self._get_abbreviation('danger_rating', day_forecast['alpine_rating'])
+            tl = self._get_abbreviation('danger_rating', day_forecast['treeline_rating'])
+            btl = self._get_abbreviation('danger_rating', day_forecast['below_treeline_rating'])
 
             parts.append(f"{day_abbrev}: ALP:{alp} TL:{tl} BTL:{btl}")
 
@@ -296,7 +347,7 @@ class AvalancheReport:
                 parts.append("")  # Empty line between problems
 
             # Problem type (use modest abbreviations)
-            prob_type = self._abbrev_problem_type(problem['type'])
+            prob_type = self._get_abbreviation('problem_type', problem['type'])
             parts.append(prob_type)
 
             # Elevations - abbreviate or use "All"
@@ -317,7 +368,7 @@ class AvalancheReport:
 
             # Likelihood and size
             likelihood = problem.get('likelihood', '')
-            likelihood = self._abbrev_problem_likelihood(likelihood)
+            likelihood = self._get_abbreviation('likelihood', likelihood)
             line = likelihood
             size_min = problem.get('size_min', '')
             size_max = problem.get('size_max', '')
@@ -333,32 +384,8 @@ class AvalancheReport:
         return parts
 
     def _abbrev_danger_rating(self, rating: str) -> str:
-        """Abbreviate danger rating to single letter.
-
-        Examples:
-            '3 - Considerable' -> 'C'
-            '2 - Moderate' -> 'M'
-            'Considerable' -> 'C'
-        """
-        rating_upper = rating.upper()
-
-        if 'EXTREME' in rating_upper:
-            return 'X'
-        elif 'HIGH' in rating_upper:
-            return 'H'
-        elif 'CONSIDERABLE' in rating_upper:
-            return 'C'
-        elif 'MODERATE' in rating_upper:
-            return 'M'
-        elif 'LOW' in rating_upper:
-            return 'L'
-        elif 'EARLY SEASON' in rating_upper:
-            return 'ES'
-        elif 'NO RATING' in rating_upper:
-            return 'N/A'
-        else:
-            logging.error(f"Avalanche API error - Unknown danger rating: {rating}")
-            return '?'
+        """Abbreviate danger rating to single letter."""
+        return self._get_abbreviation('danger_rating', rating)
 
     def _abbrev_elevations(self, elevations: list) -> str:
         """Abbreviate and order elevation bands.
@@ -408,37 +435,6 @@ class AvalancheReport:
         result = [a for a in ASPECT_ORDER if a in aspects_upper]
 
         return ','.join(result)
-
-    def _abbrev_problem_type(self, problem_type: str) -> str:
-        """Abbreviate problem type modestly while keeping clarity."""
-        replacements = {
-            'Wind slab': 'WindSlb',
-            'Storm slab': 'StormSlb',
-            'Persistent slab': 'PrsistSlb',
-            'Deep persistent slab': 'DeepPerSlb',
-            'Wet slab': 'WetSlb',
-            'Cornices': 'Cornice',
-            'Wet Loose': 'WetLoose',
-            'Dry Loose': 'DryLoose',
-        }
-
-        return replacements.get(problem_type, problem_type)
-
-    def _abbrev_problem_likelihood(self, likelihood: str) -> str:
-        """Abbreviate problem likelihood."""
-        replacements = {
-            'unlikely': 'UnLkly',
-            'possible_unlikely': 'UnLkly/Poss',
-            'possible': 'Poss',
-            'likely_possible': 'Poss/Lkly',
-            'likely': 'Lkly',
-            'veryLikely_likely': 'Lkly/VLkly',
-            'veryLikely': 'VLkly',
-            'certain_veryLikely': 'VLkly/Certain',
-            'certain': 'Certain'
-        }
-        return replacements.get(likelihood, likelihood)
-
 
     def outside_of_area_msg(self):
         return 'TrekSafer ERROR: GPS coordinates outside of supported avalanche forecast area. No data available.'

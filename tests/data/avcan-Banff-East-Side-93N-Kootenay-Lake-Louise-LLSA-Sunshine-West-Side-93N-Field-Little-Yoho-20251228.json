@@ -1,0 +1,564 @@
+{
+  "id": "ae417f59-c3c6-4796-b869-e1b9e6b2a9ad_afe9ffd14c0637d10e2530857f8e7a8cba0277f33351d3b31c8f37f4111c6ecf",
+  "slug": "ae417f59-c3c6-4796-b869-e1b9e6b2a9ad_afe9ffd14c0637d10e2530857f8e7a8cba0277f33351d3b31c8f37f4111c6ecf",
+  "url": "https://avalanche.ca/forecasts/ae417f59-c3c6-4796-b869-e1b9e6b2a9ad_afe9ffd14c0637d10e2530857f8e7a8cba0277f33351d3b31c8f37f4111c6ecf",
+  "type": "avalancheforecast",
+  "area": {
+    "id": "afe9ffd14c0637d10e2530857f8e7a8cba0277f33351d3b31c8f37f4111c6ecf",
+    "name": "afe9ffd14c0637d10e2530857f8e7a8cba0277f33351d3b31c8f37f4111c6ecf",
+    "bbox": null
+  },
+  "report": {
+    "id": "ae417f59-c3c6-4796-b869-e1b9e6b2a9ad_afe9ffd14c0637d10e2530857f8e7a8cba0277f33351d3b31c8f37f4111c6ecf",
+    "forecaster": "Parks Canada",
+    "dateIssued": "2025-12-28T00:00:00Z",
+    "validUntil": "2025-12-29T00:00:00Z",
+    "timezone": "America/Edmonton",
+    "title": "Banff-East Side 93N-Kootenay-Lake Louise-LLSA-Sunshine-West Side 93N-Field-Little Yoho",
+    "highlights": "<p>Snowfall has finally ended but the snowpack will still take time to adjust to the recent loading.</p><p>Use extra caution when approaching or exposed to alpine terrain where windslabs are fresh, and the deep persistent slab problem is the most prevalent.  </p><p>Temperatures are cold. Factor this into your decision-making.</p><p></p>",
+    "confidence": {
+      "rating": {
+        "value": "moderate",
+        "display": "Moderate"
+      }
+    },
+    "summaries": [
+      {
+        "type": {
+          "value": "avalanche-summary",
+          "display": "Avalanche Summary"
+        },
+        "content": " <p>Helicopter avalanche control on the 93S at Mt Whymper and Vermilion Peak produced mainly small slabs up to sz 2 within surface instabilities. Vermillion Peak S had a sz 2.5 that remoted into a thin area on the upper face and ran far. No results with Gasex on Mt Bourgeau last night.</p><p>The SSV ski patrol reported the Bourgeau Right-Hand avalanche path went sz 3 at approx 15:00 Saturday afternoon. Investigation of the start zone indicates this was likely triggered by goats.</p><p></p><p></p>"
+      },
+      {
+        "type": {
+          "value": "snowpack-summary",
+          "display": "Snowpack Summary"
+        },
+        "content": " <p>10-20cm of snow overnight brings storm totals to 30-60 cm in the last 4 days, while moderate southerly and westerly winds have created fresh windslabs in alpine and open treeline terrain. </p><p>There is 40-80 cm over the Dec 15 melt-freeze crust (which is present to ~1800 - 2000m). </p><p>The significant snow load that accumulated so far this December continues to settle over the weak November facet/crust interface now down 80-160 cm.</p><p>Treeline snow depths range from 100-200cm plus.</p>"
+      },
+      {
+        "type": {
+          "value": "weather-summary",
+          "display": "Weather Summary"
+        },
+        "content": " <p>As a high-pressure system takes over. Clear and cold replaces the prolonged snowy weather we have had. </p><p>A northwest flow will bring light winds overnight that may increase Sunday to moderate at ridgetop. Temperatures increase from near -20C at valley bottom to -15C through the day. </p><p>Sunday evening may bring a further increase  in the temps and in the winds, which will shift  to west.</p><p><a target=\"_blank\" rel=\"noopener noreferrer nofollow\" href=\"https://hpfx.collab.science.gc.ca/~fsg006/productviewer/ab/table/AB_Rockies_Forecast.html\">Link to weather forecast</a></p>"
+      }
+    ],
+    "dangerRatings": [
+      {
+        "date": {
+          "value": "2025-12-29T00:00:00Z",
+          "display": "Sunday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "considerable",
+              "display": "3 - Considerable"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "moderate",
+              "display": "2 - Moderate"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-12-30T00:00:00Z",
+          "display": "Monday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "considerable",
+              "display": "3 - Considerable"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "moderate",
+              "display": "2 - Moderate"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          }
+        }
+      },
+      {
+        "date": {
+          "value": "2025-12-31T00:00:00Z",
+          "display": "Tuesday"
+        },
+        "ratings": {
+          "alp": {
+            "display": "Alpine",
+            "rating": {
+              "value": "considerable",
+              "display": "3 - Considerable"
+            }
+          },
+          "tln": {
+            "display": "Treeline",
+            "rating": {
+              "value": "moderate",
+              "display": "2 - Moderate"
+            }
+          },
+          "btl": {
+            "display": "Below Treeline",
+            "rating": {
+              "value": "low",
+              "display": "1 - Low"
+            }
+          }
+        }
+      }
+    ],
+    "problems": [
+      {
+        "type": {
+          "value": "windslab",
+          "display": "Wind slab"
+        },
+        "comment": "<p>Moderate- strong southerly and westerly winds have created fresh wind slabs in alpine and open treeline terrain as the significant amounts of recent snow are redistributed. Lake Louise had small soft slabs that propagated well up to sz 1.5. SSV reported several sz 1s that ran far but started slow.</p>",
+        "factors": [
+          {
+            "type": {
+              "value": "elevation",
+              "display": "What Elevation?"
+            },
+            "graphic": {
+              "id": "elevation-0-1-1_en",
+              "url": "https://assets.avalanche.ca/images/Elevation/Elevation-0-1-1_EN.png",
+              "alt": " Treeline, Alpine"
+            }
+          },
+          {
+            "type": {
+              "value": "aspect",
+              "display": "Which Slopes?"
+            },
+            "graphic": {
+              "id": "aspect-1-1-1-1-1-1-1-1_en",
+              "url": "https://assets.avalanche.ca/images/Compass/compass-1-1-1-1-1-1-1-1_EN.png",
+              "alt": " North, Northeast, East, Southeast, south, Southwest, West, Northwest"
+            }
+          },
+          {
+            "type": {
+              "value": "likelihood",
+              "display": "Chances of Avalanches?"
+            },
+            "graphic": {
+              "id": "likelihood-likely_en",
+              "url": "https://assets.avalanche.ca/images/Likelihood/Likelihood-5_EN.png",
+              "alt": " Likely"
+            }
+          },
+          {
+            "type": {
+              "value": "size",
+              "display": "Expected Size?"
+            },
+            "graphic": {
+              "id": "size-1-3_en",
+              "url": "https://assets.avalanche.ca/images/size/Size-1-3_EN.png",
+              "alt": " Small - Large"
+            }
+          }
+        ],
+        "data": {
+          "elevations": [
+            {
+              "value": "alp",
+              "display": "Alpine"
+            },
+            {
+              "value": "tln",
+              "display": "Treeline"
+            }
+          ],
+          "aspects": [
+            {
+              "value": "e",
+              "display": "East"
+            },
+            {
+              "value": "se",
+              "display": "Southeast"
+            },
+            {
+              "value": "n",
+              "display": "North"
+            },
+            {
+              "value": "nw",
+              "display": "Northwest"
+            },
+            {
+              "value": "w",
+              "display": "West"
+            },
+            {
+              "value": "sw",
+              "display": "Southwest"
+            },
+            {
+              "value": "ne",
+              "display": "Northeast"
+            },
+            {
+              "value": "s",
+              "display": "s"
+            }
+          ],
+          "aspectElevations": [
+            "ne_alp",
+            "e_alp",
+            "se_alp",
+            "ne_tln",
+            "e_tln",
+            "se_tln",
+            "n_tln",
+            "n_alp",
+            "nw_tln",
+            "nw_alp",
+            "w_tln",
+            "s_tln",
+            "s_alp",
+            "sw_tln",
+            "sw_alp",
+            "w_alp"
+          ],
+          "likelihood": {
+            "value": "likely",
+            "display": "likely"
+          },
+          "expectedSize": {
+            "min": "1.0",
+            "max": "2.0"
+          }
+        }
+      },
+      {
+        "type": {
+          "value": "deeppersistentslab",
+          "display": "Deep persistent slab"
+        },
+        "comment": "<p>The natural avalanche cycle on this layer has ended but concern for skier triggering on this layer remains. The natural and controlled avalanches observed on this layer have often been large with many reaching below treeline terrain. Be wary of shallow areas:  triggering 'thin to thick'.</p><p></p>",
+        "factors": [
+          {
+            "type": {
+              "value": "elevation",
+              "display": "What Elevation?"
+            },
+            "graphic": {
+              "id": "elevation-0-1-1_en",
+              "url": "https://assets.avalanche.ca/images/Elevation/Elevation-0-1-1_EN.png",
+              "alt": " Treeline, Alpine"
+            }
+          },
+          {
+            "type": {
+              "value": "aspect",
+              "display": "Which Slopes?"
+            },
+            "graphic": {
+              "id": "aspect-1-1-1-1-1-1-1-1_en",
+              "url": "https://assets.avalanche.ca/images/Compass/compass-1-1-1-1-1-1-1-1_EN.png",
+              "alt": " North, Northeast, East, Southeast, south, Southwest, West, Northwest"
+            }
+          },
+          {
+            "type": {
+              "value": "likelihood",
+              "display": "Chances of Avalanches?"
+            },
+            "graphic": {
+              "id": "likelihood-possible_en",
+              "url": "https://assets.avalanche.ca/images/Likelihood/Likelihood-3_EN.png",
+              "alt": " Possible"
+            }
+          },
+          {
+            "type": {
+              "value": "size",
+              "display": "Expected Size?"
+            },
+            "graphic": {
+              "id": "size-3-7_en",
+              "url": "https://assets.avalanche.ca/images/size/Size-3-7_EN.png",
+              "alt": " Large - Very large"
+            }
+          }
+        ],
+        "data": {
+          "elevations": [
+            {
+              "value": "alp",
+              "display": "Alpine"
+            },
+            {
+              "value": "tln",
+              "display": "Treeline"
+            }
+          ],
+          "aspects": [
+            {
+              "value": "ne",
+              "display": "Northeast"
+            },
+            {
+              "value": "se",
+              "display": "Southeast"
+            },
+            {
+              "value": "sw",
+              "display": "Southwest"
+            },
+            {
+              "value": "w",
+              "display": "West"
+            },
+            {
+              "value": "nw",
+              "display": "Northwest"
+            },
+            {
+              "value": "n",
+              "display": "North"
+            },
+            {
+              "value": "e",
+              "display": "East"
+            },
+            {
+              "value": "s",
+              "display": "s"
+            }
+          ],
+          "aspectElevations": [
+            "w_alp",
+            "nw_alp",
+            "n_alp",
+            "ne_alp",
+            "e_alp",
+            "se_alp",
+            "s_alp",
+            "sw_alp",
+            "sw_tln",
+            "w_tln",
+            "nw_tln",
+            "n_tln",
+            "ne_tln",
+            "e_tln",
+            "se_tln",
+            "s_tln"
+          ],
+          "likelihood": {
+            "value": "possible",
+            "display": "possible"
+          },
+          "expectedSize": {
+            "min": "2.0",
+            "max": "4.0"
+          }
+        }
+      },
+      {
+        "type": {
+          "value": "dryloose",
+          "display": "Dry Loose"
+        },
+        "comment": "<p>New snow has piled up in mushrooms, rock faces, and along ridge crests. Manage your sluff carefully and consider others in steep terrain.  Climbers should be cautious about getting pushed off, even in relatively small terrain. </p><p>Remember, these events could trigger the other avalanche problems.</p>",
+        "factors": [
+          {
+            "type": {
+              "value": "elevation",
+              "display": "What Elevation?"
+            },
+            "graphic": {
+              "id": "elevation-1-1-1_en",
+              "url": "https://assets.avalanche.ca/images/Elevation/Elevation-1-1-1_EN.png",
+              "alt": " Below treeline, Treeline, Alpine"
+            }
+          },
+          {
+            "type": {
+              "value": "aspect",
+              "display": "Which Slopes?"
+            },
+            "graphic": {
+              "id": "aspect-1-1-1-1-1-1-1-1_en",
+              "url": "https://assets.avalanche.ca/images/Compass/compass-1-1-1-1-1-1-1-1_EN.png",
+              "alt": " North, Northeast, East, Southeast, south, Southwest, West, Northwest"
+            }
+          },
+          {
+            "type": {
+              "value": "likelihood",
+              "display": "Chances of Avalanches?"
+            },
+            "graphic": {
+              "id": "likelihood-veryLikely_likely_en",
+              "url": "https://assets.avalanche.ca/images/Likelihood/Likelihood-6_EN.png",
+              "alt": " Likely - Very likely"
+            }
+          },
+          {
+            "type": {
+              "value": "size",
+              "display": "Expected Size?"
+            },
+            "graphic": {
+              "id": "size-1-2_en",
+              "url": "https://assets.avalanche.ca/images/size/Size-1-2_EN.png",
+              "alt": " Small - Small"
+            }
+          }
+        ],
+        "data": {
+          "elevations": [
+            {
+              "value": "btl",
+              "display": "Below Treeline"
+            },
+            {
+              "value": "tln",
+              "display": "Treeline"
+            },
+            {
+              "value": "alp",
+              "display": "Alpine"
+            }
+          ],
+          "aspects": [
+            {
+              "value": "se",
+              "display": "Southeast"
+            },
+            {
+              "value": "s",
+              "display": "s"
+            },
+            {
+              "value": "sw",
+              "display": "Southwest"
+            },
+            {
+              "value": "w",
+              "display": "West"
+            },
+            {
+              "value": "n",
+              "display": "North"
+            },
+            {
+              "value": "ne",
+              "display": "Northeast"
+            },
+            {
+              "value": "e",
+              "display": "East"
+            },
+            {
+              "value": "nw",
+              "display": "Northwest"
+            }
+          ],
+          "aspectElevations": [
+            "n_btl",
+            "n_tln",
+            "n_alp",
+            "ne_btl",
+            "ne_tln",
+            "ne_alp",
+            "e_btl",
+            "e_tln",
+            "e_alp",
+            "se_btl",
+            "se_tln",
+            "se_alp",
+            "s_btl",
+            "s_tln",
+            "s_alp",
+            "sw_btl",
+            "sw_tln",
+            "sw_alp",
+            "w_btl",
+            "w_tln",
+            "w_alp",
+            "nw_btl",
+            "nw_tln",
+            "nw_alp"
+          ],
+          "likelihood": {
+            "value": "veryLikely_likely",
+            "display": "veryLikely_likely"
+          },
+          "expectedSize": {
+            "min": "1.0",
+            "max": "1.5"
+          }
+        }
+      }
+    ],
+    "terrainAndTravelAdvice": [
+      "Watch for newly formed and reactive wind slabs as you transition into wind-affected terrain.",
+      "Be mindful that deep instabilities are still present and have produced recent large avalanches."
+    ],
+    "message": null,
+    "season": null,
+    "comment": null,
+    "isFullTranslation": true
+  },
+  "version": 1,
+  "owner": {
+    "value": "parks-byk",
+    "display": "Parks Canada",
+    "isExternal": false,
+    "url": "Parks Canada"
+  },
+  "notifications": [
+    {
+      "type": "info",
+      "content": "<p>Area closures for avalanche control are in effect periodically from November to May. Click <a href=\"https://www.pc.gc.ca/en/pn-np/mtn/securiteenmontagne-mountainsafety/avalanche/declenchementpreventif-controlareas?_ga=2.80778963.573438189.1667223637-385521292.1638363862\">here</a> for more information and maps."
+    }
+  ],
+  "media": {
+    "images": [
+      {
+        "id": "2675dc36-451a-423a-ad25-97a527f7ae6b",
+        "url": "http://res.cloudinary.com/forecasts/image/upload/v1766875461/prod/parks/byk/wtxlftldfcbfq43iylne.jpg",
+        "width": 900,
+        "height": 1600,
+        "credit": "AL",
+        "caption": "<p>Sz 3 slab on Bourgeau Right Hand - appears to have been triggered by goats at approx 15:00 - dusted parking lot.</p>",
+        "tag": "avalanche",
+        "isArchived": false,
+        "altText": "",
+        "dateTaken": "2025-12-27T22:44:32.011Z"
+      }
+    ]
+  }
+}

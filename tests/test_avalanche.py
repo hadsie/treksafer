@@ -7,7 +7,6 @@ from requests import RequestException
 
 from app.avalanche import (
     AvalancheCanadaProvider,
-    AvalancheQuebecProvider,
     AvalancheReport,
 )
 from app.config import get_config, AvalancheProviderConfig
@@ -18,16 +17,7 @@ def canada_config():
     """Fixture for Canada provider configuration from settings."""
     settings = get_config()
     # Get CA provider config from settings
-    provider_config = settings.avalanche.providers.get('CA')
-    return provider_config
-
-
-@pytest.fixture
-def quebec_config():
-    """Fixture for Quebec provider configuration from settings."""
-    settings = get_config()
-    # Get QC provider config from settings
-    provider_config = settings.avalanche.providers.get('QC')
+    provider_config = settings.avalanche.providers.get('AvalancheCanada')
     return provider_config
 
 
@@ -41,7 +31,28 @@ def canada_sample_response():
 @pytest.fixture
 def quebec_sample_response():
     """Load Quebec sample API response."""
-    with open('tests/data/avalanche_quebec_sample.json', 'r') as f:
+    with open('tests/data/avcan-Chic-Chocs-20251226.json', 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def haines_pass_response():
+    """Load Haines Pass sample API response (No Rating)."""
+    with open('tests/data/avcan-Haines-Pass-20251206.json', 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def corner_brook_response():
+    """Load Corner Brook sample API response (Early Season)."""
+    with open('tests/data/avcan-Corner-Brook-Gros-Morne-Northern-Peninsula-20251001.json', 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def banff_response():
+    """Load Banff sample API response (Three Problems)."""
+    with open('tests/data/avcan-Banff-East-Side-93N-Kootenay-Lake-Louise-LLSA-Sunshine-West-Side-93N-Field-Little-Yoho-20251228.json', 'r') as f:
         return json.load(f)
 
 
@@ -69,14 +80,23 @@ class TestAvalancheCanadaProvider:
         distance = provider.distance_from_region(coords)
         assert distance is None
 
-    def test_vancouver_out_of_range(self, canada_config):
-        """Test Vancouver coordinates - may be within buffer of North Shore mountains."""
+    def test_north_vancouver_out_of_range(self, canada_config):
+        """Test North Vancouver coordinates - within buffer of North Shore mountains."""
         provider = AvalancheCanadaProvider(canada_config)
-        coords = (49.2827, -123.1207)  # Vancouver
+        coords = (49.331169, -123.059437)  # North Vancouver
 
-        # These coordinates are just over 11km away from the closest subregion.
+        # These coordinates are just over 2.7km away from the closest subregion.
         distance = provider.distance_from_region(coords)
-        assert distance is not None and isinstance(distance, float) and distance < 15
+        assert distance is not None and isinstance(distance, float) and distance < 20
+
+    def test_chic_chocs_in_range(self, canada_config):
+        """Test Chic-Chocs coordinates - Quebec boundary detection."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (49.0, -66.0)  # Chic-Chocs / Gaspésie
+
+        distance = provider.distance_from_region(coords)
+        # Should be None (in QC)
+        assert distance is None
 
     def test_near_boundary_proximity(self, canada_config):
         """Test coordinates near boundary return proximity distance."""
@@ -145,70 +165,6 @@ class TestAvalancheCanadaProvider:
             mock_request.assert_called_once_with(expected_url)
 
 
-class TestAvalancheQuebecProvider:
-    """Test AvalancheQuebecProvider functionality."""
-
-    def test_chic_chocs_in_range(self, quebec_config):
-        """Test Chic-Chocs coordinates - Quebec boundary detection."""
-        provider = AvalancheQuebecProvider(quebec_config)
-        coords = (49.0, -66.0)  # Chic-Chocs / Gaspésie
-
-        distance = provider.distance_from_region(coords)
-        # Should be None (in QC)
-        assert distance is None
-
-    def test_montreal_in_province(self, quebec_config):
-        """Test Montreal coordinates - Quebec boundary detection."""
-        provider = AvalancheQuebecProvider(quebec_config)
-        coords = (45.5017, -73.5673)  # Montreal
-
-        distance = provider.distance_from_region(coords)
-        assert distance is None
-
-    def test_outside_quebec_out_of_range(self, quebec_config):
-        """Test coordinates outside Quebec are out of range."""
-        provider = AvalancheQuebecProvider(quebec_config)
-        coords = (43.6532, -79.3832)  # Toronto
-
-        assert provider.out_of_range(coords) is True
-
-        distance = provider.distance_from_region(coords)
-        assert distance == float('inf')
-
-    def test_language_query_param_en(self, quebec_config):
-        """Test query parameter construction with English."""
-        provider = AvalancheQuebecProvider(quebec_config)
-        coords = (49.0, -66.0)
-
-        # URL now comes from config template with {lang} replaced
-        expected_url = quebec_config.api_url.format(lang=quebec_config.language)
-
-        with patch.object(provider, '_request') as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 404
-            mock_request.return_value = mock_response
-
-            provider.get_forecast(coords)
-            mock_request.assert_called_once_with(expected_url)
-
-    def test_language_query_param_fr(self, quebec_config):
-        """Test query parameter construction with French."""
-        # Create a copy with just the language changed
-        fr_config = quebec_config.model_copy(update={'language': 'fr'})
-        provider = AvalancheQuebecProvider(fr_config)
-        coords = (49.0, -66.0)
-
-        # URL now comes from config template with {lang} replaced
-        expected_url = fr_config.api_url.format(lang='fr')
-
-        with patch.object(provider, '_request') as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 404
-            mock_request.return_value = mock_response
-
-            provider.get_forecast(coords)
-            mock_request.assert_called_once_with(expected_url)
-
 class TestAvalancheReport:
     """Test AvalancheReport multi-provider selection."""
 
@@ -220,15 +176,15 @@ class TestAvalancheReport:
         if report.provider is not None:
             assert isinstance(report.provider, AvalancheCanadaProvider)
 
-    def test_quebec_coordinates_select_quebec_provider(self):
-        """Test Quebec coordinates select appropriate provider."""
-        coords = (49.0, -66.0)  # Chic-Chocs
-        report = AvalancheReport(coords)
+    # def test_quebec_coordinates_select_quebec_provider(self):
+    #     """Test Quebec coordinates select appropriate provider."""
+    #     coords = (49.0, -66.0)  # Chic-Chocs
+    #     report = AvalancheReport(coords)
 
-        # These coordinates may be served by Canada provider if they're
-        # within Canadian avalanche regions. Just verify a provider is selected.
-        if report.provider is not None:
-            assert isinstance(report.provider, (AvalancheCanadaProvider, AvalancheQuebecProvider))
+    #     # These coordinates may be served by Canada provider if they're
+    #     # within Canadian avalanche regions. Just verify a provider is selected.
+    #     if report.provider is not None:
+    #         assert isinstance(report.provider, (AvalancheCanadaProvider, AvalancheQuebecProvider))
 
     def test_out_of_range_mexico(self):
         """Test Mexico coordinates are out of range."""
@@ -319,18 +275,18 @@ class TestAPIIntegration:
 
             # Check danger ratings
             day1 = result['forecasts']['Friday']
-            assert day1['alpine_rating'] == '3 - Considerable'
-            assert day1['treeline_rating'] == '2 - Moderate'
-            assert day1['below_treeline_rating'] == '2 - Moderate'
+            assert day1['alpine_rating'] == 'Considerable'
+            assert day1['treeline_rating'] == 'Moderate'
+            assert day1['below_treeline_rating'] == 'Moderate'
 
             # Check problems
             assert len(result['problems']) == 2
             assert result['problems'][0]['type'] == 'Storm slab'
             assert result['problems'][0]['likelihood'] == 'likely'
 
-    def test_quebec_api_parsing(self, quebec_config, quebec_sample_response):
+    def test_quebec_api_parsing(self, canada_config, quebec_sample_response):
         """Test Quebec API response parsing."""
-        provider = AvalancheQuebecProvider(quebec_config)
+        provider = AvalancheCanadaProvider(canada_config)
         coords = (49.0, -66.0)
 
         with patch.object(provider, '_request') as mock_request:
@@ -343,15 +299,15 @@ class TestAPIIntegration:
 
             assert result is not None
             assert result['region'] == 'Chic-Chocs'
-            assert result['timezone'] == 'America/Toronto'
-            assert len(result['forecasts']) == 1
-            assert '2025-01-15' in result['forecasts']
+            assert result['timezone'] == 'America/New_York'
+            assert len(result['forecasts']) == 3
+            assert 'Saturday' in result['forecasts']
 
             # Check danger ratings
-            day1 = result['forecasts']['2025-01-15']
-            assert day1['alpine_rating'] == 'Considerable'
-            assert day1['treeline_rating'] == 'Moderate'
-            assert day1['below_treeline_rating'] == 'Low'
+            day1 = result['forecasts']['Saturday']
+            assert day1['alpine_rating'] == 'Low'
+            assert day1['treeline_rating'] == 'Low'
+            assert day1['below_treeline_rating'] == 'Early Season'
 
     def test_multiple_forecast_dates(self, canada_config, canada_sample_response):
         """Test parsing multiple forecast dates."""
@@ -370,9 +326,9 @@ class TestAPIIntegration:
 
             # Verify second day
             day2 = result['forecasts']['Saturday']
-            assert day2['alpine_rating'] == '3 - Considerable'
-            assert day2['treeline_rating'] == '2 - Moderate'
-            assert day2['below_treeline_rating'] == '2 - Moderate'
+            assert day2['alpine_rating'] == 'Considerable'
+            assert day2['treeline_rating'] == 'Moderate'
+            assert day2['below_treeline_rating'] == 'Moderate'
 
     def test_problem_extraction(self, canada_config, canada_sample_response):
         """Test avalanche problem extraction."""
@@ -578,3 +534,97 @@ class TestEdgeCases:
             assert len(caplog.records) == 1
             assert caplog.records[0].levelname == 'WARNING'
             assert 'Network error checking avalanche data' in caplog.records[0].message
+
+
+class TestAbbreviatedReports:
+    """Test abbreviated report generation for different forecast types."""
+
+    def test_no_rating_abbreviated_report(self, haines_pass_response):
+        """Test abbreviated report for forecast with No Rating."""
+        settings = get_config()
+        config = settings.avalanche.providers.get('AvalancheCanada')
+        provider = AvalancheCanadaProvider(config)
+        coords = (59.5, -136.0)  # Haines Pass area
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = haines_pass_response
+            mock_request.return_value = mock_response
+
+            # Create report and get abbreviated forecast
+            report = AvalancheReport(coords)
+            with patch.object(report, 'provider', provider):
+                result = report.get_forecast(format='abbrev')
+
+            # Verify abbreviated format
+            assert result is not None
+            assert 'Haines Pass' in result
+            assert 'N/A' in result  # No Rating abbreviated
+            assert 'ALP:N/A' in result
+            assert 'TL:N/A' in result
+            assert 'BTL:N/A' in result
+
+    def test_early_season_abbreviated_report(self, corner_brook_response):
+        """Test abbreviated report for forecast with Early Season rating."""
+        settings = get_config()
+        config = settings.avalanche.providers.get('AvalancheCanada')
+        provider = AvalancheCanadaProvider(config)
+        coords = (49.2, -58.0)  # Corner Brook area
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = corner_brook_response
+            mock_request.return_value = mock_response
+
+            # Create report and get abbreviated forecast
+            report = AvalancheReport(coords)
+            with patch.object(report, 'provider', provider):
+                result = report.get_forecast(format='abbrev')
+
+            # Verify abbreviated format
+            assert result is not None
+            # Region name comes from shapefile lookup, not API title
+            assert 'Gros Morne' in result or 'Corner Brook' in result
+            assert 'ES' in result  # Early Season abbreviated
+            assert 'ALP:ES' in result
+            assert 'TL:ES' in result
+            assert 'BTL:ES' in result
+
+    def test_three_problems_abbreviated_report(self, banff_response):
+        """Test abbreviated report for forecast with three problems."""
+        settings = get_config()
+        config = settings.avalanche.providers.get('AvalancheCanada')
+        provider = AvalancheCanadaProvider(config)
+        coords = (51.2, -116.0)  # Banff area
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = banff_response
+            mock_request.return_value = mock_response
+
+            # Create report and get abbreviated forecast
+            report = AvalancheReport(coords)
+            with patch.object(report, 'provider', provider):
+                result = report.get_forecast(format='abbrev')
+
+            # Verify abbreviated format
+            assert result is not None
+            # Region name comes from shapefile lookup, not API title
+            assert 'Sunshine' in result or 'Banff' in result or 'Lake Louise' in result
+
+            # Check danger ratings are abbreviated
+            assert 'ALP:C' in result  # Considerable
+            assert 'TL:M' in result  # Moderate
+            assert 'BTL:L' in result  # Low
+
+            # Check all three problems are present
+            assert 'WindSlb' in result
+            assert 'DeepPerSlb' in result
+            assert 'LooseDry' in result
+
+            # Check problem details are abbreviated
+            assert 'Lkly' in result  # Likelihood
+            assert 'Sz:' in result  # Size
