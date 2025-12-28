@@ -106,11 +106,12 @@ class AvalancheReport:
             logging.warning(f"Network error checking avalanche data: {e}")
             return False
 
-    def get_forecast(self, avalanche_filters: Optional[Dict[str, str]] = None) -> Optional[str]:
+    def get_forecast(self, avalanche_filters: Optional[Dict] = None, format: str = 'full') -> Optional[str]:
         """Get formatted avalanche forecast.
 
         Args:
             avalanche_filters: Dict with 'forecast' key: 'current'|'tomorrow'|'all'
+            format: 'full' or 'abbrev' for formatting style
 
         Returns:
             Formatted forecast string or None
@@ -128,45 +129,56 @@ class AvalancheReport:
         filters = avalanche_filters or {}
         forecast_filter = filters.get('forecast', 'current')
 
-        return self._apply_filter(forecast_data, forecast_filter)
+        # Get filtered dates
+        try:
+            dates = self._apply_filter(forecast_data, forecast_filter)
+        except ValueError:
+            return self.broken_forecast_msg('date')
 
-    def _apply_filter(self, forecast_data: Dict[str, Any], forecast_filter: str) -> str:
-        """Apply forecast filter to select dates and format.
+        # Format based on requested style
+        if format == 'abbrev':
+            return self._format_forecast_abbrev(forecast_data, dates)
+        else:
+            return self._format_forecast_full(forecast_data, dates)
+
+    def _apply_filter(self, forecast_data: Dict[str, Any], forecast_filter: str) -> list:
+        """Apply forecast filter to select day names.
 
         Args:
-            forecast_data: Full forecast data with all dates
+            forecast_data: Full forecast data with all days
             forecast_filter: 'current'|'tomorrow'|'all'
 
         Returns:
-            Formatted forecast string
+            List of day name strings to include in forecast
+
+        Raises:
+            ValueError: If no forecast days available
         """
-        # Get timezone from API response
-        tz = pytz.timezone(forecast_data['timezone'])
-        current_time = datetime.now(tz)
+        forecasts = forecast_data['forecasts']
+        days = list(forecasts.keys())  # ["Friday", "Saturday", "Sunday"]
 
-        # Convert all available forecast dates to date objects
-        dates = [datetime.strptime(d, '%Y-%m-%d').date()
-                 for d in sorted(forecast_data['forecasts'].keys())]
+        if not days:
+            raise ValueError("No forecast dates available")
 
-        if not dates:
-            return self.broken_forecast_msg('date')
+        if forecast_filter == 'current':
+            return [days[0]]
 
-        if forecast_filter == 'tomorrow':
-            tomorrow = (current_time + timedelta(days=1)).date()
-            if tomorrow in dates:
-                dates = [tomorrow]
+        elif forecast_filter == 'tomorrow':
+            # Get tomorrow's day name
+            tz = pytz.timezone(forecast_data['timezone'])
+            tomorrow = (datetime.now(tz) + timedelta(days=1)).strftime('%A')
+
+            if tomorrow in days:
+                return [tomorrow]
             else:
                 logging.warning(f"Tomorrow's forecast not available, using first available")
-                dates = [dates[0]]
+                return [days[0]]
 
-        elif forecast_filter == 'current':
-            # Use the first available forecast date from the API
-            dates = [dates[0]]
+        # 'all' - return all days
+        return days
 
-        return self._format_forecast(forecast_data, dates)
-
-    def _format_problems(self, problems: list, indent: str = "  ") -> list:
-        """Format avalanche problems."""
+    def _format_problems_full(self, problems: list, indent: str = "  ") -> list:
+        """Format avalanche problems (full version)."""
         if not problems:
             return []
 
@@ -186,41 +198,39 @@ class AvalancheReport:
 
         return parts
 
-    def _format_forecast(self, forecast_data: Dict[str, Any], dates: list) -> str:
-        """Format forecast for any number of dates.
+    def _format_forecast_full(self, forecast_data: Dict, dates: list) -> str:
+        """Format forecast for any number of dates (full version).
 
         Args:
             forecast_data: Full forecast data
-            dates: List of date objects to include in forecast
+            dates: List of day name strings to include in forecast
 
         Returns:
             Formatted forecast string
         """
         parts = [f"Avalanche Forecast: {forecast_data['region']}"]
 
-        # Header: show specific date for single, or "Issued" for multiple
+        # Header: show specific day for single, or "Issued" for multiple
         if len(dates) == 1:
-            parts.append(f"Date: {dates[0].strftime('%Y-%m-%d')}")
+            parts.append(f"Date: {dates[0]}")
         else:
             parts.append(f"Issued: {forecast_data['date_issued']}")
 
         parts.append("")
 
-        # Format each date
-        for date in dates:
-            date_str = date.strftime('%Y-%m-%d')
-
-            if date_str not in forecast_data['forecasts']:
+        # Format each day
+        for day_name in dates:
+            if day_name not in forecast_data['forecasts']:
                 continue
 
-            # For multiple dates, label each date
+            # For multiple dates, label each day
             if len(dates) > 1:
-                parts.append(f"Date: {date_str}")
+                parts.append(f"Date: {day_name}")
 
             parts.append("Danger Ratings:")
             # Indent more for multi-date to distinguish dates
             indent = "  " if len(dates) == 1 else "    "
-            day_forecast = forecast_data['forecasts'][date_str]
+            day_forecast = forecast_data['forecasts'][day_name]
             ratings = [
                 f"{indent}Alpine: {day_forecast['alpine_rating']}",
                 f"{indent}Treeline: {day_forecast['treeline_rating']}",
@@ -231,9 +241,204 @@ class AvalancheReport:
 
         # Problems shown once at end
         if forecast_data.get('problems'):
-            parts.extend(self._format_problems(forecast_data['problems']))
+            parts.extend(self._format_problems_full(forecast_data['problems']))
+
+        if forecast_data.get('url'):
+            parts.append("")
+            parts.append(forecast_data['url'])
 
         return "\n".join(parts)
+
+    def _format_forecast_abbrev(self, forecast_data: Dict[str, Any], dates: list) -> str:
+        """Format forecast in abbreviated form for SMS.
+
+        Args:
+            forecast_data: Full forecast data
+            dates: List of day name strings to include in forecast
+
+        Returns:
+            Abbreviated forecast string
+        """
+        parts = [forecast_data['region']]
+
+        # Format each day
+        for day_name in dates:
+            if day_name not in forecast_data['forecasts']:
+                continue
+
+            day_forecast = forecast_data['forecasts'][day_name]
+
+            # Abbreviated day (3-letter abbreviation)
+            day_abbrev = day_name[:3]
+
+            # Abbreviated danger ratings
+            alp = self._abbrev_danger_rating(day_forecast['alpine_rating'])
+            tl = self._abbrev_danger_rating(day_forecast['treeline_rating'])
+            btl = self._abbrev_danger_rating(day_forecast['below_treeline_rating'])
+
+            parts.append(f"{day_abbrev}: ALP:{alp} TL:{tl} BTL:{btl}")
+
+        # Problems shown after danger ratings
+        if forecast_data.get('problems'):
+            parts.append("")  # Empty line before problems
+            parts.extend(self._format_problems_abbrev(forecast_data['problems']))
+
+        return "\n".join(parts)
+
+    def _format_problems_abbrev(self, problems: list) -> list:
+        """Format avalanche problems in abbreviated form."""
+        if not problems:
+            return []
+
+        parts = []
+        for i, problem in enumerate(problems, 1):
+            if i > 1:
+                parts.append("")  # Empty line between problems
+
+            # Problem type (use modest abbreviations)
+            prob_type = self._abbrev_problem_type(problem['type'])
+            parts.append(prob_type)
+
+            # Elevations - abbreviate or use "All"
+            elevations = problem.get('elevations', [])
+            if len(elevations) == 3 or not elevations:
+                elev_str = "AllElev"
+            else:
+                elev_str = self._abbrev_elevations(elevations)
+
+            # Aspects - explicit list or "All"
+            aspects = problem.get('aspects', [])
+            if len(aspects) >= 7 or not aspects:
+                aspect_str = "All"
+            else:
+                aspect_str = self._abbrev_aspects(aspects)
+
+            parts.append(f"{elev_str} Slp:{aspect_str}")
+
+            # Likelihood and size
+            likelihood = problem.get('likelihood', '')
+            likelihood = self._abbrev_problem_likelihood(likelihood)
+            line = likelihood
+            size_min = problem.get('size_min', '')
+            size_max = problem.get('size_max', '')
+            if size_min and size_max:
+                # Format size range, removing trailing .0
+                size_min_fmt = size_min.rstrip('0').rstrip('.') if '.' in size_min else size_min
+                size_max_fmt = size_max.rstrip('0').rstrip('.') if '.' in size_max else size_max
+                size_str = f"{size_min_fmt}-{size_max_fmt}"
+                line = f"{line}, Sz:{size_str}"
+            if line:
+                parts.append(line)
+
+        return parts
+
+    def _abbrev_danger_rating(self, rating: str) -> str:
+        """Abbreviate danger rating to single letter.
+
+        Examples:
+            '3 - Considerable' -> 'C'
+            '2 - Moderate' -> 'M'
+            'Considerable' -> 'C'
+        """
+        rating_upper = rating.upper()
+
+        if 'EXTREME' in rating_upper:
+            return 'X'
+        elif 'HIGH' in rating_upper:
+            return 'H'
+        elif 'CONSIDERABLE' in rating_upper:
+            return 'C'
+        elif 'MODERATE' in rating_upper:
+            return 'M'
+        elif 'LOW' in rating_upper:
+            return 'L'
+        elif 'EARLY SEASON' in rating_upper:
+            return 'ES'
+        elif 'NO RATING' in rating_upper:
+            return 'N/A'
+        else:
+            logging.error(f"Avalanche API error - Unknown danger rating: {rating}")
+            return '?'
+
+    def _abbrev_elevations(self, elevations: list) -> str:
+        """Abbreviate and order elevation bands.
+
+        Always returns elevations in order: ALP, TL, BTL.
+        Logs error for unknown elevation values.
+
+        Args:
+            elevations: List of elevation strings
+
+        Returns:
+            Comma-separated abbreviated elevations in order
+        """
+        # Ordered mapping: keys are in display order (ALP, TL, BTL)
+        ELEV_MAP = {
+            'ALPINE': 'ALP',
+            'TREELINE': 'TL',
+            'BELOW TREELINE': 'BTL',
+        }
+
+        result = []
+        elevations_upper = [e.upper() for e in elevations]
+
+        for elev_key, abbrev in ELEV_MAP.items():
+            if elev_key in elevations_upper:
+                result.append(abbrev)
+
+        for elevation in elevations_upper:
+            if elevation not in ELEV_MAP.keys():
+                logging.error(f"Avalanche API error - Unknown elevation value: {elevation}")
+
+        return ','.join(result)
+
+    def _abbrev_aspects(self, aspects: list) -> str:
+        """Order aspects in clockwise order from N.
+
+        Args:
+            aspects: List of aspect strings (e.g., ['e', 'nw', 'n', 'ne'])
+
+        Returns:
+            Comma-separated aspects in clockwise order from N
+        """
+        # Clockwise order starting from N
+        ASPECT_ORDER = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+
+        aspects_upper = [a.upper() for a in aspects]
+        result = [a for a in ASPECT_ORDER if a in aspects_upper]
+
+        return ','.join(result)
+
+    def _abbrev_problem_type(self, problem_type: str) -> str:
+        """Abbreviate problem type modestly while keeping clarity."""
+        replacements = {
+            'Wind slab': 'WindSlb',
+            'Storm slab': 'StormSlb',
+            'Persistent slab': 'PrsistSlb',
+            'Deep persistent slab': 'DeepPerSlb',
+            'Wet slab': 'WetSlb',
+            'Cornices': 'Cornice',
+            'Wet Loose': 'WetLoose',
+            'Dry Loose': 'DryLoose',
+        }
+
+        return replacements.get(problem_type, problem_type)
+
+    def _abbrev_problem_likelihood(self, likelihood: str) -> str:
+        """Abbreviate problem likelihood."""
+        replacements = {
+            'unlikely': 'UnLkly',
+            'possible_unlikely': 'UnLkly/Poss',
+            'possible': 'Poss',
+            'likely_possible': 'Poss/Lkly',
+            'likely': 'Lkly',
+            'veryLikely_likely': 'Lkly/VLkly',
+            'veryLikely': 'VLkly',
+            'certain_veryLikely': 'VLkly/Certain',
+            'certain': 'Certain'
+        }
+        return replacements.get(likelihood, likelihood)
+
 
     def outside_of_area_msg(self):
         return 'TrekSafer ERROR: GPS coordinates outside of supported avalanche forecast area. No data available.'

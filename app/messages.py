@@ -8,7 +8,7 @@ from .helpers import parse_message, get_aqi
 from .fires import FindFires
 from .avalanche import AvalancheReport
 
-_SMS_LIMIT = 159
+_SMS_LIMIT = 160
 
 class Messages:
     def no_gps(self) -> str:

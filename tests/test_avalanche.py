@@ -313,12 +313,12 @@ class TestAPIIntegration:
             assert result['region'] == 'Spearhead'
             assert result['timezone'] == 'America/Vancouver'
             assert len(result['forecasts']) == 3
-            assert '2025-12-20' in result['forecasts']
-            assert '2025-12-21' in result['forecasts']
-            assert '2025-12-22' in result['forecasts']
+            assert 'Friday' in result['forecasts']
+            assert 'Saturday' in result['forecasts']
+            assert 'Sunday' in result['forecasts']
 
             # Check danger ratings
-            day1 = result['forecasts']['2025-12-20']
+            day1 = result['forecasts']['Friday']
             assert day1['alpine_rating'] == '3 - Considerable'
             assert day1['treeline_rating'] == '2 - Moderate'
             assert day1['below_treeline_rating'] == '2 - Moderate'
@@ -369,7 +369,7 @@ class TestAPIIntegration:
             assert len(result['forecasts']) == 3
 
             # Verify second day
-            day2 = result['forecasts']['2025-12-21']
+            day2 = result['forecasts']['Saturday']
             assert day2['alpine_rating'] == '3 - Considerable'
             assert day2['treeline_rating'] == '2 - Moderate'
             assert day2['below_treeline_rating'] == '2 - Moderate'

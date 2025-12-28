@@ -157,7 +157,7 @@ class AvalancheCanadaProvider(AvalancheProvider):
 
         return None
 
-    def _parse_forecast(self, data: Dict[str, Any], coords: tuple) -> Optional[Dict[str, Any]]:
+    def _parse_forecast(self, data: Dict, coords: tuple) -> Optional[Dict]:
         """Parse Avalanche Canada API response.
 
         Args:
@@ -187,8 +187,8 @@ class AvalancheCanadaProvider(AvalancheProvider):
             logging.warning(f"Avalanche Canada API returned empty danger ratings for coords {coords}")
 
         for rating in danger_ratings:
-            dt = datetime.strptime(rating['date']['value'], '%Y-%m-%dT%H:%M:%SZ')
-            date_str = dt.strftime('%Y-%m-%d')
+            # Use display value (day of week) as key
+            day_name = rating['date']['display']
 
             # Extract ratings by elevation band
             ratings = {}
@@ -198,7 +198,7 @@ class AvalancheCanadaProvider(AvalancheProvider):
                 else:
                     logging.warning(f"Invalid avalanche band found in API response: {key}")
 
-            forecasts_by_date[date_str] = {
+            forecasts_by_date[day_name] = {
                 'alpine_rating': ratings.get('alp', 'No Rating'),
                 'treeline_rating': ratings.get('tln', 'No Rating'),
                 'below_treeline_rating': ratings.get('btl', 'No Rating'),
@@ -235,5 +235,6 @@ class AvalancheCanadaProvider(AvalancheProvider):
             'date_issued': report.get('dateIssued', ''),
             'timezone': timezone,
             'forecasts': forecasts_by_date,
-            'problems': problems
+            'problems': problems,
+            'url': data.get('url', '')
         }
