@@ -115,8 +115,11 @@ class ProviderNameProvider(AvalancheProvider):
 
     def __init__(self, config: AvalancheProviderConfig):
         super().__init__(config)
-        # Add provider-specific initialization here
-        # e.g., load shapefiles, set up additional config
+        # Load geospatial data using base class helper
+        # self.regions_gdf is automatically used by base class distance_from_region()
+        self.regions_gdf = self._load_geodata(
+            lambda: gpd.read_file('boundaries/provider_regions.shp.zip')
+        )
 
     def get_forecast(self, coords: tuple) -> Optional[Dict[str, Any]]:
         """Get forecast from Provider API.
@@ -159,20 +162,9 @@ class ProviderNameProvider(AvalancheProvider):
         # e.g., check against shapefile, bounding box, or API
         pass
 
-    def distance_from_region(self, coords: tuple) -> Optional[float]:
-        """Calculate distance from coordinates to nearest region.
-
-        Args:
-            coords: (latitude, longitude) tuple
-
-        Returns:
-            None: Exact match (point inside region)
-            float: Distance in km to nearest region
-            float('inf'): No region data or all regions out of range
-        """
-        # Implement provider-specific distance calculation
-        # Used for provider selection when multiple providers overlap
-        pass
+    # NOTE: distance_from_region() is implemented in base class
+    # It uses self.regions_gdf automatically - no need to override
+    # unless you have provider-specific distance logic
 
     def _parse_forecast(self, data: Dict, coords: tuple) -> Optional[Dict]:
         """Parse API response into normalized format.
@@ -300,31 +292,53 @@ response = self._request(url)
 
 ### 5.2 Region/Distance Checking
 
-For `distance_from_region()` and `out_of_range()`:
+The base class provides `distance_from_region()` implementation that works automatically if you set `self.regions_gdf`. You only need to implement `out_of_range()`.
 
 **Option 1: Shapefile-based (recommended)**
 ```python
 import geopandas as gpd
-from shapely.geometry import Point
-from ..helpers import coords_to_point_meters
 
 def __init__(self, config):
     super().__init__(config)
-    self.regions_gdf = gpd.read_file('boundaries/provider_regions.shp.zip')
+    # Load geodata using base class helper (handles errors automatically)
+    self.regions_gdf = self._load_geodata(
+        lambda: gpd.read_file('boundaries/provider_regions.shp.zip')
+    )
 
-def distance_from_region(self, coords: tuple) -> Optional[float]:
-    point = Point(coords[1], coords[0])  # lon, lat
+def out_of_range(self, coords: tuple) -> bool:
+    """Check if coordinates are outside coverage area."""
+    # Use your own region lookup method
+    return self._get_region(coords) is None
 
-    # Check exact match
-    if self.regions_gdf.contains(point).any():
+def _get_region(self, coords: tuple) -> Optional[str]:
+    """Get region name from coordinates (helper method)."""
+    if self.regions_gdf is None:
         return None
 
-    # Calculate distance using helpers
-    point_meters = coords_to_point_meters(coords)
-    gdf_meters = self.regions_gdf.to_crs(epsg=3857)
-    min_distance_m = gdf_meters.geometry.distance(point_meters).min()
+    from shapely.geometry import Point
+    point = Point(coords[1], coords[0])  # lon, lat
 
-    return min_distance_m / 1000  # Return km
+    matches = self.regions_gdf[self.regions_gdf.contains(point)]
+    if not matches.empty:
+        return matches.iloc[0]['region_name_field']
+
+    return None
+
+# distance_from_region() is inherited from base class
+# It automatically:
+#  - Checks exact match against self.regions_gdf
+#  - Calculates distance to nearest region
+#  - Applies buffer limit from config
+#  - Returns None (exact match), float (km), or inf (out of range)
+```
+
+**Helper methods available from base class:**
+```python
+# Load geodata with consistent error handling
+self.regions_gdf = self._load_geodata(loader_fn)
+
+# Calculate distances to all regions (used by distance_from_region)
+gdf_with_distances = self._calculate_distances(coords)
 ```
 
 **Option 2: Bounding box**
@@ -430,10 +444,19 @@ def test_newprovider_parsing(newprovider_config, newprovider_sample_response):
 
 ```python
 """Minimal provider example."""
+import geopandas as gpd
 from typing import Optional, Dict, Any
+from shapely.geometry import Point
 from .base import AvalancheProvider
 
 class MinimalProvider(AvalancheProvider):
+    def __init__(self, config):
+        super().__init__(config)
+        # Load regions using base class helper
+        self.regions_gdf = self._load_geodata(
+            lambda: gpd.read_file('boundaries/provider_regions.shp.zip')
+        )
+
     def get_forecast(self, coords: tuple) -> Optional[Dict[str, Any]]:
         url = f"{self.api_base}?lat={coords[0]}&lon={coords[1]}"
         response = self._request(url)
@@ -459,14 +482,14 @@ class MinimalProvider(AvalancheProvider):
         }
 
     def out_of_range(self, coords: tuple) -> bool:
-        # Simple bounding box check
-        lat, lon = coords
-        return not (48.0 <= lat <= 51.0 and -124.0 <= lon <= -120.0)
+        """Check if coordinates are outside coverage."""
+        if self.regions_gdf is None:
+            return True
 
-    def distance_from_region(self, coords: tuple) -> Optional[float]:
-        if self.out_of_range(coords):
-            return float('inf')
-        return None  # Assume exact match if in range
+        point = Point(coords[1], coords[0])  # lon, lat
+        return not self.regions_gdf.contains(point).any()
+
+    # distance_from_region() inherited from base class
 ```
 
 ## Reference

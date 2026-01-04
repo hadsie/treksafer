@@ -12,7 +12,7 @@ from requests import RequestException
 from shapely.geometry import Point
 
 from .base import AvalancheProvider
-from ..config import AvalancheProviderConfig
+from ..config import AvalancheProviderConfig, get_config
 from ..helpers import coords_to_point_meters
 
 
@@ -52,30 +52,23 @@ class NationalAvalancheProvider(AvalancheProvider):
 
     def __init__(self, config: AvalancheProviderConfig):
         super().__init__(config)
-        self.zones_gdf = self._load_zones()
+        self.regions_gdf = self._load_geodata(self._load_zones)
 
     def _load_zones(self):
         """Load zone polygons from GeoJSON file.
 
         Manually parses GeoJSON to preserve feature-level IDs as zone_id property.
         """
-        try:
-            with open('boundaries/us_nac_boundaries.geojson') as f:
-                data = json.load(f)
+        with open('boundaries/us_nac_boundaries.geojson') as f:
+            data = json.load(f)
 
-            # Inject feature-level ID into properties
-            for feature in data['features']:
-                feature['properties']['zone_id'] = feature['id']
+        # Inject feature-level ID into properties
+        for feature in data['features']:
+            feature['properties']['zone_id'] = feature['id']
 
-            gdf = gpd.GeoDataFrame.from_features(data['features'])
-            gdf.set_crs(epsg=4326, inplace=True)
-            return gdf
-        except FileNotFoundError as e:
-            logging.warning(f"NAC zone boundaries file not found: {e}")
-            return None
-        except ImportError as e:
-            logging.warning(f"geopandas not available for zone lookup: {e}")
-            return None
+        gdf = gpd.GeoDataFrame.from_features(data['features'])
+        gdf.set_crs(epsg=4326, inplace=True)
+        return gdf
 
     def _find_zone(self, coords: tuple) -> Optional[Dict[str, Any]]:
         """Find zone containing coordinates.
@@ -86,11 +79,11 @@ class NationalAvalancheProvider(AvalancheProvider):
         Returns:
             Dict with zone properties (id, center_id, timezone, name) or None
         """
-        if self.zones_gdf is None:
+        if self.regions_gdf is None:
             return None
 
         point = Point(coords[1], coords[0])  # lon, lat
-        matches = self.zones_gdf[self.zones_gdf.contains(point)]
+        matches = self.regions_gdf[self.regions_gdf.contains(point)]
 
         if matches.empty:
             return None
@@ -103,24 +96,6 @@ class NationalAvalancheProvider(AvalancheProvider):
             'timezone': zone['timezone'],
             'name': zone['name']
         }
-
-    def distance_from_region(self, coords: tuple) -> Optional[float]:
-        """Calculate distance from coordinates to nearest NAC zone."""
-        if self.zones_gdf is None:
-            return float('inf')
-
-        point_wgs84 = Point(coords[1], coords[0])
-
-        # Check for exact match
-        if self.zones_gdf.contains(point_wgs84).any():
-            return None
-
-        # Calculate distance to nearest zone
-        point_meters = coords_to_point_meters(coords)
-        gdf_meters = self.zones_gdf.to_crs(epsg=3857)
-        min_distance_m = gdf_meters.geometry.distance(point_meters).min()
-
-        return min_distance_m / 1000  # Return km
 
     def out_of_range(self, coords: tuple) -> bool:
         """Check if coordinates are outside NAC coverage area."""

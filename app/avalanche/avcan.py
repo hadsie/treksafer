@@ -19,22 +19,13 @@ class AvalancheCanadaProvider(AvalancheProvider):
 
     def __init__(self, config: AvalancheProviderConfig):
         super().__init__(config)
-        self.subregions_gdf = self._load_subregions()
+        # https://github.com/avalanche-canada/forecast-polygons/blob/main/canadian_subregions.shp.zip
+        self.regions_gdf = self._load_geodata(
+            lambda: gpd.read_file('boundaries/canadian_subregions.shp.zip')
+        )
 
-    def _load_subregions(self):
-        """Load subregion shapefile once on initialization."""
-        try:
-            # https://github.com/avalanche-canada/forecast-polygons/blob/main/canadian_subregions.shp.zip
-            return gpd.read_file('boundaries/canadian_subregions.shp.zip')
-        except FileNotFoundError as e:
-            logging.warning(f"Avalanche subregion shapefile not found: {e}")
-            return None
-        except ImportError as e:
-            logging.warning(f"geopandas not available for subregion lookup: {e}")
-            return None
-
-    def _get_subregion(self, coords: tuple) -> Optional[str]:
-        """Get avalanche subregion name from coordinates.
+    def _get_region(self, coords: tuple) -> Optional[str]:
+        """Get avalanche region name from coordinates.
 
         First checks for exact match, then nearest region within configured radius.
 
@@ -42,52 +33,31 @@ class AvalancheCanadaProvider(AvalancheProvider):
             coords: (latitude, longitude)
 
         Returns:
-            Subregion name or None if not found
+            Region name or None if not found
         """
-        if self.subregions_gdf is None:
+        if self.regions_gdf is None:
             return None
 
         point_wgs84 = Point(coords[1], coords[0])  # lon, lat
 
         # Check for exact match first
-        matches = self.subregions_gdf[self.subregions_gdf.contains(point_wgs84)]
+        matches = self.regions_gdf[self.regions_gdf.contains(point_wgs84)]
         if not matches.empty:
             return matches.iloc[0]['polygon_na']
 
         # No exact match - find closest within radius
         settings = get_config()
-        return self._find_closest_subregion(coords, settings.avalanche_distance_buffer)
+        return self._find_closest_region(coords, settings.avalanche_distance_buffer)
 
-    def _calculate_distances(self, coords: tuple):
-        """Calculate distances from coordinates to all subregions.
-
-        Args:
-            coords: (latitude, longitude) in WGS84
-
-        Returns:
-            GeoDataFrame with 'distance' column (in meters), or None if no shapefile
-        """
-        if self.subregions_gdf is None:
-            return None
-
-        # Convert coordinates to EPSG:3857 (meters)
-        point_meters = coords_to_point_meters(coords)
-
-        # Convert polygons to EPSG:3857 and calculate distances
-        gdf_meters = self.subregions_gdf.to_crs(epsg=3857)
-        gdf_meters['distance'] = gdf_meters.geometry.distance(point_meters)
-
-        return gdf_meters
-
-    def _find_closest_subregion(self, coords: tuple, limit_km: int) -> Optional[str]:
-        """Find closest subregion within distance limit.
+    def _find_closest_region(self, coords: tuple, limit_km: int) -> Optional[str]:
+        """Find closest region within distance limit.
 
         Args:
             coords: (latitude, longitude) in WGS84
             limit_km: Maximum distance in kilometers
 
         Returns:
-            Subregion name or None if none within limit
+            Region name or None if none within limit
         """
         # Calculate distances using helper
         gdf_with_distances = self._calculate_distances(coords)
@@ -104,37 +74,9 @@ class AvalancheCanadaProvider(AvalancheProvider):
 
         return None
 
-    def distance_from_region(self, coords: tuple) -> Optional[float]:
-        """Calculate distance from coordinates to nearest Canadian subregion."""
-        if self.subregions_gdf is None:
-            return float('inf')  # No shapefile = infinite distance
-
-        point_wgs84 = Point(coords[1], coords[0])
-
-        # Check for exact match first
-        matches = self.subregions_gdf[self.subregions_gdf.contains(point_wgs84)]
-        if not matches.empty:
-            return None  # Exact match
-
-        # Calculate distances using helper
-        gdf_with_distances = self._calculate_distances(coords)
-        if gdf_with_distances is None:
-            return float('inf')
-
-        # Get nearest distance
-        nearest_distance_m = gdf_with_distances['distance'].min()
-        nearest_distance_km = nearest_distance_m / 1000
-
-        # Apply same limit as _find_closest_subregion
-        settings = get_config()
-        if nearest_distance_km > settings.avalanche_distance_buffer:
-            return float('inf')  # Beyond buffer limit
-
-        return nearest_distance_km
-
     def out_of_range(self, coords: tuple) -> bool:
         """Check if coordinates are outside Canadian avalanche forecast area."""
-        return self._get_subregion(coords) is None
+        return self._get_region(coords) is None
 
     def get_forecast(self, coords: tuple) -> Optional[Dict[str, Any]]:
         """Get forecast from Avalanche Canada API."""
@@ -177,7 +119,7 @@ class AvalancheCanadaProvider(AvalancheProvider):
         timezone = report.get('timezone', 'America/Vancouver')
 
         # Get region from shapefile, fall back to API title
-        region = self._get_subregion(coords) or report.get('title', 'Unknown')
+        region = self._get_region(coords) or report.get('title', 'Unknown')
 
         # Parse all available danger ratings
         forecasts_by_date = {}

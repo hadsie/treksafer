@@ -369,7 +369,7 @@ class TestAPIIntegration:
             # Verify logging
             assert len(caplog.records) == 1
             assert caplog.records[0].levelname == 'WARNING'
-            assert 'Network error checking avalanche data' in caplog.records[0].message
+            assert 'Network error checking Avalanche Canada data' in caplog.records[0].message
 
     def test_404_response(self, canada_config, caplog):
         """Test 404 response handling and logging."""
@@ -533,7 +533,7 @@ class TestEdgeCases:
             # Verify logging
             assert len(caplog.records) == 1
             assert caplog.records[0].levelname == 'WARNING'
-            assert 'Network error checking avalanche data' in caplog.records[0].message
+            assert 'Network error checking Avalanche Canada data' in caplog.records[0].message
 
 
 class TestAbbreviatedReports:

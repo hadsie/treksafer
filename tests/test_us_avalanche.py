@@ -50,14 +50,15 @@ class TestNationalAvalancheProvider:
         assert distance is None
 
     def test_seattle_out_of_range(self, nac_config):
-        """Test Seattle coordinates - should be in NWAC zone, not out of range."""
+        """Test Seattle coordinates - should be out of range (beyond buffer)."""
         provider = NationalAvalancheProvider(nac_config)
         coords = (47.6062, -122.3321)  # Seattle
 
-        # Seattle itself should be outside, but close to NWAC zones
+        # Seattle is ~65km from nearest NWAC zone, beyond the buffer limit
+        assert provider.out_of_range(coords) is True
+
         distance = provider.distance_from_region(coords)
-        # Either in range (None) or nearby but not inf
-        assert distance != float('inf') or distance is None
+        assert distance == float('inf')
 
     def test_exact_match_returns_none(self, nac_config):
         """Test that exact match (point in polygon) returns None."""
