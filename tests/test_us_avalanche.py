@@ -397,7 +397,7 @@ class TestNACEdgeCases:
 class TestNACLiveAPI:
     """Test live NAC API integration (requires network)."""
 
-    @pytest.mark.skip(reason="Live API test - enable manually")
+    @pytest.mark.live
     def test_cnfaic_live_api_format(self, nac_config):
         """Test that live NAC API returns expected format."""
         provider = NationalAvalancheProvider(nac_config)

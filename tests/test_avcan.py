@@ -1,0 +1,544 @@
+"""Tests for Avalanche Canada provider functionality."""
+
+import json
+import pytest
+from unittest.mock import Mock, patch
+from requests import RequestException
+
+from app.avalanche import AvalancheCanadaProvider, AvalancheReport
+from app.config import get_config
+
+
+@pytest.fixture
+def canada_config():
+    """Fixture for Canada provider configuration from settings."""
+    settings = get_config()
+    provider_config = settings.avalanche.providers.get('AvalancheCanada')
+    return provider_config
+
+
+@pytest.fixture
+def canada_sample_response():
+    """Load Canada sample API response."""
+    with open('tests/data/avcan_Brandywine-Garibaldi-Homathko-Spearhead-Tantalus_sample.json', 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def quebec_sample_response():
+    """Load Quebec sample API response."""
+    with open('tests/data/avcan-Chic-Chocs-20251226.json', 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def haines_pass_response():
+    """Load Haines Pass sample API response (No Rating)."""
+    with open('tests/data/avcan-Haines-Pass-20251206.json', 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def corner_brook_response():
+    """Load Corner Brook sample API response (Early Season)."""
+    with open('tests/data/avcan-Corner-Brook-Gros-Morne-Northern-Peninsula-20251001.json', 'r') as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def banff_response():
+    """Load Banff sample API response (Three Problems)."""
+    with open('tests/data/avcan-Banff-East-Side-93N-Kootenay-Lake-Louise-LLSA-Sunshine-West-Side-93N-Field-Little-Yoho-20251228.json', 'r') as f:
+        return json.load(f)
+
+
+class TestAvalancheCanadaProvider:
+    """Test AvalancheCanadaProvider functionality."""
+
+    def test_whistler_in_range(self, canada_config):
+        """Test Whistler coordinates are within avalanche region."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)  # Whistler
+
+        assert provider.out_of_range(coords) is False
+
+        distance = provider.distance_from_region(coords)
+        # Should be None (exact match) or very small distance
+        assert distance is None
+
+    def test_rogers_pass_in_range(self, canada_config):
+        """Test Rogers Pass coordinates are within avalanche region."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (51.3014, -117.5161)  # Rogers Pass
+
+        assert provider.out_of_range(coords) is False
+
+        distance = provider.distance_from_region(coords)
+        assert distance is None
+
+    def test_north_vancouver_out_of_range(self, canada_config):
+        """Test North Vancouver coordinates - within buffer of North Shore mountains."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (49.331169, -123.059437)  # North Vancouver
+
+        # These coordinates are just over 2.7km away from the closest region.
+        distance = provider.distance_from_region(coords)
+        assert distance is not None and isinstance(distance, float) and distance < 20
+
+    def test_chic_chocs_in_range(self, canada_config):
+        """Test Chic-Chocs coordinates - Quebec boundary detection."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (49.0, -66.0)  # Chic-Chocs / Gaspésie
+
+        distance = provider.distance_from_region(coords)
+        # Should be None (in QC)
+        assert distance is None
+
+    def test_near_boundary_proximity(self, canada_config):
+        """Test coordinates near boundary return proximity distance."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (49.3429512, -123.0223727)  # 0.4km outside of a region
+
+        distance = provider.distance_from_region(coords)
+
+        # Should return a distance (not None = exact match, not inf = in range)
+        assert distance is not None
+        assert distance != float('inf')
+        assert isinstance(distance, float)
+        assert 0 < distance <= 1
+
+    def test_far_from_avalanche_terrain(self, canada_config):
+        """Test coordinates far from avalanche terrain."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (55.0, -125.0)  # Far north
+
+        assert provider.out_of_range(coords) is True
+
+        distance = provider.distance_from_region(coords)
+        assert distance == float('inf')
+
+    def test_exact_match_returns_none(self, canada_config):
+        """Test that exact match (point in polygon) returns None."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)  # Whistler (in region)
+
+        distance = provider.distance_from_region(coords)
+        assert distance is None
+
+    def test_language_url_construction_en(self, canada_config):
+        """Test URL construction with English language."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        # URL now comes from config template with {lang} replaced
+        expected_url = f"{canada_config.api_url.format(lang=canada_config.language)}?lat={coords[0]}&long={coords[1]}"
+
+        # Mock the _request method to capture the URL
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 404  # Doesn't matter for this test
+            mock_request.return_value = mock_response
+
+            provider.get_forecast(coords)
+            mock_request.assert_called_once_with(expected_url)
+
+    def test_language_url_construction_fr(self, canada_config):
+        """Test URL construction with French language."""
+        # Create a copy with just the language changed
+        fr_config = canada_config.model_copy(update={'language': 'fr'})
+        provider = AvalancheCanadaProvider(fr_config)
+        coords = (50.1163, -122.9574)
+
+        # URL now comes from config template with {lang} replaced
+        expected_url = f"{fr_config.api_url.format(lang='fr')}?lat={coords[0]}&long={coords[1]}"
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 404
+            mock_request.return_value = mock_response
+
+            provider.get_forecast(coords)
+            mock_request.assert_called_once_with(expected_url)
+
+
+class TestAvcanAPIIntegration:
+    """Test Avalanche Canada API integration with mocked responses."""
+
+    def test_canada_api_parsing(self, canada_config, canada_sample_response):
+        """Test Canada API response parsing."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)  # Spearhead region
+
+        # Mock the HTTP request
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = canada_sample_response
+            mock_request.return_value = mock_response
+
+            result = provider.get_forecast(coords)
+
+            assert result is not None
+            assert result['region'] == 'Spearhead'
+            assert result['timezone'] == 'America/Vancouver'
+            assert len(result['forecasts']) == 3
+            assert 'Friday' in result['forecasts']
+            assert 'Saturday' in result['forecasts']
+            assert 'Sunday' in result['forecasts']
+
+            # Check danger ratings
+            day1 = result['forecasts']['Friday']
+            assert day1['alpine_rating'] == 'Considerable'
+            assert day1['treeline_rating'] == 'Moderate'
+            assert day1['below_treeline_rating'] == 'Moderate'
+
+            # Check problems
+            assert len(result['problems']) == 2
+            assert result['problems'][0]['type'] == 'Storm slab'
+            assert result['problems'][0]['likelihood'] == 'likely'
+
+    def test_quebec_api_parsing(self, canada_config, quebec_sample_response):
+        """Test Quebec API response parsing."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (49.0, -66.0)
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = quebec_sample_response
+            mock_request.return_value = mock_response
+
+            result = provider.get_forecast(coords)
+
+            assert result is not None
+            assert result['region'] == 'Chic-Chocs'
+            assert result['timezone'] == 'America/New_York'
+            assert len(result['forecasts']) == 3
+            assert 'Saturday' in result['forecasts']
+
+            # Check danger ratings
+            day1 = result['forecasts']['Saturday']
+            assert day1['alpine_rating'] == 'Low'
+            assert day1['treeline_rating'] == 'Low'
+            assert day1['below_treeline_rating'] == 'Early Season'
+
+    def test_multiple_forecast_dates(self, canada_config, canada_sample_response):
+        """Test parsing multiple forecast dates."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = canada_sample_response
+            mock_request.return_value = mock_response
+
+            result = provider.get_forecast(coords)
+
+            assert len(result['forecasts']) == 3
+
+            # Verify second day
+            day2 = result['forecasts']['Saturday']
+            assert day2['alpine_rating'] == 'Considerable'
+            assert day2['treeline_rating'] == 'Moderate'
+            assert day2['below_treeline_rating'] == 'Moderate'
+
+    def test_problem_extraction(self, canada_config, canada_sample_response):
+        """Test avalanche problem extraction."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = canada_sample_response
+            mock_request.return_value = mock_response
+
+            result = provider.get_forecast(coords)
+
+            problems = result['problems']
+            assert len(problems) == 2
+
+            # Check first problem details
+            problem1 = problems[0]
+            assert problem1['type'] == 'Storm slab'
+            assert 'Alpine' in problem1['elevations']
+            assert 'n' in problem1['aspects']
+            assert problem1['likelihood'] == 'likely'
+            assert problem1['size_min'] == '1.0'
+            assert problem1['size_max'] == '2.5'
+
+    def test_network_error_handling(self, canada_config, caplog):
+        """Test network error handling and logging."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        with patch.object(provider, '_request', side_effect=RequestException("Network error")):
+            result = provider.get_forecast(coords)
+
+            # Verify return value
+            assert result is None
+
+            # Verify logging
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'Network error checking Avalanche Canada data' in caplog.records[0].message
+
+    def test_404_response(self, canada_config, caplog):
+        """Test 404 response handling and logging."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 404
+            mock_request.return_value = mock_response
+
+            result = provider.get_forecast(coords)
+
+            # Verify return value
+            assert result is None
+
+            # Verify logging of non-200 status code
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'status code 404' in caplog.records[0].message
+
+    def test_invalid_json_response(self, canada_config, caplog):
+        """Test invalid JSON response handling and logging."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = {}  # Empty response
+            mock_request.return_value = mock_response
+
+            result = provider.get_forecast(coords)
+
+            # Verify return value
+            assert result is None
+
+            # Verify logging of invalid/empty JSON
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'Invalid or empty JSON response' in caplog.records[0].message
+
+
+class TestAvcanLiveAPI:
+    """Test live Avalanche Canada API integration (requires network)."""
+
+    @pytest.mark.live
+    def test_canada_live_api_format(self, canada_config):
+        """Test that live Canada API returns expected format."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)  # Whistler
+
+        # Make a real API call
+        result = provider.get_forecast(coords)
+
+        # Verify we got a response
+        assert result is not None, "API should return data for Whistler coordinates"
+
+        # Check expected top-level keys
+        assert result['region'] == 'Spearhead'
+        assert result['timezone'] == 'America/Vancouver'
+        assert 'forecasts' in result
+        assert 'problems' in result
+
+        # Verify forecasts structure
+        assert isinstance(result['forecasts'], dict)
+        assert len(result['forecasts']) > 0, "Should have at least one forecast day"
+
+        # Check first forecast has expected rating keys
+        first_forecast = next(iter(result['forecasts'].values()))
+        assert 'alpine_rating' in first_forecast
+        assert 'treeline_rating' in first_forecast
+        assert 'below_treeline_rating' in first_forecast
+
+        # Verify problems structure
+        assert isinstance(result['problems'], list)
+        if len(result['problems']) > 0:
+            problem = result['problems'][0]
+            assert 'type' in problem
+            assert 'elevations' in problem
+            assert 'aspects' in problem
+            assert 'likelihood' in problem
+            assert 'size_min' in problem
+            assert 'size_max' in problem
+
+
+class TestAvcanEdgeCases:
+    """Test Avalanche Canada edge cases and error conditions."""
+
+    def test_missing_report_id(self, canada_config, caplog):
+        """Test response with missing report ID and logging."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        bad_response = {
+            "report": {
+                "id": None,  # Missing ID
+                "title": "Test"
+            }
+        }
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = bad_response
+            mock_request.return_value = mock_response
+
+            result = provider.get_forecast(coords)
+
+            # Verify return value
+            assert result is None
+
+            # Verify logging
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'Invalid or empty JSON response' in caplog.records[0].message
+
+    def test_empty_danger_ratings(self, canada_config, caplog):
+        """Test response with empty danger ratings and logging."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        response = {
+            "report": {
+                "id": "test-id",
+                "title": "Test",
+                "timezone": "America/Vancouver",
+                "dateIssued": "2025-01-15T16:00:00Z",
+                "dangerRatings": [],  # Empty
+                "problems": []
+            }
+        }
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = response
+            mock_request.return_value = mock_response
+
+            result = provider.get_forecast(coords)
+
+            # Should still parse but with empty forecasts
+            assert result is not None
+            assert len(result['forecasts']) == 0
+
+            # Verify logging of empty danger ratings
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'empty danger ratings' in caplog.records[0].message.lower()
+
+    def test_timeout_error(self, canada_config, caplog):
+        """Test timeout error handling and logging."""
+        provider = AvalancheCanadaProvider(canada_config)
+        coords = (50.1163, -122.9574)
+
+        with patch.object(provider, '_request', side_effect=RequestException("Timeout")):
+            result = provider.get_forecast(coords)
+
+            # Verify return value
+            assert result is None
+
+            # Verify logging
+            assert len(caplog.records) == 1
+            assert caplog.records[0].levelname == 'WARNING'
+            assert 'Network error checking Avalanche Canada data' in caplog.records[0].message
+
+
+class TestAvcanAbbreviatedReports:
+    """Test abbreviated report generation for different forecast types."""
+
+    def test_no_rating_abbreviated_report(self, haines_pass_response):
+        """Test abbreviated report for forecast with No Rating."""
+        settings = get_config()
+        config = settings.avalanche.providers.get('AvalancheCanada')
+        provider = AvalancheCanadaProvider(config)
+        coords = (59.5, -136.0)  # Haines Pass area
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = haines_pass_response
+            mock_request.return_value = mock_response
+
+            # Create report and get abbreviated forecast
+            report = AvalancheReport(coords)
+            with patch.object(report, 'provider', provider):
+                result = report.get_forecast(format='abbrev')
+
+            # Verify abbreviated format
+            assert result is not None
+            assert 'Haines Pass' in result
+            assert 'N/A' in result  # No Rating abbreviated
+            assert 'ALP:N/A' in result
+            assert 'TL:N/A' in result
+            assert 'BTL:N/A' in result
+
+    def test_early_season_abbreviated_report(self, corner_brook_response):
+        """Test abbreviated report for forecast with Early Season rating."""
+        settings = get_config()
+        config = settings.avalanche.providers.get('AvalancheCanada')
+        provider = AvalancheCanadaProvider(config)
+        coords = (49.2, -58.0)  # Corner Brook area
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = corner_brook_response
+            mock_request.return_value = mock_response
+
+            # Create report and get abbreviated forecast
+            report = AvalancheReport(coords)
+            with patch.object(report, 'provider', provider):
+                result = report.get_forecast(format='abbrev')
+
+            # Verify abbreviated format
+            assert result is not None
+            # Region name comes from shapefile lookup, not API title
+            assert 'Gros Morne' in result or 'Corner Brook' in result
+            assert 'ES' in result  # Early Season abbreviated
+            assert 'ALP:ES' in result
+            assert 'TL:ES' in result
+            assert 'BTL:ES' in result
+
+    def test_three_problems_abbreviated_report(self, banff_response):
+        """Test abbreviated report for forecast with three problems."""
+        settings = get_config()
+        config = settings.avalanche.providers.get('AvalancheCanada')
+        provider = AvalancheCanadaProvider(config)
+        coords = (51.2, -116.0)  # Banff area
+
+        with patch.object(provider, '_request') as mock_request:
+            mock_response = Mock()
+            mock_response.status_code = 200
+            mock_response.json.return_value = banff_response
+            mock_request.return_value = mock_response
+
+            # Create report and get abbreviated forecast
+            report = AvalancheReport(coords)
+            with patch.object(report, 'provider', provider):
+                result = report.get_forecast(format='abbrev')
+
+            # Verify abbreviated format
+            assert result is not None
+            # Region name comes from shapefile lookup, not API title
+            assert 'Sunshine' in result or 'Banff' in result or 'Lake Louise' in result
+
+            # Check danger ratings are abbreviated
+            assert 'ALP:C' in result  # Considerable
+            assert 'TL:M' in result  # Moderate
+            assert 'BTL:L' in result  # Low
+
+            # Check all three problems are present
+            assert 'WindSlb' in result
+            assert 'DeepPerSlb' in result
+            assert 'LooseDry' in result
+
+            # Check problem details are abbreviated
+            assert 'Lkly' in result  # Likelihood
+            assert 'Sz:' in result  # Size
