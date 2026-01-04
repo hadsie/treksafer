@@ -49,10 +49,12 @@ def _get_provider_class(class_name: str):
     # Import here to avoid circular dependency
     from .avcan import AvalancheCanadaProvider
     from .quebec import AvalancheQuebecProvider
+    from .us_nac import NationalAvalancheProvider
 
     providers = {
         'AvalancheCanadaProvider': AvalancheCanadaProvider,
         'AvalancheQuebecProvider': AvalancheQuebecProvider,
+        'NationalAvalancheProvider': NationalAvalancheProvider,
     }
 
     provider_class = providers.get(class_name)

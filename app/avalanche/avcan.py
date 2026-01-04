@@ -153,7 +153,7 @@ class AvalancheCanadaProvider(AvalancheProvider):
                 logging.warning(f"Avalanche Canada API returned status code {response.status_code} for coords {coords}")
 
         except RequestException as e:
-            logging.warning(f"Network error checking avalanche data: {e}")
+            logging.warning(f"Network error checking Avalanche Canada data: {e}")
 
         return None
 

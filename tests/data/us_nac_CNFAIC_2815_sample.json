@@ -1,0 +1,78 @@
+{
+  "id": 176532,
+  "published_time": "2025-12-28T16:00:00+00:00",
+  "expires_time": "2025-12-29T16:00:00+00:00",
+  "created_at": "2025-12-28T02:21:49+00:00",
+  "updated_at": "2025-12-28T15:24:34+00:00",
+  "author": "Andrew Schauer",
+  "product_type": "forecast",
+  "bottom_line": "<p>It will be easy to trigger a small avalanche 6 to 12\" deep where freshly wind-drifted snow is sitting on top of a weaker layer. This will most likely exist at upper elevations near ridgelines, below convex rolls, and in steep gullies. It is unlikely a person will be able to trigger an avalanche at or below treeline, or in terrain that has remained protected from the winds.</p>\n<p>___________________________________</p>\n<p><strong>SPECIAL ANNOUNCEMENTS:</strong></p>\n<p>We rely on the support of the Friends of the Chugach Avalanche Center to operate. When you make a donation to the Friends, your contribution makes these forecasts possible. If you haven't already done so, please consider&nbsp;<a href=\"https://www.cnfaic.org/friends/donate/\" target=\"_blank\" rel=\"noopener\">becoming a member in December</a>! We rely heavily on public support to keep us running and would like to send a big THANK YOU to everyone who has donated, past and present!</p>",
+  "hazard_discussion": null,
+  "weather_discussion": null,
+  "announcement": null,
+  "status": "published",
+  "media": [],
+  "weather_data": {
+    "weather_product_id": 176529
+  },
+  "json_data": null,
+  "avalanche_center": {
+    "id": "CNFAIC",
+    "name": "Chugach National Forest Avalanche Center",
+    "url": "http://www.cnfaic.org/",
+    "city": "Girdwood",
+    "state": "AK"
+  },
+  "forecast_avalanche_problems": [
+    {
+      "id": 2548929,
+      "forecast_id": 176532,
+      "avalanche_problem_id": 3,
+      "rank": 1,
+      "likelihood": "possible",
+      "discussion": "<p>Temperatures have once again dipped into the subzero range, and the strong easterly winds that arrived on Friday have calmed down. Today's main avalanche concerns lie at the interface of the few inches of new snow we received Friday night and the older, weak surfaces that snow buried. With only 2 to 4\" new snow on the ground, the only places this will be able to produce an avalanche big enough to carry or bury a person will be in wind-loaded terrain. You will most likely find this problem above treeline, on steep slopes just below ridgelines, convex rolls, or steep gullies.&nbsp;</p>\n<p>You can use small wind-loaded terrain features to test this layer and see how reactive it remains today, but the better option may be to just avoid steep, wind-loaded slopes. Warning signs like shooting cracks or collapsing are clear indicators of unstable snow, but these do not always show up &mdash; even when conditions are unstable.</p>\n<p><strong>Dry Loose Avalanches:&nbsp;</strong>This low-density snow has fallen on firm surfaces for the most part, and is likely to produce fast-moving dry loose avalanches (sluffs) in steep terrain. With only a few inches of fresh snow, these are unlikely to be big enough to bury a person, but they may get big enough to carry someone, and will be important to pay attention to today.</p>",
+      "media": null,
+      "location": [
+        "southwest upper",
+        "south upper",
+        "southeast upper",
+        "east upper",
+        "northeast upper",
+        "northwest upper",
+        "west upper",
+        "north upper"
+      ],
+      "size": [
+        "1",
+        "2"
+      ],
+      "name": "Wind Slab",
+      "problem_description": "Wind Slab avalanches are the release of a cohesive layer of snow (a slab) formed by the wind. Wind typically transports snow from the upwind sides of terrain features and deposits snow on the downwind side. Wind slabs are often smooth and rounded and sometimes sound hollow, and can range from soft to hard. Wind slabs that form over a persistent weak layer (surface hoar, depth hoar, or near-surface facets) may be termed Persistent Slabs or may develop into Persistent Slabs.",
+      "icon": "http://api.avalanche.org/img/avalanche_problems/WindSlab.png"
+    }
+  ],
+  "danger": [
+    {
+      "lower": 1,
+      "upper": 2,
+      "middle": 1,
+      "valid_day": "current"
+    },
+    {
+      "lower": 1,
+      "upper": 2,
+      "middle": 1,
+      "valid_day": "tomorrow"
+    }
+  ],
+  "forecast_zone": [
+    {
+      "id": 2815,
+      "name": "Turnagain Pass and Girdwood",
+      "url": "https://www.cnfaic.org/forecast/#/turnagain-pass-and-girdwood/",
+      "state": "AK",
+      "zone_id": "turnagain",
+      "config": null
+    }
+  ]
+}
