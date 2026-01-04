@@ -31,15 +31,15 @@ def apply_status_filter(items, status_filter, data_file, **kwargs):
 
     filtered_items = []
     for item in items:
-        status = item.get('Status')
-        if status is None:
-            # Log warning for missing status (indicates potential normalization bug)
+        status_level = item.get('StatusLevel')
+        if status_level is None:
+            # Log warning for missing status level (indicates potential normalization bug)
             # Use highest level (currently 4='out') so missing status fires appear with 'out' filter
             fire_id = item.get('Fire', item.get('Name', 'unknown'))
-            logging.warning(f"Fire {fire_id} is missing Status field - using max level as default")
-            status = max(STATUS_LEVELS.values())
+            logging.warning(f"Fire {fire_id} is missing StatusLevel field - using max level as default")
+            status_level = max(STATUS_LEVELS.values())
 
-        if status <= max_level:
+        if status_level <= max_level:
             filtered_items.append(item)
 
     return filtered_items

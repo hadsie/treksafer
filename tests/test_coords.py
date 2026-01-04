@@ -15,6 +15,7 @@ class TestFireLocationBasics:
         fires = ff.nearby()
 
         assert len(fires) == 1
+        assert isinstance(fires[0]['Status'], str), "Status should be a string, not a numeric level"
         assert ff.out_of_range() is False
 
     def test_manning_park_bc(self, mock_bc_fire_api):

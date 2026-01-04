@@ -72,7 +72,8 @@ def _process_fields(field_mapping, data_file, get_value_fn):
     for data_key, source_key in field_mapping.items():
         raw_value = get_value_fn(source_key)
         if data_key == 'Status':
-            result[data_key] = status_to_level(raw_value, data_file.status_map)
+            result[data_key] = raw_value  # Keep original for display
+            result['StatusLevel'] = status_to_level(raw_value, data_file.status_map)  # For filtering
         else:
             result[data_key] = _apply_transform(data_key, raw_value, data_file.mapping)
 

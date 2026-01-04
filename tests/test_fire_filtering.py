@@ -124,11 +124,11 @@ class TestGenericFilterSystem:
 
     def test_apply_status_filter(self):
         """Test status filter application with numeric levels."""
-        # Status is now a numeric level (1=active, 2=managed, 3=controlled, 4=out)
+        # StatusLevel is now a numeric level (1=active, 2=managed, 3=controlled, 4=out)
         test_fires = [
-            {'Fire': 'Fire1', 'Status': 1},  # active
-            {'Fire': 'Fire2', 'Status': 2},  # managed
-            {'Fire': 'Fire3', 'Status': 4}   # out
+            {'Fire': 'Fire1', 'StatusLevel': 1},  # active
+            {'Fire': 'Fire2', 'StatusLevel': 2},  # managed
+            {'Fire': 'Fire3', 'StatusLevel': 4}   # out
         ]
 
         class MockDataFile:
@@ -166,12 +166,12 @@ class TestGenericFilterSystem:
 
     def test_apply_filters_multiple(self):
         """Test applying multiple filters together (status + size only)."""
-        # Status is now numeric level, distance filtering happens in search()
+        # StatusLevel is now numeric level, distance filtering happens in search()
         test_fires = [
-            {'Fire': 'Fire1', 'Status': 1, 'Size': 5.0},   # Pass both
-            {'Fire': 'Fire2', 'Status': 2, 'Size': 0.5},   # Fail size
-            {'Fire': 'Fire3', 'Status': 4, 'Size': 2.0},   # Fail status
-            {'Fire': 'Fire4', 'Status': 1, 'Size': 3.0}    # Pass both
+            {'Fire': 'Fire1', 'StatusLevel': 1, 'Size': 5.0},   # Pass both
+            {'Fire': 'Fire2', 'StatusLevel': 2, 'Size': 0.5},   # Fail size
+            {'Fire': 'Fire3', 'StatusLevel': 4, 'Size': 2.0},   # Fail status
+            {'Fire': 'Fire4', 'StatusLevel': 1, 'Size': 3.0}    # Pass both
         ]
 
         class MockDataFile:
@@ -217,13 +217,13 @@ class TestFireFilteringIntegration:
 
     def test_filter_fires_by_status_active(self):
         """Test filtering fires with active filter (numeric levels)."""
-        # Status is now numeric: 1=active, 2=managed, 3=controlled, 4=out
+        # StatusLevel is now numeric: 1=active, 2=managed, 3=controlled, 4=out
         test_fires = [
-            {'Fire': 'Fire1', 'Status': 1},     # active
-            {'Fire': 'Fire2', 'Status': 2},     # managed
-            {'Fire': 'Fire3', 'Status': 3},     # controlled
-            {'Fire': 'Fire4', 'Status': 4},     # out
-            {'Fire': 'Fire5', 'Status': None}   # no status (filtered out)
+            {'Fire': 'Fire1', 'StatusLevel': 1},     # active
+            {'Fire': 'Fire2', 'StatusLevel': 2},     # managed
+            {'Fire': 'Fire3', 'StatusLevel': 3},     # controlled
+            {'Fire': 'Fire4', 'StatusLevel': 4},     # out
+            {'Fire': 'Fire5', 'StatusLevel': None}   # no status (filtered out)
         ]
 
         class MockDataFile:
@@ -236,13 +236,13 @@ class TestFireFilteringIntegration:
 
     def test_filter_fires_by_status_controlled(self):
         """Test filtering fires with controlled filter (numeric levels)."""
-        # Status is now numeric: 1=active, 2=managed, 3=controlled, 4=out
+        # StatusLevel is now numeric: 1=active, 2=managed, 3=controlled, 4=out
         test_fires = [
-            {'Fire': 'Fire1', 'Status': 1},     # active
-            {'Fire': 'Fire2', 'Status': 2},     # managed
-            {'Fire': 'Fire3', 'Status': 3},     # controlled
-            {'Fire': 'Fire4', 'Status': 4},     # out
-            {'Fire': 'Fire5', 'Status': None}   # no status (filtered out)
+            {'Fire': 'Fire1', 'StatusLevel': 1},     # active
+            {'Fire': 'Fire2', 'StatusLevel': 2},     # managed
+            {'Fire': 'Fire3', 'StatusLevel': 3},     # controlled
+            {'Fire': 'Fire4', 'StatusLevel': 4},     # out
+            {'Fire': 'Fire5', 'StatusLevel': None}   # no status (filtered out)
         ]
 
         class MockDataFile:
@@ -257,10 +257,10 @@ class TestFireFilteringIntegration:
     def test_filter_fires_all_no_filtering(self):
         """Test that 'all' filter includes all fires."""
         test_fires = [
-            {'Fire': 'Fire1', 'Status': 1},
-            {'Fire': 'Fire2', 'Status': 2},
-            {'Fire': 'Fire3', 'Status': 4},
-            {'Fire': 'Fire4', 'Status': None}
+            {'Fire': 'Fire1', 'StatusLevel': 1},
+            {'Fire': 'Fire2', 'StatusLevel': 2},
+            {'Fire': 'Fire3', 'StatusLevel': 4},
+            {'Fire': 'Fire4', 'StatusLevel': None}
         ]
 
         class MockDataFile:
@@ -273,9 +273,9 @@ class TestFireFilteringIntegration:
     def test_filter_with_no_status_level(self):
         """Test filtering fires with missing status levels."""
         test_fires = [
-            {'Fire': 'Fire1', 'Status': 1},     # known
-            {'Fire': 'Fire2', 'Status': None},  # no status (treated as inf)
-            {'Fire': 'Fire3', 'Status': 2},     # known
+            {'Fire': 'Fire1', 'StatusLevel': 1},     # known
+            {'Fire': 'Fire2', 'StatusLevel': None},  # no status (treated as inf)
+            {'Fire': 'Fire3', 'StatusLevel': 2},     # known
         ]
 
         class MockDataFile:

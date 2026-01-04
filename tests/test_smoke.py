@@ -74,6 +74,8 @@ def test_cli_transport_smoke():
 @pytest.mark.smoke
 def test_cli_transport_fire_nearby_smoke():
     """Verify CLI transport returns fire data when fires are nearby (Manning Park)."""
+    import re
+
     # Load real config
     settings = get_config()
     cli_config = get_transport_config(settings, 'cli')
@@ -104,6 +106,13 @@ def test_cli_transport_fire_nearby_smoke():
     response_lower = response.lower()
     assert "fire" in response_lower or "km" in response_lower or "ha" in response_lower, \
         f"Unexpected response format: {response}"
+
+    # Verify Status contains a text value, not a numeric level
+    status_match = re.search(r'Status:\s*(\S+)', response)
+    assert status_match is not None, "Response should contain 'Status:' field"
+    status_value = status_match.group(1)
+    assert not status_value.isdigit(), \
+        f"Status should be a text value, not a numeric level: {status_value}"
 
     print(f"\n✅ CLI transport smoke test passed (fires nearby)")
     print(f"   Response: {response[:200]}...")
