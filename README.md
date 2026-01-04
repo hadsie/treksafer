@@ -104,4 +104,4 @@ TREKSAFER_ENV=prod treksafer
 
 ### Downloading shapefile data
 
-From within the venv environment run `python ./download.py`. This will download public data sources. Still on the todo list to get the data downloading in realtime.
+From within the venv environment run `python scripts/downloads.py`. This will download public data sources. Still on the todo list to get the data downloading in realtime.
