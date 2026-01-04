@@ -129,7 +129,7 @@ class AvalancheReport:
             logging.warning(f"Network error checking avalanche data: {e}")
             return False
 
-    def get_forecast(self, avalanche_filters: Optional[Dict] = None, format: str = 'full') -> Optional[str]:
+    def get_forecast(self, avalanche_filters: Optional[Dict] = None, format: str = 'abbrev') -> Optional[str]:
         """Get formatted avalanche forecast.
 
         Args:
