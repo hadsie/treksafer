@@ -150,7 +150,7 @@ class AvalancheReport:
 
         # Apply filters
         filters = avalanche_filters or {}
-        forecast_filter = filters.get('forecast', 'current')
+        forecast_filter = filters.get('forecast', 'all')
 
         # Get filtered dates
         try:

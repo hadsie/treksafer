@@ -7,6 +7,7 @@ from .config import get_config
 from .helpers import parse_message, get_aqi
 from .fires import FindFires
 from .avalanche import AvalancheReport
+from .filters import STATUS_LEVELS
 
 _SMS_LIMIT = 160
 
@@ -17,8 +18,37 @@ class Messages:
     def outside_of_area(self) -> str:
         return 'TrekSafer ERROR: GPS coordinates outside of supported fire perimeter area. No data available.'
 
-    def no_fires(self, distance: float) -> str:
-        return f'No fires reported within {distance}km of your location.'
+    def no_fires(self, distance: float, status_filter: str = None) -> str:
+        """Generate no fires message with optional status filter context.
+
+        Args:
+            distance: Search radius in km
+            status_filter: Status filter applied ('active', 'managed', 'controlled', 'out', 'all', or None)
+
+        Returns:
+            Formatted message string
+        """
+        base_msg = f'No fires reported within {distance}km of your location.'
+
+        # If no filter or 'all'/'out', return simple message
+        if not status_filter or status_filter in ('all', 'out'):
+            return base_msg
+
+        # Get all statuses included in this filter level
+        filter_level = STATUS_LEVELS.get(status_filter)
+        if not filter_level:
+            return base_msg
+
+        # Include all statuses at or below this level
+        included_statuses = [
+            status for status, level in STATUS_LEVELS.items()
+            if level <= filter_level
+        ]
+        included_statuses.sort(key=lambda s: STATUS_LEVELS[s])  # Sort by level
+
+        # Format message with included statuses
+        status_list = ', '.join(included_statuses)
+        return f'No fires reported within {distance}km of your location. (Showing: {status_list})'
 
     def fires(self, fires: list[Dict]) -> list[str]:
         messages = []
@@ -143,7 +173,8 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     fires = findfires.nearby()
     if not fires:
         distance = min(findfires.filters['distance'], settings.max_radius)
-        return aqi_message + responses.no_fires(distance)
+        status_filter = fire_filters.get('status')
+        return aqi_message + responses.no_fires(distance, status_filter)
 
     # Format response
     fire_messages = []
