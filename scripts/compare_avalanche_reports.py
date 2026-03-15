@@ -10,6 +10,10 @@ Usage:
 import argparse
 import sys
 import re
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import requests
 from typing import List, Tuple
 
