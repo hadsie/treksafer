@@ -1,7 +1,7 @@
 # TrekSafer
 
-TrekSafer keeps backcountry travelers in the loop about nearby wild-fires.
-Send the service a message from your satellite messenger with your GPS coordinates and get a summary of any active fires around you.
+TrekSafer keeps backcountry travelers informed about nearby wildfires and avalanche conditions.
+Send the service a message from your satellite messenger with your GPS coordinates and get a summary of what's happening around you.
 
 ---
 
@@ -11,33 +11,51 @@ See https://treksafer.com for more information.
 
 1. Add TrekSafer’s number to your contacts.
 1. From your inReach / satellite SMS device, open a new message to that number.
-1. Type **`fires`** — that’s it. *(Any text is fine; `fires` is easy to remember.)*
-1. Make sure your device is set to **include location** with outgoing messages (most inReach presets add “(lat, lon)” automatically).
-1. Hit *Send*. Within a few seconds you’ll get a reply like:
+1. Type **`fires`** or **`avalanche`**, or just send any text. TrekSafer will auto-detect based on your location whether to return fire or avalanche data.
+1. Ensure your device is set to **include location** with outgoing messages (most inReach presets add “(lat, lon)” automatically).
+1. Hit *Send*. Within a few seconds you’ll get a reply.
 
+**Fire response example:**
 ```
+AQI: 42
+
 Fire: Lower Young Creek (K50911)
 Location: Lower Young Creek 25km E
 Size: 66 ha
 Status: Out of Control
 ```
 
-Currently all active fires within a 50km radius of your GPS location are returned.
+**Avalanche response example:**
+```
+Avalanche Forecast
+Rating: Considerable (Alp), Moderate (Tln), Low (Btl)
+Problems: Storm Slabs (N-E-SE, Alp-Tln), Wind Slabs (N-NE-E, Alp)
+Valid: Apr 6-7
+```
+
+By default, all active fires within 50km of your GPS location are returned. If you’re in an area covered by an avalanche forecast provider (Avalanche Canada, US National Avalanche Center), you’ll get the current forecast instead.
 
 ---
 
 ## Filter Options
 
-You can customize your fire search with optional filters in your message:
+### Fire Filters
 
-### Status Filters
+**Status:**
 - **`active`** - Only active/out of control fires
 - **`all`** - All fires including extinguished ones
 - **Default** - Active, managed, and controlled fires (excludes extinguished)
 
-### Distance Filters
+**Distance:**
 - **`25km`** or **`10mi`** - Custom search radius (max 150km)
 - **Default** - 50km radius
+
+### Avalanche Filters
+
+- **`current`** - Today’s forecast only
+- **`tomorrow`** - Tomorrow’s forecast only
+- **`all`** - All available forecast days
+- **Default** - Full current forecast
 
 ### Coordinate Formats Supported
 - Decimal degrees: `(49.123, -123.456)`
@@ -45,30 +63,30 @@ You can customize your fire search with optional filters in your message:
 - Apple Maps and Google Maps share links
 - InReach automatic format: `fires (lat, lon)`
 
-### Example Usage
+### Examples
 ```
 Basic: fires
 With status filter: fires active
 With distance: fires 25km
 Combined filters: fires active 10mi
 With coordinates: (49.2827, -123.1207) active 25km
+Avalanche: avalanche
+Avalanche tomorrow: avalanche tomorrow
 ```
 
 ---
 
 ## Todo
 
-1. Currently wildfire data is pulled in manually / periodically, not at the time of the request. Pulling closer live data at the time of the request is a must have for fires of note.
-2. Pulling in data sources from outside of the US/Canada and more fine grained data support for specific US states that offer it.
-3. Add options to the SMS call, such as specifying the fire radius.
-4. Detect message send failures and auto-retry.
-5. Add current AQI ratings at the coordinates.
+1. Wildfire data is pulled in manually/periodically, not at the time of the request. Pulling live data at request time is a priority for fires of note.
+2. Data sources from outside of the US/Canada, and more fine-grained data support for specific US states that offer it.
+3. Detect message send failures and auto-retry.
 
 ---
 
 ## Running TrekSafer locally
 
-### Clone & set up
+### Clone and set up
 
 ```bash
 git clone https://github.com/your-org/treksafer.git
@@ -104,4 +122,4 @@ TREKSAFER_ENV=prod treksafer
 
 ### Downloading shapefile data
 
-From within the venv environment run `python scripts/downloads.py`. This will download public data sources. Still on the todo list to get the data downloading in realtime.
+From within the venv environment run `python scripts/downloads.py`. This will download public fire perimeter data from BC, AB, CA, and US sources. Still on the todo list to get data downloading in realtime.

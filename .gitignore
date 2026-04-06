@@ -4,6 +4,7 @@
 .vscode/
 treksafer.iml
 *.code-workspace
+.claude/settings.local.json
 # macOS / System files
 .DS_Store
 # Python stuff
