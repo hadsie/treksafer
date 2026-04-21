@@ -14,5 +14,7 @@ timezonefinder>=6.5
 requests>=2.3,<3
 requests_cache>=1.2.1,<1.3
 signalwire>=2.1,<3
+aiohttp>=3.13.4
+pyjwt>=2.12.0
 shapely>=2.0,<3
 responses
