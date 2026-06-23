@@ -38,6 +38,7 @@ transports:
     project_id: ${TREKSAFER_SW_PROJECT}
     api_token : ${TREKSAFER_SW_TOKEN}
     phone_number: "${TREKSAFER_SW_NUMBER}"
+    context: ${TREKSAFER_SW_CONTEXT:-treksafer}
   - type: "cli"
     enabled: ${TREKSAFER_CLI_ENABLED:-true}
     host: ${TREKSAFER_CLI_HOST:-localhost}

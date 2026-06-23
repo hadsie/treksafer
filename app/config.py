@@ -29,6 +29,7 @@ class SignalWireConfig(BaseModel):
     project_id: SecretStr | None = None
     api_token: SecretStr | None = None
     phone_number: str | None = None
+    context: str = "treksafer"
     enabled: bool = False
 
     # require secrets only if enabled
