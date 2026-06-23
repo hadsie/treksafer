@@ -50,8 +50,9 @@ Boundary files in `boundaries/` determine which data sources are nearby.
 
 ## Dependencies
 
-Python 3.11+. All direct dependencies are pinned in `requirements.txt`.
-When updating dependencies, pin to exact versions (e.g. `requests==2.32.3`).
+Python 3.11+. Direct dependencies are listed in `requirements.txt` using a
+floor-plus-major-cap convention (e.g. `pandas>=2.2,<3`), which allows minor and
+patch updates while guarding against breaking major bumps.
 Run `pytest` after any dependency change to verify nothing breaks.
 
 ## Testing
