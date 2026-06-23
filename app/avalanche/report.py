@@ -129,6 +129,23 @@ class AvalancheReport:
             logging.warning(f"Network error checking avalanche data: {e}")
             return False
 
+    def out_of_season(self) -> bool:
+        """Check if the location's forecast is an out-of-season report.
+
+        Kept separate from has_data() so auto-detection can fall back to fire
+        while an explicit avalanche request still returns the report.
+        """
+        if not self.provider:
+            return False
+
+        try:
+            forecast = self.provider.get_forecast(self.coords)
+        except RequestException as e:
+            logging.warning(f"Network error checking avalanche season: {e}")
+            return False
+
+        return bool(forecast) and self.provider.is_out_of_season(forecast)
+
     def get_forecast(self, avalanche_filters: Optional[Dict] = None, format: str = 'abbrev') -> Optional[str]:
         """Get formatted avalanche forecast.
 

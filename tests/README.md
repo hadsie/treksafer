@@ -41,6 +41,32 @@ TREKSAFER_ENV=prod pytest -m smoke -v -s
 - Tests will **pass** if transport works correctly
 - Tests will **fail** if transport errors occur
 
+### Manual CLI testing
+
+`scripts/cli_connect.py` sends an ad-hoc message to a running CLI transport and prints the response. Useful for exercising the full parse → route → format path by hand (no SMS or SignalWire account needed).
+
+Start the app in one terminal:
+
+```bash
+python -m app
+```
+
+Then send messages from another terminal (the message is a required positional argument; quote it if it contains spaces):
+
+```bash
+python scripts/cli_connect.py "(50.0, -122.95)"            # bare coords -> auto-detect (fire vs avalanche)
+python scripts/cli_connect.py "(50.0, -122.95) avalanche"  # force avalanche forecast
+python scripts/cli_connect.py "(54.78, -125.47) fire"      # force fire report
+```
+
+Options: `--host` (default `127.0.0.1`), `--port` (default `8888`), `--timeout` (default `30`), `--append-newline`.
+
+Equivalent one-liner with netcat:
+
+```bash
+echo '(50.0, -122.95)' | nc localhost 8888
+```
+
 ### Other pytest commands
 
 Combine markers and test names as needed:

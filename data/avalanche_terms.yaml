@@ -26,6 +26,7 @@ default:
     "Moderate": "M"
     "Low": "L"
     "Early Season": "ES"
+    "Spring Conditions": "Spring"
     "No Rating": "N/A"
 
   likelihood:

@@ -161,6 +161,90 @@ class TestAvalancheProviderBase:
         assert caplog.records[0].levelname == 'WARNING'
         assert 'geopandas not available' in caplog.records[0].message
 
+
+def _make_forecast(*days):
+    """Build a normalized forecast dict from (alp, tln, btl) rating tuples."""
+    return {
+        'forecasts': {
+            f'Day{i}': {
+                'alpine_rating': alp,
+                'treeline_rating': tln,
+                'below_treeline_rating': btl,
+            }
+            for i, (alp, tln, btl) in enumerate(days)
+        }
+    }
+
+
+def _stub_provider(out_of_season=None):
+    config = AvalancheProviderConfig(
+        class_name='Stub',
+        api_url='https://api.example.com',
+        out_of_season=out_of_season or [],
+    )
+
+    class StubProvider(AvalancheProvider):
+        def get_forecast(self, coords):
+            return None
+
+        def out_of_range(self, coords):
+            return False
+
+    return StubProvider(config)
+
+
+class TestIsOutOfSeason:
+    """Provider out-of-season detection from configured rating markers."""
+
+    def test_true_when_every_rating_is_a_marker(self):
+        provider = _stub_provider(['Spring Conditions', 'Early Season'])
+        forecast = _make_forecast(
+            ('Spring Conditions', 'Spring Conditions', 'Spring Conditions'),
+            ('Early Season', 'Early Season', 'Early Season'),
+        )
+        assert provider.is_out_of_season(forecast) is True
+
+    def test_false_when_any_rating_is_real(self):
+        provider = _stub_provider(['Spring Conditions'])
+        forecast = _make_forecast(('Spring Conditions', 'Moderate', 'Spring Conditions'))
+        assert provider.is_out_of_season(forecast) is False
+
+    def test_false_when_no_markers_configured(self):
+        # e.g. the US provider, which detects off-season structurally instead
+        provider = _stub_provider([])
+        forecast = _make_forecast(('Spring Conditions',) * 3)
+        assert provider.is_out_of_season(forecast) is False
+
+    def test_false_when_forecast_has_no_days(self):
+        provider = _stub_provider(['Spring Conditions'])
+        assert provider.is_out_of_season({'forecasts': {}}) is False
+
+
+class TestReportOutOfSeason:
+    """AvalancheReport.out_of_season() delegates to the selected provider."""
+
+    def test_false_without_provider(self):
+        report = AvalancheReport((19.4326, -99.1332))  # Mexico, no provider
+        assert report.provider is None
+        assert report.out_of_season() is False
+
+    def test_delegates_to_provider(self):
+        report = AvalancheReport((19.4326, -99.1332))
+        report.provider = Mock()
+        report.provider.get_forecast.return_value = {'forecasts': {'Mon': {}}}
+        report.provider.is_out_of_season.return_value = True
+
+        assert report.out_of_season() is True
+        report.provider.is_out_of_season.assert_called_once()
+
+    def test_false_when_no_forecast_returned(self):
+        report = AvalancheReport((19.4326, -99.1332))
+        report.provider = Mock()
+        report.provider.get_forecast.return_value = None
+
+        assert report.out_of_season() is False
+        report.provider.is_out_of_season.assert_not_called()
+
     def test_calculate_distances_no_gdf(self):
         """Test _calculate_distances with no regions_gdf."""
         config = AvalancheProviderConfig(

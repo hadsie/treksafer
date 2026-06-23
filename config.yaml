@@ -114,6 +114,7 @@ avalanche:
       api_url: https://api.avalanche.ca/forecasts/{lang}/products/point
       cache_timeout: 3600
       language: en
+      out_of_season: ["Spring Conditions", "Early Season"]
     NationalAvalancheCenter:
       class: NationalAvalancheProvider
       api_url: https://api.avalanche.org/v2/public/product?type=forecast&center_id={center}&zone_id={zone}

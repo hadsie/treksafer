@@ -75,6 +75,7 @@ class AvalancheProviderConfig(BaseModel):
     api_url: str
     cache_timeout: int = 3600
     language: str = 'en'
+    out_of_season: List[str] = []
 
 
 class AvalancheConfig(BaseModel):
