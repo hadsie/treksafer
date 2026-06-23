@@ -1,5 +1,7 @@
 import pytest
-from app.messages import Messages
+from unittest.mock import patch
+
+from app.messages import Messages, handle_message
 
 
 def mock_fire(**overrides):
@@ -159,3 +161,29 @@ class TestDistanceFormatting:
     def test_distance_exactly_10km(self):
         """10000m = 10km (boundary case)."""
         assert Messages()._format_distance(10000) == 10
+
+
+class TestAutoDetectRouting:
+    """Bare coordinates auto-detect between avalanche and fire."""
+
+    @patch("app.messages.handle_fire_request", return_value="FIRE")
+    @patch("app.messages.handle_avalanche_request", return_value="AVY")
+    @patch("app.messages.AvalancheReport")
+    def test_out_of_season_routes_to_fire(self, mock_report_cls, mock_avy, mock_fire):
+        report = mock_report_cls.return_value
+        report.has_data.return_value = True
+        report.out_of_season.return_value = True
+
+        assert handle_message("(50.12,-122.90)") == "FIRE"
+        mock_avy.assert_not_called()
+
+    @patch("app.messages.handle_fire_request", return_value="FIRE")
+    @patch("app.messages.handle_avalanche_request", return_value="AVY")
+    @patch("app.messages.AvalancheReport")
+    def test_in_season_routes_to_avalanche(self, mock_report_cls, mock_avy, mock_fire):
+        report = mock_report_cls.return_value
+        report.has_data.return_value = True
+        report.out_of_season.return_value = False
+
+        assert handle_message("(50.12,-122.90)") == "AVY"
+        mock_fire.assert_not_called()

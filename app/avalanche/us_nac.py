@@ -139,7 +139,9 @@ class NationalAvalancheProvider(AvalancheProvider):
         Returns:
             Normalized forecast dict
         """
-        if not data or 'danger' not in data:
+        # Off-season the NAC API returns a "summary" product with an empty
+        # danger array rather than a forecast; treat that as no data.
+        if not data or not data.get('danger'):
             return None
 
         # Extract timezone from zone info

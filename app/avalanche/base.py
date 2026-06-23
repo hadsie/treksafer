@@ -58,6 +58,25 @@ class AvalancheProvider(ABC):
         """
         pass
 
+    def is_out_of_season(self, forecast: Dict[str, Any]) -> bool:
+        """Check whether a returned forecast is an out-of-season report.
+
+        Out-of-season markers (e.g. "Spring Conditions") are configured per
+        provider. A forecast counts as out of season only when every band
+        rating across all days is one of those markers; providers with no
+        configured markers are never out of season.
+        """
+        markers = set(self.config.out_of_season)
+        if not markers:
+            return False
+
+        ratings = [
+            rating
+            for day in forecast.get('forecasts', {}).values()
+            for rating in (day['alpine_rating'], day['treeline_rating'], day['below_treeline_rating'])
+        ]
+        return bool(ratings) and all(rating in markers for rating in ratings)
+
     def distance_from_region(self, coords: tuple) -> Optional[float]:
         """Calculate distance from coordinates to nearest region.
 

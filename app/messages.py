@@ -226,10 +226,11 @@ def handle_message(message: str) -> str:
     data_type = parsed_data.get("data_type", "auto")
     avalanche_filters = parsed_data.get("avalanche_filters", {})
 
-    # Auto-detect data type based on availability
+    # Auto-detect data type based on availability. Out-of-season avalanche
+    # reports fall back to fire.
     if data_type == "auto":
         avalanche = AvalancheReport(coords)
-        if avalanche.has_data():
+        if avalanche.has_data() and not avalanche.out_of_season():
             data_type = "avalanche"
         else:
             data_type = "fire"

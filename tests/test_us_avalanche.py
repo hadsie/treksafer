@@ -237,6 +237,27 @@ class TestNACAPIIntegration:
         assert day2['treeline_rating'] == 'Low'
         assert day2['below_treeline_rating'] == 'Low'
 
+    def test_off_season_summary_returns_none(self, nac_config):
+        """Off-season the API returns a 'summary' product with empty danger."""
+        provider = NationalAvalancheProvider(nac_config)
+
+        zone_info = {
+            'id': 2815,
+            'center_id': 'CNFAIC',
+            'timezone': 'America/Anchorage',
+            'name': 'Turnagain Pass and Girdwood'
+        }
+
+        off_season = {
+            'product_type': 'summary',
+            'danger': [],
+            'published_time': '2026-04-13T14:00:00+00:00',
+            'forecast_avalanche_problems': [],
+            'forecast_zone': [{}],
+        }
+
+        assert provider._parse_forecast(off_season, zone_info) is None
+
 
 class TestNACEdgeCases:
     """Test NAC edge cases and error conditions."""
@@ -277,7 +298,7 @@ class TestNACEdgeCases:
         assert any('Invalid NAC problem location' in record.message for record in caplog.records)
 
     def test_empty_danger_ratings(self, nac_config, caplog):
-        """Test empty danger array handling."""
+        """Empty danger array (off-season summary) yields no forecast."""
         provider = NationalAvalancheProvider(nac_config)
 
         zone_info = {
@@ -294,11 +315,7 @@ class TestNACEdgeCases:
             'forecast_zone': [{'url': 'https://example.com'}]
         }
 
-        result = provider._parse_forecast(response, zone_info)
-
-        # Should still parse but with empty forecasts
-        assert result is not None
-        assert len(result['forecasts']) == 0
+        assert provider._parse_forecast(response, zone_info) is None
 
     def test_missing_forecast_zone(self, nac_config):
         """Test missing forecast_zone in response."""
