@@ -147,9 +147,11 @@ def test_cli_transport_avalanche_smoke():
     # Verify we got a response
     assert response, "CLI transport returned empty response"
 
-    # Response should mention avalanche-related content or indicate no data
+    # A forecast always carries elevation-band labels (Alpine/ALP, Treeline/TL,
+    # Below Treeline/BTL) regardless of the rating; "error" covers the no-data path.
     response_lower = response.lower()
-    assert "avalanche" in response_lower or "forecast" in response_lower or "danger" in response_lower or "error" in response_lower, \
+    markers = ("avalanche", "forecast", "danger", "alp", "treeline", "btl", "error")
+    assert any(m in response_lower for m in markers), \
         f"Unexpected response format: {response}"
 
     print(f"\n✅ CLI transport smoke test passed (avalanche)")
@@ -170,9 +172,9 @@ def test_signalwire_transport_smoke():
     # Verify initialization works with real config
     try:
         transport = SignalWireTransport(sw_config)
-        assert transport.cfg.phone_number is not None, "SignalWire phone number not configured"
-        assert transport.cfg.project_id is not None, "SignalWire project_id not configured"
-        assert transport.cfg.api_token is not None, "SignalWire api_token not configured"
+        assert transport.config.phone_number is not None, "SignalWire phone number not configured"
+        assert transport.config.project_id is not None, "SignalWire project_id not configured"
+        assert transport.config.api_token is not None, "SignalWire api_token not configured"
     except ValueError as e:
         pytest.fail(f"SignalWire transport failed validation: {e}")
     except Exception as e:

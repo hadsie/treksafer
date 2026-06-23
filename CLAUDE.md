@@ -72,7 +72,7 @@ Three-tier precedence: env vars > `.env.<ENV>` file > `config.yaml`.
 
 All config placeholders use `${VAR:-default}` syntax. Pydantic validates everything in `app/config.py`.
 
-Key env vars: `TREKSAFER_ENV`, `TREKSAFER_SW_ENABLED`, `TREKSAFER_SW_PROJECT`, `TREKSAFER_SW_TOKEN`, `TREKSAFER_SW_NUMBER`.
+Key env vars: `TREKSAFER_ENV`, `TREKSAFER_SW_ENABLED`, `TREKSAFER_SW_PROJECT`, `TREKSAFER_SW_TOKEN`, `TREKSAFER_SW_NUMBER`, `TREKSAFER_SW_CONTEXT`.
 
 ## Contributing
 
