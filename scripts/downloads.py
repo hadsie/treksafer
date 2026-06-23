@@ -1,6 +1,7 @@
 #!venv/bin/python
 
 import sys
+import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -11,7 +12,6 @@ import networkx as nx
 import requests
 import tempfile
 import time
-import warnings
 import zipfile
 
 from datetime import date
@@ -58,20 +58,23 @@ def fetch_US():
                                  'dataFormat': 'shapefile',
                              }
                             )
-    status_url = response.json()['statusUrl']
-    try:
-        json_response = requests.get(status_url, params="f=json").json()
-        while json_response['status'] in ['Pending', 'ExportingData'] and time.time() - start_time < max_wait_time:
-            time.sleep(10)
-            json_response = requests.get(status_url, params="f=json").json()
+    status_url = response.json().get('statusUrl')
+    if not status_url:
+        raise ValueError(f"US replica request returned no statusUrl: {response.json()}")
 
-        file = requests.get(json_response['resultUrl'])
-        open(target_path, 'wb').write(file.content)
-    except:
-        print('Failed to download')
+    job = requests.get(status_url, params={'f': 'json'}).json()
+    while job.get('status') in ('Pending', 'ExportingData') and time.time() - start_time < max_wait_time:
+        time.sleep(10)
+        job = requests.get(status_url, params={'f': 'json'}).json()
+
+    if job.get('status') != 'Completed' or not job.get('resultUrl'):
+        raise ValueError(f"US replica export did not complete: {job}")
+
+    file = requests.get(job['resultUrl'])
+    target_path.write_bytes(file.content)
 
 def fetch_AB():
-    fire_perimeters_url = 'https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/wildfire_perimeter_active/FeatureServer/1/query?where=1=1&outFields=*&f=geojson'
+    fire_perimeters_url = 'https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/Wildfire_Perimeter_Active_(PROD)/FeatureServer/3/query?where=1=1&outFields=*&f=geojson'
 
     # Convert the ArcGIS geojson to a shapefile.
     print(f"Downloading AB Fire Perimeters")
@@ -80,11 +83,16 @@ def fetch_AB():
     if "features" not in data or not data["features"]:
         raise ValueError("No features returned by query.")
     gdf = gpd.GeoDataFrame.from_features(data["features"])
+    # Rename to the names config.yaml reads, then keep only those columns so the
+    # shapefile carries nothing the app doesn't use (and no >10-char field names).
     gdf = gdf.rename(columns={
-        "FIRE_STATUS": "STATUS",
+        "FireNumber": "FIRE_NUMBE",
+        "IncdtName": "ALIAS",
         "FIRE_COMPLEX_NAME": "COMPLEX",
-        "AREA_ESTIMATE": "AREA"
+        "AREA_ESTIMATE": "AREA",
+        "FIRE_STATUS": "STATUS",
     })
+    gdf = gdf[["FIRE_NUMBE", "ALIAS", "COMPLEX", "AREA", "STATUS", "geometry"]]
     gdf = gdf.set_crs("EPSG:4326")
 
     write_shapefile("AB", gdf)
@@ -121,17 +129,29 @@ def fetch_CA():
     gdf_perim = gpd.read_file(perim_url)  # EPSG:3978
     print(f"Loaded {len(gdf_perim)} perimeters.")
 
-    # Load activefires metadata CSV.
-    active_fires_url = "https://cwfis.cfs.nrcan.gc.ca/downloads/activefires/activefires.csv"
+    # Load active-fire metadata.
+    active_fires_url = (
+        "https://geoserver.cwfif.nrcan.gc.ca/geoserver/wfs"
+        "?service=WFS&version=2.0.1&request=GetFeature&outputFormat=csv"
+        "&typeName=public:cwfif_national_activefires"
+        "&sortBy=agency_code+A,record_start+D"
+        "&CQL_FILTER=now()%3E=record_start%20AND%20now()%3C=record_end"
+    )
     df_meta = pd.read_csv(active_fires_url)
     df_meta.columns = df_meta.columns.str.strip()
-    df_meta = df_meta.applymap(
-        lambda x: x.strip() if isinstance(x, str) else x
-    )
-    # Remove all excluded agencies from the active fires list.
-    excluded_agencies = ["conus", "bc", "ab"]
+    df_meta = df_meta.rename(columns={
+        "agency_code": "agency",
+        "longitude": "lon",
+        "latitude": "lat",
+        "agency_fire_id": "firename",
+        "fire_size": "hectares",
+        "stage_of_control_status": "stage_of_c",
+    })
+    df_meta = df_meta.map(lambda x: x.strip() if isinstance(x, str) else x)
+    # Remove agencies sourced from their own dedicated shapefiles (BC, AB).
+    excluded_agencies = ["BC", "AB"]
     original_count = len(df_meta)
-    df_meta = df_meta[~df_meta["agency"].str.strip().isin(excluded_agencies)]
+    df_meta = df_meta[~df_meta["agency"].str.upper().isin(excluded_agencies)]
     print(f"Filtered out {original_count - len(df_meta)} fires.")
 
     # Convert fire lat/lon to Point geometries
@@ -143,7 +163,7 @@ def fetch_CA():
         'fireId': 'firename',
         'fireArea': 'agency',
         'fireSize': 'hectares',
-        'fireStage': 'stage_of_control',
+        'fireStage': 'stage_of_c',
         'perimId': 'UID',
     })
 
@@ -359,14 +379,9 @@ def write_shapefile(location, gdf):
 
     with tempfile.TemporaryDirectory() as tmpdir:
         shapefile_base = Path(tmpdir) / "data.shp"
-        # Suppress long column warnings.
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message="Column names longer than 10 characters will be truncated",
-                category=UserWarning
-            )
-            gdf.to_file(shapefile_base, driver="ESRI Shapefile")
+        # Callers trim to the columns config.yaml reads, all within the
+        # shapefile 10-char field-name limit, so nothing gets truncated here.
+        gdf.to_file(shapefile_base, driver="ESRI Shapefile")
 
         # Create ZIP archive
         with zipfile.ZipFile(target_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -374,7 +389,24 @@ def write_shapefile(location, gdf):
                 zf.write(file, arcname=file.name)
 
 
-fetch_CA()
-fetch_BC()
-fetch_AB()
-fetch_US()
+def main():
+    fetchers = [fetch_CA, fetch_BC, fetch_AB, fetch_US]
+    failures = []
+    for fetch in fetchers:
+        name = fetch.__name__
+        try:
+            fetch()
+        except (requests.RequestException, urllib.error.URLError, ValueError) as e:
+            failures.append(name)
+            print(f"{name} failed: {e}")
+
+    if failures:
+        print(f"\n{len(failures)} of {len(fetchers)} sources failed: "
+              f"{', '.join(failures)}")
+        return 1
+    print(f"\nAll {len(fetchers)} sources downloaded successfully.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
