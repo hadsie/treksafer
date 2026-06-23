@@ -129,6 +129,7 @@ def main():
         'BC': 'BC_perimeters.geojson',
         'AB': 'AB_perimeters.geojson',
         'US': 'US_perimeters.geojson',
+        'CA': 'CA_perimeters.geojson',
     }
 
     if args.clean:

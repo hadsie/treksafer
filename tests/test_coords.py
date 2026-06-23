@@ -191,3 +191,36 @@ class TestDataSources:
 
         # Should include BC, AB, and CA sources
         assert len(ff.sources) == 3
+
+
+class TestCanadaWideSource:
+    """Integration tests for the national (CA) fire source.
+
+    The CA fixtures sit in boreal Quebec, far from the BC/AB fixtures, so this
+    region is covered only by the national source.
+    """
+
+    QUEBEC_COORDS = (48.50, -72.00)  # Inside the CA fixture region
+
+    def test_quebec_fires_come_from_ca_source_only(self):
+        """Quebec coords load fires from CA without pulling in BC/AB."""
+        ff = FindFires(self.QUEBEC_COORDS, filters={'status': 'all', 'distance': 50})
+        fires = ff.nearby()
+
+        assert 'CA' in ff.sources
+        assert 'BC' not in ff.sources
+        assert 'AB' not in ff.sources
+
+        # All four CA fixture fires fall within 50km.
+        assert len(fires) == 4
+        # CA has no API enrichment, so Status is the raw stage-of-control code.
+        assert all(f['Status'] in {'OC', 'BH', 'UC'} for f in fires)
+
+    def test_ca_active_filter_keeps_out_of_control_only(self):
+        """The active filter keeps only out-of-control (OC) CA fires."""
+        ff = FindFires(self.QUEBEC_COORDS, filters={'status': 'active', 'distance': 50})
+        fires = ff.nearby()
+
+        # Two of the four fixture fires are OC.
+        assert len(fires) == 2
+        assert all(f['Status'] == 'OC' for f in fires)
