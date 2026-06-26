@@ -1,6 +1,7 @@
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Optional
 
 import websockets
@@ -31,6 +32,7 @@ class SignalWireTransport(BaseTransport):
         sms_log = logging.getLogger("sms")
         if not sms_log.handlers:
             fmt = "%(asctime)s %(name)s %(levelname)s %(message)s"
+            Path("logs").mkdir(exist_ok=True)
             h = logging.FileHandler("logs/sms.log")
             h.setFormatter(logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S"))
             sms_log.setLevel(logging.DEBUG)
