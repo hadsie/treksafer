@@ -11,9 +11,9 @@ treksafer.iml
 __pycache__/
 .pytest_cache/
 venv/
-# Application runtime output
-cache/
-logs/
-shapefiles/
+# Application runtime output (top-level only; test fixtures under tests/ are tracked)
+/cache/
+/logs/
+/shapefiles/
 # Environment / secrets
 .env*
