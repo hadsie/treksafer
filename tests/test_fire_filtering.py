@@ -1,9 +1,12 @@
 """Tests for generic fire filtering functionality."""
 
+from unittest.mock import patch
+
 import pytest
 from app.filters import (STATUS_LEVELS, apply_filters,
                         apply_status_filter, apply_size_filter,
                         FILTER_HANDLERS)
+from app.fires import FindFires
 from app.helpers import parse_message
 from app.config import get_config
 
@@ -269,6 +272,41 @@ class TestFireFilteringIntegration:
         # 'all' filter should return all fires
         filtered_fires = apply_status_filter(test_fires, 'all', MockDataFile())
         assert len(filtered_fires) == 4
+
+    def _nearby_with_fires(self, fires):
+        """Run FindFires.nearby() with search()/shapefile I/O stubbed out."""
+        find = FindFires((49.25, -123.1))
+        find.sources = ['BC']
+        with patch.object(FindFires, 'sources_map', return_value={'BC': 'dummy'}), \
+             patch.object(FindFires, '_load_shapefile', return_value=None), \
+             patch.object(FindFires, 'search', return_value=fires):
+            return find.nearby()
+
+    def test_nearby_sorts_by_status_then_distance(self):
+        """Fires are ordered by status priority, then by distance within a status."""
+        fires = [
+            {'Fire': 'ManagedNear', 'StatusLevel': 2, 'Distance': 3000},
+            {'Fire': 'ActiveFar', 'StatusLevel': 1, 'Distance': 20000},
+            {'Fire': 'ActiveNear', 'StatusLevel': 1, 'Distance': 3000},
+            {'Fire': 'ControlledNear', 'StatusLevel': 3, 'Distance': 1000},
+        ]
+
+        result = self._nearby_with_fires(fires)
+
+        assert [f['Fire'] for f in result] == [
+            'ActiveNear', 'ActiveFar', 'ManagedNear', 'ControlledNear'
+        ]
+
+    def test_nearby_sorts_missing_status_level_last(self):
+        """Fires without a StatusLevel sort after any known status."""
+        fires = [
+            {'Fire': 'NoStatus', 'Distance': 500},
+            {'Fire': 'Controlled', 'StatusLevel': 3, 'Distance': 40000},
+        ]
+
+        result = self._nearby_with_fires(fires)
+
+        assert [f['Fire'] for f in result] == ['Controlled', 'NoStatus']
 
     def test_filter_with_no_status_level(self):
         """Test filtering fires with missing status levels."""
