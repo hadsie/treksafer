@@ -224,3 +224,56 @@ class TestCanadaWideSource:
         # Two of the four fixture fires are OC.
         assert len(fires) == 2
         assert all(f['Status'] == 'OC' for f in fires)
+
+
+class TestUSSource:
+    """Integration tests for the US (WFIGS) source.
+
+    WFIGS has no stage-of-control field, so status is derived from the numeric
+    attr_PercentContained. The fixture (Wyoming) is far from all Canadian
+    fixtures, so this region is covered only by the US source. It is stored as a
+    FileGDB to preserve the real WFIGS field names the mapping depends on.
+    """
+
+    US_COORDS = (44.0, -110.0)  # Inside the US fixture cluster
+
+    def test_us_status_derived_from_percent_contained(self):
+        """Status is a human-readable string derived from percent contained."""
+        ff = FindFires(self.US_COORDS, filters={'status': 'all', 'distance': 50, 'size': 0})
+        fires = ff.nearby()
+
+        assert 'US' in ff.sources
+        assert len(fires) == 6
+        statuses = {f['Status'] for f in fires}
+        assert 'Contained' in statuses       # 100% contained
+        assert 'Uncontained' in statuses     # 0% contained
+        assert '60% contained' in statuses   # partial
+        assert 'Active' in statuses          # unknown (null) percent contained
+
+    def test_us_active_filter_excludes_fully_contained(self):
+        """The active filter keeps only fires that are not fully contained."""
+        ff = FindFires(self.US_COORDS, filters={'status': 'active', 'distance': 50, 'size': 0})
+        fires = ff.nearby()
+
+        # Four fixture fires are not fully contained (0%, 60%, 30%, unknown).
+        assert len(fires) == 4
+        assert all(f['Status'] != 'Contained' for f in fires)
+
+    def test_us_unknown_containment_not_hidden_by_default_filter(self):
+        """A fire with no percent-contained value is treated as active, never hidden."""
+        # Default status filter is 'controlled', which excludes 'out'.
+        ff = FindFires(self.US_COORDS, filters={'distance': 50, 'size': 0})
+        fires = ff.nearby()
+
+        wy06 = next((f for f in fires if f['Fire'] == 'WY06'), None)
+        assert wy06 is not None, "fire with unknown containment must still be shown"
+        assert wy06['Status'] == 'Active'
+
+    def test_us_size_filter_uses_hectares(self):
+        """acres_to_hectares runs before the size filter, dropping the sub-hectare fire."""
+        ff = FindFires(self.US_COORDS, filters={'status': 'all', 'distance': 50})
+        fires = ff.nearby()
+
+        # The 2-acre (~0.81 ha) fire falls below the 1 ha default; the other five remain.
+        assert len(fires) == 5
+        assert all(f['Fire'] != 'WY05' for f in fires)

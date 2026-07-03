@@ -91,6 +91,57 @@ def convert_geojson_to_shapefile(
             shutil.rmtree(temp_dir)
 
 
+def convert_geojson_to_filegdb(
+    geojson_path: Path,
+    output_dir: Path,
+    location: str,
+    filename_template: str,
+    date_str: str
+) -> bool:
+    """
+    Convert a GeoJSON file to a zipped FileGDB.
+
+    FileGDB preserves full field names (shapefiles truncate to 10 chars), which
+    the US/WFIGS mapping relies on. Mirrors the production download format.
+    """
+    if not geojson_path.exists():
+        print(f"✗ {geojson_path.name} not found")
+        return False
+
+    gdf = gpd.read_file(geojson_path)
+    feature_count = len(gdf)
+
+    output_zip_path = output_dir / filename_template.replace('{DATE}', date_str)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    temp_dir = output_dir / f"temp_{location}"
+    temp_dir.mkdir(exist_ok=True)
+
+    try:
+        gdb_path = temp_dir / f"{location}_perimeters.gdb"
+        gdf.to_file(gdb_path, driver='OpenFileGDB', layer='Perimeters')
+
+        with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for component in sorted(gdb_path.rglob('*')):
+                if component.is_file():
+                    zipf.write(component, component.relative_to(temp_dir))
+
+        print(f"✓ {geojson_path.name} → {output_dir.name}/{output_zip_path.name} ({feature_count} features, FileGDB)")
+        return True
+
+    except Exception as e:
+        print(f"✗ Error converting {geojson_path.name}: {e}")
+        return False
+
+    finally:
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+
+
+# Locations whose fixtures are FileGDB (real field names) rather than shapefile.
+FILEGDB_LOCATIONS = {'US'}
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Convert test GeoJSON files to shapefile ZIP archives'
@@ -104,6 +155,10 @@ def main():
         '--clean',
         action='store_true',
         help='Remove existing shapefiles before generating new ones'
+    )
+    parser.add_argument(
+        '--location',
+        help='Only build this location (e.g. US, BC, AB, CA); default builds all'
     )
 
     args = parser.parse_args()
@@ -152,12 +207,18 @@ def main():
         if location not in geojson_files:
             continue
 
+        # Optionally restrict to a single location
+        if args.location and location != args.location:
+            continue
+
         total_count += 1
         geojson_filename = geojson_files[location]
         geojson_path = data_dir / geojson_filename
         output_dir = shapefiles_base / location
 
-        if convert_geojson_to_shapefile(
+        convert = (convert_geojson_to_filegdb if location in FILEGDB_LOCATIONS
+                   else convert_geojson_to_shapefile)
+        if convert(
             geojson_path,
             output_dir,
             location,

@@ -95,17 +95,20 @@ data:
     filename: "WFIGS_Interagency_Perimeters_{DATE}.zip"
     mapping:
       fields:
-        Fire: attr_Fir_6
-        Name: attr_Inc_2
-        Location: attr_Inc_4
-        Size: attr_Incid
-        Status: attr_Fir_2
+        Fire: attr_FireCode
+        Name: attr_IncidentName
+        Location: attr_IncidentShortDescription
+        Size: attr_IncidentSize
+        Status: attr_PercentContained
       size_transform: acres_to_hectares
+      status_transform: percent_contained
+    # WFIGS has no stage-of-control field; status is derived from
+    # attr_PercentContained via status_transform, so status_map is unused.
     status_map:
-      active: ['OUT_CNTRL']
-      managed: ['Flanking', 'HOLDING']
-      controlled: ['UC']
-      out: ['OUT']
+      active: []
+      managed: []
+      controlled: []
+      out: []
 
 avalanche:
   providers:
