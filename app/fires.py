@@ -201,6 +201,7 @@ class FindFires:
 
         # Sort by status priority (active, managed, controlled, out), then distance.
         fires.sort(key=lambda f: (f.get('StatusLevel', float('inf')), f['Distance']))
+
         return fires
 
     def sources_map(self):
