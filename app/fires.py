@@ -18,7 +18,9 @@ Design notes
 from __future__ import annotations
 
 import logging
+import math
 import re
+import zipfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Any
@@ -56,6 +58,60 @@ def status_to_level(value, status_map) -> int:
     return float('inf')
 
 
+def _status_from_percent_contained(value):
+    """Derive (display, level) from WFIGS percent contained.
+
+    WFIGS has no stage-of-control field, so containment percent is the only
+    status signal: 100% is under control, anything less is still active.
+    Percent is absent for many fires; an unknown containment is treated as
+    active so a fire is never hidden from a user under a status filter.
+    """
+    try:
+        pct = float(value)
+    except (TypeError, ValueError):
+        pct = math.nan
+    if math.isnan(pct):
+        return "Active", STATUS_LEVELS['active']
+    if pct >= 100:
+        return "Contained", STATUS_LEVELS['controlled']
+    if pct <= 0:
+        return "Uncontained", STATUS_LEVELS['active']
+    return f"{round(pct)}% contained", STATUS_LEVELS['active']
+
+
+STATUS_TRANSFORMS = {
+    "percent_contained": _status_from_percent_contained,
+}
+
+
+def _resolve_status(raw_value, data_file):
+    """Return (display_status, status_level) for a source's raw status value.
+
+    Sources with a stage-of-control field map raw codes via status_map; sources
+    with only a numeric signal use a status_transform (e.g. percent_contained).
+    """
+    transform_name = data_file.mapping.get("status_transform")
+    if transform_name:
+        return STATUS_TRANSFORMS[transform_name](raw_value)
+    return raw_value, status_to_level(raw_value, data_file.status_map)
+
+
+def _gdal_path(filepath):
+    """Return a GDAL-readable path for a fire source file.
+
+    FileGDB sources arrive as a .zip wrapping a .gdb directory whose name varies
+    per export, so locate the .gdb and build a /vsizip/ path. Zipped shapefiles
+    are read directly.
+    """
+    if filepath.endswith(".zip"):
+        with zipfile.ZipFile(filepath) as archive:
+            entry = next((n for n in archive.namelist() if ".gdb/" in n), None)
+        if entry:
+            gdb_dir = entry[: entry.index(".gdb") + len(".gdb")]
+            return f"/vsizip/{filepath}/{gdb_dir}"
+    return filepath
+
+
 def _process_fields(field_mapping, data_file, get_value_fn):
     """
     Process a set of fields and return processed values.
@@ -72,8 +128,7 @@ def _process_fields(field_mapping, data_file, get_value_fn):
     for data_key, source_key in field_mapping.items():
         raw_value = get_value_fn(source_key)
         if data_key == 'Status':
-            result[data_key] = raw_value  # Keep original for display
-            result['StatusLevel'] = status_to_level(raw_value, data_file.status_map)  # For filtering
+            result['Status'], result['StatusLevel'] = _resolve_status(raw_value, data_file)
         else:
             result[data_key] = _apply_transform(data_key, raw_value, data_file.mapping)
 
@@ -178,8 +233,8 @@ class FindFires:
     @staticmethod
     @lru_cache(maxsize=16)
     def _load_shapefile(filepath):
-        """Load and cache shapefile with CRS transformation."""
-        return gpd.read_file(filepath).to_crs(epsg=3857)
+        """Load and cache a fire source (zipped shapefile or FileGDB)."""
+        return gpd.read_file(_gdal_path(filepath)).to_crs(epsg=3857)
 
     def nearby(self) -> list[Dict[str, Any]]:
         """Find all fires within distance limit.

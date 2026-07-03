@@ -48,14 +48,12 @@ def fetch_US():
                                  'f': 'json',
                                  'layers': '0',
                                  'layerQueries': '{"0":{"queryOption":"all"}}',
-                                 'returnAttachments': 'true',
-                                 'returnAttachmentsDataByUrl': 'true',
+                                 'returnAttachments': 'false',
                                  'async': 'true',
                                  'syncModel': 'none',
                                  'targetType': 'client',
                                  'syncDirection': 'bidirectional',
-                                 'attachmentsSyncDirection': 'bidirectional',
-                                 'dataFormat': 'shapefile',
+                                 'dataFormat': 'filegdb',
                              }
                             )
     status_url = response.json().get('statusUrl')
