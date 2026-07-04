@@ -137,7 +137,7 @@ def parse_message(message):
         filters['status'] = 'all'
 
     # Distance filter (support km and mi) - ensure it's standalone
-    distance_match = re.search(r'(?:^|\s)(\d+)(km|mi)(?=\s|$)', message_lower)
+    distance_match = re.search(r'(?:^|\s)(\d+)\s*(km|mi)(?=\s|$)', message_lower)
     if distance_match:
         value, unit = distance_match.groups()
         # Convert to km if needed
@@ -198,25 +198,28 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
         if coords:
             return coords
 
-    lat_coord = r'-?\d{1,2}\.\d{1,8}|-?\d{1,2}'
-    long_coord = r'-?\d{1,3}\.\d{1,8}|-?\d{1,3}'
+    # Coordinates must include a decimal point. Every satellite messenger and
+    # map share emits decimals, so requiring them avoids matching incidental
+    # integers (e.g. "party of 2, ...") as coordinates.
+    lat_coord = r'[-+]?\d{1,2}\.\d+'
+    long_coord = r'[-+]?\d{1,3}\.\d+'
 
-    # inReach has the coordinates at the end of the message in brackets.
-    m = re.search(r'\((%s),\s*(%s)\)\s*$' % (lat_coord, long_coord), message)
-
-    if m is not None and len(m.groups()) == 2:
-        lat = float(m.group(1))
-        lon = float(m.group(2))
+    # inReach appends the coordinates in brackets at the end of the message;
+    # prefer those over any earlier pair in the free-text body.
+    m = re.search(r'\(\s*(%s)\s*,\s*(%s)\s*\)\s*$' % (lat_coord, long_coord), message)
+    if m:
+        lat, lon = float(m.group(1)), float(m.group(2))
         if _valid_coords(lat, lon):
             return lat, lon
-    else:
-        # Find a matching coordinate pair anywhere in the string.
-        m = re.findall(r'\b(%s)\s*,\s*(%s)\b' % (lat_coord, long_coord), message)
-        for coords in m:
-            coords = [float(x) for x in coords]
-            # Find the first number pair that matches lat/long coords.
-            if _valid_coords(coords[0], coords[1]):
-                return tuple(coords)
+
+    # Otherwise take the first valid pair anywhere in the message. The
+    # lookbehind/lookahead stop a pair from matching a fragment of a longer
+    # number (e.g. "122.09" must not yield "09") and keep leading signs intact.
+    pair_re = r'(?<![\d.])(%s)\s*,\s*(%s)(?!\.?\d)' % (lat_coord, long_coord)
+    for lat_s, lon_s in re.findall(pair_re, message):
+        lat, lon = float(lat_s), float(lon_s)
+        if _valid_coords(lat, lon):
+            return lat, lon
 
     # If decimal parsing didn't hit, try degree+hemisphere patterns.
     for pattern in _DEG_HEMI_PATTERNS:

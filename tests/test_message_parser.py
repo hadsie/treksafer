@@ -55,34 +55,52 @@ class TestCoordinateParsing:
         result = parse_message(message)
         assert result["coords"] == (52.5092, -115.6182)
 
-    def test_coords_no_decimals(self):
-        """Integer coordinates without decimal points."""
+    def test_integer_coords_rejected(self):
+        """Integer-only coordinates are rejected; real device coords always have decimals."""
         message = "Test basic message (52, -115) coordinates arbitrarily placed."
-        result = parse_message(message)
-        assert result["coords"] == (52, -115)
+        assert parse_message(message) is None
 
     def test_zero_coordinates(self):
-        """Null Island (0, 0) is valid."""
+        """Null Island parses when given with decimals; the integer form is rejected."""
         result = parse_message("0.0000, 0.0000")
         assert result["coords"] == (0.0, 0.0)
-        result = parse_message("0, 0")
-        assert result["coords"] == (0.0, 0.0)
+        assert parse_message("0, 0") is None
 
-    def test_first_valid_pair_wins(self):
-        """When multiple pairs exist, first valid one is used."""
+    def test_decimal_coords_preferred_over_integer_pair(self):
+        """An incidental integer pair is ignored in favour of real decimal coords."""
         message = "Valid (12, 99) valid (52.5092, -115.6182)."
         result = parse_message(message)
-        assert result["coords"] == (12, 99)
+        assert result["coords"] == (52.5092, -115.6182)
+
+    def test_incidental_integer_pair_ignored(self):
+        """An incidental integer pair before the coords is not read as coordinates."""
+        result = parse_message("party of 2, 50.58, -122.09")
+        assert result["coords"] == (50.58, -122.09)
+
+    def test_out_of_range_pair_returns_none(self):
+        """A pair whose first value cannot be a latitude returns None, not a corrupted value."""
+        # 122.09 is not a valid latitude; must not return the fragment (9.0, 50.58).
+        assert parse_message("122.09, 50.58") is None
+
+    def test_leading_negative_sign_preserved(self):
+        """A leading negative sign on the latitude is not dropped."""
+        result = parse_message("-45.5, -120.5")
+        assert result["coords"] == (-45.5, -120.5)
+
+    def test_end_bracketed_coords_beat_earlier_decimal_pair(self):
+        """Bracketed coords at the end of the message win over an earlier decimal pair."""
+        result = parse_message("temp 12.5, 20.3 at (52.5092, -115.6182)")
+        assert result["coords"] == (52.5092, -115.6182)
 
     def test_skip_invalid_find_valid(self):
         """Skip invalid pairs, find first valid one."""
-        message = "Invalid (1234, 99) valid (52.5092, -115.6182)."
+        message = "Invalid (1234.0, 99.0) valid (52.5092, -115.6182)."
         result = parse_message(message)
         assert result["coords"] == (52.5092, -115.6182)
 
     def test_invalid_coords_only(self):
         """Message with only invalid coordinates returns None."""
-        message = "Message with invalid coords (1234, 99)"
+        message = "Message with invalid coords (1234.0, 99.0)"
         assert parse_message(message) is None
 
     def test_no_coords_returns_none(self):
@@ -124,39 +142,39 @@ class TestCoordinateValidation:
 
     def test_max_valid_latitude(self):
         """North pole (90) is valid."""
-        result = parse_message("(90, 0)")
+        result = parse_message("(90.0, 0.0)")
         assert result["coords"] == (90, 0)
 
     def test_min_valid_latitude(self):
         """South pole (-90) is valid."""
-        result = parse_message("(-90, 0)")
+        result = parse_message("(-90.0, 0.0)")
         assert result["coords"] == (-90, 0)
 
     def test_max_valid_longitude(self):
         """International date line east (180) is valid."""
-        result = parse_message("(0, 180)")
+        result = parse_message("(0.0, 180.0)")
         assert result["coords"] == (0, 180)
 
     def test_min_valid_longitude(self):
         """International date line west (-180) is valid."""
-        result = parse_message("(0, -180)")
+        result = parse_message("(0.0, -180.0)")
         assert result["coords"] == (0, -180)
 
     def test_latitude_too_high(self):
         """Latitude > 90 is invalid."""
-        assert parse_message("(91, 0)") is None
+        assert parse_message("(91.0, 0.0)") is None
 
     def test_latitude_too_low(self):
         """Latitude < -90 is invalid."""
-        assert parse_message("(-91, 0)") is None
+        assert parse_message("(-91.0, 0.0)") is None
 
     def test_longitude_too_high(self):
         """Longitude > 180 is invalid."""
-        assert parse_message("(0, 181)") is None
+        assert parse_message("(0.0, 181.0)") is None
 
     def test_longitude_too_low(self):
         """Longitude < -180 is invalid."""
-        assert parse_message("(0, -181)") is None
+        assert parse_message("(0.0, -181.0)") is None
 
 
 class TestMapLinkParsing:
@@ -246,6 +264,11 @@ class TestFilterExtraction:
         """Distance filter handles spacing variations."""
         result = parse_message("(49.25, -123.01)  50km  ")
         assert result["fire_filters"]["distance"] == 50
+
+    def test_distance_filter_space_between_number_and_unit(self):
+        """Distance filter matches with a space between the number and unit."""
+        result = parse_message("(49.25, -123.01) 25 km")
+        assert result["fire_filters"]["distance"] == 25
 
     def test_data_type_fire(self):
         """'fire' keyword sets data type."""

@@ -13,7 +13,7 @@ _SMS_LIMIT = 160
 
 class Messages:
     def no_gps(self) -> str:
-        return 'TrekSafer ERROR: No GPS location found. Ensure device is setup to include location in sent message or manually include coordinates with "(lat, long)".'
+        return 'TrekSafer ERROR: No valid GPS coordinates found. Enable location on your device, or send coords as "(lat, long)" e.g. (50.5,-122.1), and check the values.'
 
     def outside_of_area(self) -> str:
         return 'TrekSafer ERROR: GPS coordinates outside of supported fire perimeter area. No data available.'
