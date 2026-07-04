@@ -51,11 +51,12 @@ def _apply_transform(data_key, raw_value, mapping):
     return raw_value
 
 
-def status_to_level(value, status_map) -> int:
+def status_to_level(value, status_map):
+    """Return the StatusLevel for a raw status value, or None if unmapped."""
     for status, codes in status_map.items():
         if value in codes:
             return STATUS_LEVELS[status]
-    return float('inf')
+    return None
 
 
 def _status_from_percent_contained(value):
@@ -89,11 +90,22 @@ def _resolve_status(raw_value, data_file):
 
     Sources with a stage-of-control field map raw codes via status_map; sources
     with only a numeric signal use a status_transform (e.g. percent_contained).
+    An unmapped code is logged and treated as active rather than silently
+    dropped, so a provider status change is visible and no fire is hidden.
     """
     transform_name = data_file.mapping.get("status_transform")
     if transform_name:
         return STATUS_TRANSFORMS[transform_name](raw_value)
-    return raw_value, status_to_level(raw_value, data_file.status_map)
+
+    level = status_to_level(raw_value, data_file.status_map)
+    if level is None:
+        logging.error(
+            f"Unmapped {data_file.location} fire status {raw_value!r} "
+            f"(known: {', '.join(data_file.status_map) or 'none'}); treating as "
+            f"active so the fire is not hidden. status_map likely needs updating."
+        )
+        level = STATUS_LEVELS['active']
+    return raw_value, level
 
 
 def _gdal_path(filepath):

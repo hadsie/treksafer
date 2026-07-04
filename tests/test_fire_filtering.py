@@ -1,12 +1,14 @@
 """Tests for generic fire filtering functionality."""
 
+import logging
 from unittest.mock import patch
 
 import pytest
 from app.filters import (STATUS_LEVELS, apply_filters,
                         apply_status_filter, apply_size_filter,
                         FILTER_HANDLERS)
-from app.fires import FindFires
+from app.fires import FindFires, _resolve_status
+from app.config import DataFile
 from app.helpers import parse_message
 from app.config import get_config
 
@@ -191,6 +193,44 @@ class TestGenericFilterSystem:
         result = apply_filters(test_fires, filters, MockDataFile(), None, MockSettings())
         assert len(result) == 2
         assert set(f['Fire'] for f in result) == {'Fire1', 'Fire4'}
+
+
+class TestUnmappedStatusFailsLoud:
+    """An unmapped provider status must be logged and shown, never silently dropped."""
+
+    def _data_file(self):
+        return DataFile(
+            location='AB',
+            filename='x_{DATE}.zip',
+            mapping={'fields': {}},
+            status_map={'active': ['Out of Control'], 'controlled': ['Under Control']},
+        )
+
+    def test_unmapped_status_logged_as_error(self, caplog):
+        """A status not in the status_map is logged at ERROR and kept as-is for display."""
+        with caplog.at_level(logging.ERROR):
+            display, level = _resolve_status('Modified Response', self._data_file())
+
+        assert display == 'Modified Response'      # raw status kept for the user
+        assert level == STATUS_LEVELS['active']     # treated as active, not hidden
+        assert any('Unmapped' in r.message and r.levelname == 'ERROR'
+                   for r in caplog.records)
+
+    def test_mapped_status_resolves_without_error(self, caplog):
+        """A known status resolves normally and logs nothing."""
+        with caplog.at_level(logging.ERROR):
+            display, level = _resolve_status('Under Control', self._data_file())
+
+        assert (display, level) == ('Under Control', STATUS_LEVELS['controlled'])
+        assert caplog.records == []
+
+    def test_unmapped_status_survives_default_filter(self):
+        """An unmapped-status fire is not dropped by the default 'controlled' filter."""
+        display, level = _resolve_status('Some New Code', self._data_file())
+        fire = {'Fire': 'F1', 'Status': display, 'StatusLevel': level}
+
+        kept = apply_status_filter([fire], 'controlled', self._data_file())
+        assert len(kept) == 1
 
 
 class TestConfigurationIntegration:
