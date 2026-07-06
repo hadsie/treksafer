@@ -93,6 +93,7 @@ class RealtimeFireConfig(BaseModel):
     perimeters_url: str
     cache_timeout: int = 900
     mapping: Dict[str, str]
+    transforms: Dict[str, str] = {}
     status_map: Dict[str, List[str]]
 
     @model_validator(mode="after")
@@ -122,6 +123,8 @@ class Settings(BaseSettings):
     max_radius: int = 150
     fire_status: str = "controlled"
     fire_size: int = 1
+    # Fires discovered within this many days bypass the minimum size filter.
+    new_fire_age_days: int = 7
     # Auto-detected requests default to fire data within this window (MM-DD, inclusive).
     fire_season_start: str = "05-15"
     fire_season_end: str = "08-15"

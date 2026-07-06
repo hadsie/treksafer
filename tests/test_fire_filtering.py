@@ -1,6 +1,7 @@
 """Tests for generic fire filtering functionality."""
 
 import logging
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -168,6 +169,34 @@ class TestGenericFilterSystem:
         assert len(result) == 2
         fire_names = [f['Fire'] for f in result]
         assert set(fire_names) == {'Fire1', 'Fire3'}
+
+    def test_size_filter_exempts_new_fires(self):
+        """Fires discovered within the new-fire window bypass the size minimum."""
+        now = datetime.now(timezone.utc)
+
+        class MockSettings:
+            new_fire_age_days = 7
+
+        test_fires = [
+            {'Fire': 'NewSmall', 'Size': 0.01, 'Discovered': now - timedelta(days=2)},
+            {'Fire': 'NewNoSize', 'Discovered': now - timedelta(days=1)},
+            {'Fire': 'OldSmall', 'Size': 0.01, 'Discovered': now - timedelta(days=8)},
+            {'Fire': 'OldNoDate', 'Size': 0.01},
+            {'Fire': 'OldBig', 'Size': 50.0, 'Discovered': now - timedelta(days=30)},
+        ]
+
+        result = apply_size_filter(test_fires, 1.0, None, settings=MockSettings())
+        assert set(f['Fire'] for f in result) == {'NewSmall', 'NewNoSize', 'OldBig'}
+
+    def test_size_filter_without_settings_has_no_exemption(self):
+        """Direct calls without settings keep plain size semantics."""
+        test_fires = [
+            {'Fire': 'NewSmall', 'Size': 0.01,
+             'Discovered': datetime.now(timezone.utc) - timedelta(days=1)},
+        ]
+
+        result = apply_size_filter(test_fires, 1.0, None)
+        assert result == []
 
     def test_apply_filters_multiple(self):
         """Test applying multiple filters together (status + size only)."""

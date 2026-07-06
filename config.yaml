@@ -15,6 +15,9 @@ fire_status: "controlled"
 # Minimum fire size to include (hectares).
 fire_size: 1
 
+# Fires discovered within this many days bypass the minimum size filter.
+new_fire_age_days: 7
+
 # Auto-detected requests default to fire data within this window (MM-DD, inclusive).
 fire_season_start: "05-15"
 fire_season_end: "08-15"
@@ -79,6 +82,9 @@ data:
         Location: GEOGRAPHIC_DESCRIPTION
         Size: CURRENT_SIZE
         Status: FIRE_STATUS
+        Discovered: IGNITION_DATE
+      transforms:
+        Discovered: epoch_ms
       status_map:
         active: ['Out of Control', 'Fire of Note']
         managed: ['Being Held']

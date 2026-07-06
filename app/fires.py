@@ -31,11 +31,12 @@ from shapely.ops import nearest_points
 
 from .arcgis import fetch_fires
 from .config import get_config, DataFile
-from .helpers import acres_to_hectares, compass_direction, coords_to_point_meters
+from .helpers import acres_to_hectares, compass_direction, coords_to_point_meters, epoch_ms_to_datetime
 from .filters import apply_filters, STATUS_LEVELS
 
 TRANSFORMS = {
     "acres_to_hectares": acres_to_hectares,
+    "epoch_ms": epoch_ms_to_datetime,
 }
 
 def _apply_transform(data_key, raw_value, mapping):
@@ -200,12 +201,17 @@ class FindFires:
         self.sources = self._data_sources()
 
         # Build filters with defaults
+        filters = filters or {}
         default_filters = {
             'status': self.settings.fire_status,
             'distance': self.settings.fire_radius,
             'size': self.settings.fire_size
         }
-        self.filters = {**default_filters, **(filters or {})}
+        self.filters = {**default_filters, **filters}
+        # An explicit "all" shows every fire: drop the default size minimum
+        # so small and not-yet-sized fires are included.
+        if filters.get('status') == 'all' and 'size' not in filters:
+            del self.filters['size']
 
     def out_of_range(self) -> bool:
         """
@@ -262,10 +268,15 @@ class FindFires:
             radius_km = min(self.filters['distance'], self.settings.max_radius)
             fires = fetch_fires(realtime, self.coords, radius_km)
             if fires is not None:
+                mapping = {'fields': realtime.mapping}
+                mapping.update({
+                    f'{key.lower()}_transform': name
+                    for key, name in realtime.transforms.items()
+                })
                 return fires, DataFile(
                     location=data_file.location,
                     filename=data_file.filename,
-                    mapping={'fields': realtime.mapping},
+                    mapping=mapping,
                     status_map=realtime.status_map,
                 )
             logging.warning(

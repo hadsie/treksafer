@@ -1,5 +1,6 @@
 """Tests for FindFires source loading (realtime vs downloaded)."""
 
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import geopandas as gpd
@@ -21,7 +22,9 @@ REALTIME = RealtimeFireConfig(
         'Location': 'GEOGRAPHIC_DESCRIPTION',
         'Size': 'CURRENT_SIZE',
         'Status': 'FIRE_STATUS',
+        'Discovered': 'IGNITION_DATE',
     },
+    transforms={'Discovered': 'epoch_ms'},
     status_map={
         'active': ['Out of Control', 'Fire of Note'],
         'managed': ['Being Held'],
@@ -40,15 +43,16 @@ def realtime_settings(enabled=True):
     return settings
 
 
-def realtime_gdf(lat, lon, status='Out of Control'):
+def realtime_gdf(lat, lon, status='Out of Control', size=25.0, ignition_date=None):
     """A single-fire GeoDataFrame as fetch_fires would return it."""
     return gpd.GeoDataFrame(
         {
             'FIRE_NUMBER': ['K1'],
             'INCIDENT_NAME': ['Test Fire'],
             'GEOGRAPHIC_DESCRIPTION': ['Test Creek'],
-            'CURRENT_SIZE': [25.0],
+            'CURRENT_SIZE': [size],
             'FIRE_STATUS': [status],
+            'IGNITION_DATE': [ignition_date],
         },
         geometry=gpd.GeoSeries([Point(lon, lat)], crs='EPSG:4326'),
     ).to_crs(epsg=3857)
@@ -64,7 +68,7 @@ class TestLoadSource:
             fires_gdf, effective = ff._load_source(data_file, {})
 
         assert fires_gdf is gdf
-        assert effective.mapping == {'fields': REALTIME.mapping}
+        assert effective.mapping == {'fields': REALTIME.mapping, 'discovered_transform': 'epoch_ms'}
         assert effective.status_map == REALTIME.status_map
         mock_fetch.assert_called_once_with(data_file.realtime, BC_COORDS, 20)
 
@@ -133,3 +137,55 @@ class TestNearbyRealtime:
             fires = ff.nearby()
 
         assert fires == []
+
+    def test_nearby_shows_new_small_fire_despite_size_minimum(self):
+        """A fire discovered days ago bypasses the default 1 ha size filter."""
+        two_days_ago_ms = (datetime.now(timezone.utc) - timedelta(days=2)).timestamp() * 1000
+        gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1],
+                           size=0.01, ignition_date=two_days_ago_ms)
+        with patch('app.fires.get_config', return_value=realtime_settings()), \
+             patch('app.fires.fetch_fires', return_value=gdf):
+            ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50, 'size': 1})
+            fires = ff.nearby()
+
+        assert len(fires) == 1
+        assert fires[0]['Fire'] == 'K1'
+
+    def test_nearby_hides_old_small_fire(self):
+        """An old fire below the size minimum stays filtered out."""
+        last_month_ms = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp() * 1000
+        gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1],
+                           size=0.01, ignition_date=last_month_ms)
+        with patch('app.fires.get_config', return_value=realtime_settings()), \
+             patch('app.fires.fetch_fires', return_value=gdf):
+            ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50, 'size': 1})
+            fires = ff.nearby()
+
+        assert fires == []
+
+
+class TestAllStatusDropsSizeFilter:
+    """An explicit 'all' status shows every fire regardless of size."""
+
+    def test_all_removes_default_size_filter(self):
+        ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50})
+        assert 'size' not in ff.filters
+
+    def test_all_with_explicit_size_keeps_it(self):
+        ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50, 'size': 5})
+        assert ff.filters['size'] == 5
+
+    def test_default_status_keeps_size_filter(self):
+        ff = FindFires(BC_COORDS, filters={'distance': 50})
+        assert ff.filters['size'] == ff.settings.fire_size
+
+    def test_all_includes_fire_with_no_size(self):
+        """With 'all', even a fire without a size estimate is shown."""
+        gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1], size=None)
+        with patch('app.fires.get_config', return_value=realtime_settings()), \
+             patch('app.fires.fetch_fires', return_value=gdf):
+            ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50})
+            fires = ff.nearby()
+
+        assert len(fires) == 1
+        assert 'Size' not in fires[0]

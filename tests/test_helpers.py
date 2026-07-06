@@ -5,7 +5,7 @@ compass direction calculations, and external API integrations.
 """
 import pytest
 from unittest.mock import Mock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 from shapely.geometry import Point
 from requests import RequestException
 
@@ -13,6 +13,7 @@ from app.helpers import (
     acres_to_hectares,
     compass_direction,
     coords_to_point_meters,
+    epoch_ms_to_datetime,
     get_aqi,
 )
 
@@ -35,6 +36,20 @@ class TestAcresToHectares:
     def test_large_area(self):
         """Test larger area conversion."""
         assert acres_to_hectares(100) == 40.47
+
+
+class TestEpochMsToDatetime:
+    """Test epoch-milliseconds conversion."""
+
+    def test_converts_to_aware_utc_datetime(self):
+        result = epoch_ms_to_datetime(1782543600000)
+        assert result == datetime(2026, 6, 27, 7, 0, tzinfo=timezone.utc)
+
+    def test_none_returns_none(self):
+        assert epoch_ms_to_datetime(None) is None
+
+    def test_nan_returns_none(self):
+        assert epoch_ms_to_datetime(float('nan')) is None
 
 
 class TestCoordsToPointMeters:
