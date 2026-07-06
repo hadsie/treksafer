@@ -15,5 +15,6 @@ venv/
 /cache/
 /logs/
 /shapefiles/
+/specs/
 # Environment / secrets
 .env*

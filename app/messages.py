@@ -103,7 +103,9 @@ class Messages:
 
         distance = self._format_distance(fire['Distance'])
         fire['DistDir'] = f"{distance}km {fire['Direction']}"
-        fire['Size'] = round(float(fire['Size']))
+        # New fires may not have a size estimate yet; the line is omitted.
+        if 'Size' in fire:
+            fire['Size'] = self._format_size(fire['Size'])
         message = []
 
         for key, template in fields:
@@ -124,6 +126,27 @@ class Messages:
     def _message_length(message: str) -> float:
         """Computes the byte length of a string including emojis."""
         return len(message.encode(encoding='utf_16_le'))/2
+
+    @staticmethod
+    def _format_size(hectares: float | str) -> str:
+        """Return a nicely formatted fire size in hectares.
+
+        Rules
+        -----
+        1. 0 ha     → "" (no estimate yet; the Size line is omitted)
+        2. < 0.1 ha → "<0.1" so tiny new fires still show a size
+        3. < 10 ha  → round to 1 decimal place
+        4. ≥ 10 ha  → round to nearest whole hectare
+        5. Never show a trailing .0
+        """
+        ha = float(hectares)
+        if ha == 0:
+            return ""
+        if ha < 0.1:
+            return "<0.1"
+        # Scale-up rounding for consistency; see _format_distance.
+        rounded = round(ha * 10) / 10 if ha < 10 else round(ha)
+        return str(int(rounded)) if rounded == int(rounded) else str(rounded)
 
     @staticmethod
     def _format_distance(meters: float) -> int | float:

@@ -8,6 +8,7 @@ filter types with a consistent interface.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 # Filter priority levels (lower numbers = more urgent/restrictive)
 STATUS_LEVELS = {
@@ -45,10 +46,26 @@ def apply_status_filter(items, status_filter, data_file, **kwargs):
     return filtered_items
 
 
-def apply_size_filter(items, min_size_ha, data_file, **kwargs):
-    """Apply size filtering to items."""
+def _within_new_fire_window(item, settings):
+    """True when the item was discovered within the new-fire age window."""
+    discovered = item.get('Discovered')
+    if discovered is None or settings is None:
+        return False
+    return datetime.now(timezone.utc) - discovered < timedelta(days=settings.new_fire_age_days)
+
+
+def apply_size_filter(items, min_size_ha, data_file, settings=None, **kwargs):
+    """Apply size filtering to items.
+
+    Fires discovered within settings.new_fire_age_days bypass the size
+    filter: a brand new fire is the most safety-relevant kind and often has
+    no size estimate yet.
+    """
     filtered_items = []
     for item in items:
+        if _within_new_fire_window(item, settings):
+            filtered_items.append(item)
+            continue
         item_size = item.get('Size')
         if item_size is not None:
             try:

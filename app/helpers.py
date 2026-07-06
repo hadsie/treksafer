@@ -1,10 +1,11 @@
 import logging
+import math
 import osmnx as ox
 import pytz
 import re
 import requests
 
-from datetime import datetime
+from datetime import datetime, timezone
 from pyproj import Transformer
 from shapely.geometry import Point
 from urllib.parse import urlparse, parse_qs, unquote_plus
@@ -31,6 +32,15 @@ _DEG_HEMI_PATTERNS = [
 
 def acres_to_hectares(acres):
     return round(float(acres)/2.4710538147, 2)
+
+def epoch_ms_to_datetime(ms):
+    """Convert an epoch-milliseconds timestamp to an aware UTC datetime.
+
+    Returns None for missing values (None or NaN).
+    """
+    if ms is None or math.isnan(float(ms)):
+        return None
+    return datetime.fromtimestamp(float(ms) / 1000, tz=timezone.utc)
 
 def coords_to_point_meters(coords):
     """Convert WGS84 coordinates to EPSG:3857 point for distance calculations.

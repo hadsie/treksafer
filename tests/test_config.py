@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.config import Settings
+from app.config import RealtimeFireConfig, Settings
 
 
 class TestFireSeasonValidation:
@@ -16,3 +16,26 @@ class TestFireSeasonValidation:
     def test_malformed_dates_rejected(self, value):
         with pytest.raises(ValidationError):
             Settings(fire_season_start=value)
+
+
+class TestRealtimeFireConfig:
+    """RealtimeFireConfig validates the realtime source block."""
+
+    def test_defaults(self):
+        config = RealtimeFireConfig(
+            points_url="https://example.test/points/query",
+            perimeters_url="https://example.test/perims/query",
+            mapping={"Fire": "FIRE_NUMBER"},
+            status_map={"active": ["Out of Control"]},
+        )
+        assert config.enabled is True
+        assert config.cache_timeout == 900
+
+    def test_mapping_without_fire_key_rejected(self):
+        with pytest.raises(ValidationError, match="Fire"):
+            RealtimeFireConfig(
+                points_url="https://example.test/points/query",
+                perimeters_url="https://example.test/perims/query",
+                mapping={"Name": "INCIDENT_NAME"},
+                status_map={"active": ["Out of Control"]},
+            )

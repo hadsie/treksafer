@@ -36,7 +36,9 @@ Download fire perimeter data: `python scripts/downloads.py`
 
 ### Data sources
 
-Fire perimeter shapefiles in `shapefiles/{BC,AB,CA,US}/`. Each source has field mappings and status maps in `config.yaml` under `data:`. BC fires are enriched via a REST API call (cached 4h).
+Fire perimeter shapefiles in `shapefiles/{BC,AB,CA,US}/`. Each source has field mappings and status maps in `config.yaml` under `data:`.
+
+BC fires are queried in realtime from the BCWS ArcGIS API (`app/arcgis.py`, see `specs/bc-realtime-fires.md`), falling back to the downloaded shapefile when the API is unavailable. The fallback path enriches fires via a REST API call (cached 4h). Set `TREKSAFER_BC_REALTIME=false` to disable realtime.
 
 Avalanche providers are configured in `config.yaml` under `avalanche.providers:` and selected dynamically based on location.
 
@@ -44,6 +46,7 @@ Boundary files in `boundaries/` determine which data sources are nearby.
 
 ### Caching
 
+- `requests_cache` for the realtime ArcGIS fire queries (SQLite in `cache/`, 15m TTL)
 - `requests_cache` for BC fire API (SQLite in `cache/`, 4h TTL)
 - Each avalanche provider has its own `CachedSession` (1h default)
 - Shapefile loading is memoized via `@lru_cache`

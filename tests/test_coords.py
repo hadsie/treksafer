@@ -19,12 +19,12 @@ class TestFireLocationBasics:
         assert ff.out_of_range() is False
 
     def test_manning_park_bc(self, mock_bc_fire_api):
-        """Test Manning Park, BC - known fire location."""
+        """Test Manning Park, BC - known fire location. 'all' includes the sub-hectare fire."""
         coords = (49.064646, -120.7919022)
         ff = FindFires(coords, filters={'status': 'all', 'distance': 50})
         fires = ff.nearby()
 
-        assert len(fires) == 3
+        assert len(fires) == 4
         assert ff.out_of_range() is False
 
 
@@ -271,9 +271,9 @@ class TestUSSource:
 
     def test_us_size_filter_uses_hectares(self):
         """acres_to_hectares runs before the size filter, dropping the sub-hectare fire."""
-        ff = FindFires(self.US_COORDS, filters={'status': 'all', 'distance': 50})
+        ff = FindFires(self.US_COORDS, filters={'status': 'all', 'distance': 50, 'size': 1})
         fires = ff.nearby()
 
-        # The 2-acre (~0.81 ha) fire falls below the 1 ha default; the other five remain.
+        # The 2-acre (~0.81 ha) fire falls below the 1 ha minimum; the other five remain.
         assert len(fires) == 5
         assert all(f['Fire'] != 'WY05' for f in fires)

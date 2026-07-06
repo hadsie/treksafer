@@ -165,6 +165,51 @@ class TestDistanceFormatting:
         assert Messages()._format_distance(10000) == 10
 
 
+class TestFormatSize:
+    """_format_size() renders hectares for SMS."""
+
+    @pytest.mark.parametrize("hectares,expected", [
+        (0.009, "<0.1"),
+        (0.05, "<0.1"),
+        (0.1, "0.1"),
+        (0.5, "0.5"),
+        (2.69, "2.7"),
+        (9.95, "10"),
+        (10.4, "10"),
+        (123.4, "123"),
+        (808.1, "808"),
+    ])
+    def test_size_formatting(self, hectares, expected):
+        assert Messages._format_size(hectares) == expected
+
+    def test_zero_size_renders_empty_and_omits_line(self):
+        """A 0 ha size means no estimate yet; the Size line is dropped."""
+        assert Messages._format_size(0) == ""
+        message = Messages().fire(mock_fire(Size=0.0))
+        assert 'Size' not in message
+
+    def test_tiny_fire_message_shows_size(self):
+        message = Messages().fire(mock_fire(Size=0.009))
+        assert 'Size: <0.1 ha' in message
+
+
+class TestFireMessageWithoutSize:
+    """New fires may have no size estimate; the Size line is omitted."""
+
+    def test_full_format_omits_size_line(self):
+        fire = mock_fire()
+        del fire['Size']
+        message = Messages().fire(fire)
+        assert 'Size' not in message
+        assert 'K72481' in message
+
+    def test_short_format_omits_size(self):
+        fire = mock_fire()
+        del fire['Size']
+        message = Messages().fire(fire, size='short')
+        assert 'ha' not in message
+
+
 class TestAutoDetectRouting:
     """Bare coordinates auto-detect between avalanche and fire."""
 
