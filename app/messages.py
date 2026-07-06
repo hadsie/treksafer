@@ -1,7 +1,8 @@
 """Parses inbound text, locates fires, and generates the responses."""
 
 import logging
-from typing import Dict, Any
+from datetime import date
+from typing import Dict, Any, Optional
 
 from .config import get_config
 from .helpers import parse_message, get_aqi
@@ -203,6 +204,26 @@ def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dic
     return forecast
 
 
+def in_fire_season(today: Optional[date] = None) -> bool:
+    """Check whether a date falls within the configured fire season window.
+
+    The window is defined by the fire_season_start/fire_season_end settings
+    (MM-DD, inclusive) and may wrap the year boundary.
+
+    :param date today: Date to check, defaults to the current date
+    :return: True if the date is within the fire season window
+    :rtype: bool
+    """
+    settings = get_config()
+    today = today or date.today()
+    start = tuple(map(int, settings.fire_season_start.split("-")))
+    end = tuple(map(int, settings.fire_season_end.split("-")))
+    month_day = (today.month, today.day)
+    if start <= end:
+        return start <= month_day <= end
+    return month_day >= start or month_day <= end
+
+
 def handle_message(message: str) -> str:
     """Route message to appropriate data handler.
 
@@ -226,14 +247,15 @@ def handle_message(message: str) -> str:
     data_type = parsed_data.get("data_type", "auto")
     avalanche_filters = parsed_data.get("avalanche_filters", {})
 
-    # Auto-detect data type based on availability. Out-of-season avalanche
-    # reports fall back to fire.
+    # Auto-detect data type. During fire season, default straight to fire;
+    # otherwise use avalanche when available, with out-of-season reports
+    # falling back to fire.
     if data_type == "auto":
-        avalanche = AvalancheReport(coords)
-        if avalanche.has_data() and not avalanche.out_of_season():
-            data_type = "avalanche"
-        else:
-            data_type = "fire"
+        data_type = "fire"
+        if not in_fire_season():
+            avalanche = AvalancheReport(coords)
+            if avalanche.has_data() and not avalanche.out_of_season():
+                data_type = "avalanche"
 
     logging.info(f"Message: {message}")
     logging.info(f"Data type: {data_type}")

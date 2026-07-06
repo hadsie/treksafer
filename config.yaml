@@ -15,6 +15,10 @@ fire_status: "controlled"
 # Minimum fire size to include (hectares).
 fire_size: 1
 
+# Auto-detected requests default to fire data within this window (MM-DD, inclusive).
+fire_season_start: "05-15"
+fire_season_end: "08-15"
+
 # The amount of time to wait for a download before giving up, in seconds.
 download_timeout: 600
 
@@ -117,7 +121,7 @@ avalanche:
       api_url: https://api.avalanche.ca/forecasts/{lang}/products/point
       cache_timeout: 3600
       language: en
-      out_of_season: ["Spring Conditions", "Early Season"]
+      out_of_season: ["Spring Conditions", "Summer Conditions", "Early Season"]
     NationalAvalancheCenter:
       class: NationalAvalancheProvider
       api_url: https://api.avalanche.org/v2/public/product?type=forecast&center_id={center}&zone_id={zone}

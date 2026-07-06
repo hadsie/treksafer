@@ -1,7 +1,9 @@
-import pytest
+from datetime import date
 from unittest.mock import patch
 
-from app.messages import Messages, handle_message
+import pytest
+
+from app.messages import Messages, handle_message, in_fire_season
 
 
 def mock_fire(**overrides):
@@ -166,10 +168,11 @@ class TestDistanceFormatting:
 class TestAutoDetectRouting:
     """Bare coordinates auto-detect between avalanche and fire."""
 
+    @patch("app.messages.in_fire_season", return_value=False)
     @patch("app.messages.handle_fire_request", return_value="FIRE")
     @patch("app.messages.handle_avalanche_request", return_value="AVY")
     @patch("app.messages.AvalancheReport")
-    def test_out_of_season_routes_to_fire(self, mock_report_cls, mock_avy, mock_fire):
+    def test_out_of_season_routes_to_fire(self, mock_report_cls, mock_avy, mock_fire, mock_season):
         report = mock_report_cls.return_value
         report.has_data.return_value = True
         report.out_of_season.return_value = True
@@ -177,13 +180,58 @@ class TestAutoDetectRouting:
         assert handle_message("(50.12,-122.90)") == "FIRE"
         mock_avy.assert_not_called()
 
+    @patch("app.messages.in_fire_season", return_value=False)
     @patch("app.messages.handle_fire_request", return_value="FIRE")
     @patch("app.messages.handle_avalanche_request", return_value="AVY")
     @patch("app.messages.AvalancheReport")
-    def test_in_season_routes_to_avalanche(self, mock_report_cls, mock_avy, mock_fire):
+    def test_in_season_routes_to_avalanche(self, mock_report_cls, mock_avy, mock_fire, mock_season):
         report = mock_report_cls.return_value
         report.has_data.return_value = True
         report.out_of_season.return_value = False
 
         assert handle_message("(50.12,-122.90)") == "AVY"
         mock_fire.assert_not_called()
+
+    @patch("app.messages.in_fire_season", return_value=True)
+    @patch("app.messages.handle_fire_request", return_value="FIRE")
+    @patch("app.messages.handle_avalanche_request", return_value="AVY")
+    @patch("app.messages.AvalancheReport")
+    def test_fire_season_routes_to_fire_without_avalanche_lookup(
+        self, mock_report_cls, mock_avy, mock_fire, mock_season
+    ):
+        assert handle_message("(50.12,-122.90)") == "FIRE"
+        mock_report_cls.assert_not_called()
+        mock_avy.assert_not_called()
+
+    @patch("app.messages.in_fire_season", return_value=True)
+    @patch("app.messages.handle_fire_request", return_value="FIRE")
+    @patch("app.messages.handle_avalanche_request", return_value="AVY")
+    @patch("app.messages.AvalancheReport")
+    def test_explicit_avalanche_request_bypasses_fire_season(
+        self, mock_report_cls, mock_avy, mock_fire, mock_season
+    ):
+        assert handle_message("avalanche (50.12,-122.90)") == "AVY"
+        mock_fire.assert_not_called()
+
+
+class TestInFireSeason:
+    """in_fire_season() checks dates against the configured MM-DD window."""
+
+    @pytest.mark.parametrize("today,expected", [
+        (date(2026, 5, 14), False),
+        (date(2026, 5, 15), True),
+        (date(2026, 7, 5), True),
+        (date(2026, 8, 15), True),
+        (date(2026, 8, 16), False),
+        (date(2026, 1, 1), False),
+        (date(2026, 12, 31), False),
+    ])
+    def test_default_window_boundaries(self, today, expected):
+        assert in_fire_season(today) is expected
+
+    def test_window_wrapping_year_boundary(self):
+        settings = type("S", (), {"fire_season_start": "11-01", "fire_season_end": "03-31"})()
+        with patch("app.messages.get_config", return_value=settings):
+            assert in_fire_season(date(2026, 12, 25)) is True
+            assert in_fire_season(date(2026, 2, 10)) is True
+            assert in_fire_season(date(2026, 7, 5)) is False

@@ -11,13 +11,14 @@ from __future__ import annotations
 import logging
 import os
 import re
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Literal, List, Union, Optional
 
 import yaml
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.types import SecretStr
 from pydantic_settings import BaseSettings
 
@@ -101,6 +102,9 @@ class Settings(BaseSettings):
     max_radius: int = 150
     fire_status: str = "controlled"
     fire_size: int = 1
+    # Auto-detected requests default to fire data within this window (MM-DD, inclusive).
+    fire_season_start: str = "05-15"
+    fire_season_end: str = "08-15"
     download_timeout: int = 600
     include_aqi: bool = True
 
@@ -117,6 +121,13 @@ class Settings(BaseSettings):
 
     log_file: str | None = None
     log_level: int = logging.INFO
+
+    @field_validator("fire_season_start", "fire_season_end")
+    @classmethod
+    def validate_month_day(cls, value: str) -> str:
+        # Parsed against a leap year so "02-29" is accepted.
+        datetime.strptime(f"2000-{value}", "%Y-%m-%d")
+        return value
 
     def model_post_init(self, __context):
         if self.log_file is None:
