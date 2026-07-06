@@ -66,6 +66,24 @@ data:
       out: []
   - location: BC
     filename: BC_Fire_Perimeters_{DATE}.zip
+    # Realtime BCWS ArcGIS layers; the downloaded file below is the fallback
+    # when the API is unavailable. See specs/bc-realtime-fires.md.
+    realtime:
+      enabled: ${TREKSAFER_BC_REALTIME:-true}
+      points_url: https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0/query
+      perimeters_url: https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0/query
+      cache_timeout: 900
+      mapping:
+        Fire: FIRE_NUMBER
+        Name: INCIDENT_NAME
+        Location: GEOGRAPHIC_DESCRIPTION
+        Size: CURRENT_SIZE
+        Status: FIRE_STATUS
+      status_map:
+        active: ['Out of Control', 'Fire of Note']
+        managed: ['Being Held']
+        controlled: ['Under Control']
+        out: ['Out']
     mapping:
       fields:
         Fire: FIRE_NUM

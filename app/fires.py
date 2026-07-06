@@ -29,6 +29,7 @@ import geopandas as gpd
 import requests
 from shapely.ops import nearest_points
 
+from .arcgis import fetch_fires
 from .config import get_config, DataFile
 from .helpers import acres_to_hectares, compass_direction, coords_to_point_meters
 from .filters import apply_filters, STATUS_LEVELS
@@ -194,6 +195,7 @@ class FindFires:
     def __init__(self, coords, filters=None):
         self.settings = get_config()
         self.distance_limit = self.settings.max_radius * 1000
+        self.coords = coords
         self.location = coords_to_point_meters(coords)
         self.sources = self._data_sources()
 
@@ -248,6 +250,33 @@ class FindFires:
         """Load and cache a fire source (zipped shapefile or FileGDB)."""
         return gpd.read_file(_gdal_path(filepath)).to_crs(epsg=3857)
 
+    def _load_source(self, data_file: DataFile, sources_map: Dict) -> tuple[gpd.GeoDataFrame | None, DataFile]:
+        """Return (fires GeoDataFrame, effective DataFile) for a source.
+
+        Realtime sources are queried live and use the realtime field mapping;
+        when the API is unavailable (or realtime is disabled) the newest
+        downloaded file is used with the source's regular mapping.
+        """
+        realtime = data_file.realtime
+        if realtime and realtime.enabled:
+            radius_km = min(self.filters['distance'], self.settings.max_radius)
+            fires = fetch_fires(realtime, self.coords, radius_km)
+            if fires is not None:
+                return fires, DataFile(
+                    location=data_file.location,
+                    filename=data_file.filename,
+                    mapping={'fields': realtime.mapping},
+                    status_map=realtime.status_map,
+                )
+            logging.warning(
+                f"Realtime {data_file.location} fire data unavailable; using downloaded data."
+            )
+
+        filepath = sources_map.get(data_file.location)
+        if filepath is None:
+            return None, data_file
+        return self._load_shapefile(str(filepath)), data_file
+
     def nearby(self) -> list[Dict[str, Any]]:
         """Find all fires within distance limit.
 
@@ -258,13 +287,13 @@ class FindFires:
         sources_map = self.sources_map()
 
         for source in self.sources:
-            if source not in sources_map:
-                continue
-            fire_perimeters = self._load_shapefile(str(sources_map[source]))
-            # Grab the matching data file settings
             data_file = next((df for df in self.settings.data if df.location == source), None)
-            if data_file:
-                fires += self.search(fire_perimeters, self.filters, data_file)
+            if not data_file:
+                continue
+            fire_perimeters, data_file = self._load_source(data_file, sources_map)
+            if fire_perimeters is None:
+                continue
+            fires += self.search(fire_perimeters, self.filters, data_file)
 
         # Sort by status priority (active, managed, controlled, out), then distance.
         fires.sort(key=lambda f: (f.get('StatusLevel', float('inf')), f['Distance']))

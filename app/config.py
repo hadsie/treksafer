@@ -86,11 +86,31 @@ class AvalancheConfig(BaseModel):
 
 # ---- Core settings model ---- #
 
+class RealtimeFireConfig(BaseModel):
+    """Realtime ArcGIS FeatureServer source for a fire data location."""
+    enabled: bool = True
+    points_url: str
+    perimeters_url: str
+    cache_timeout: int = 900
+    mapping: Dict[str, str]
+    status_map: Dict[str, List[str]]
+
+    @model_validator(mode="after")
+    def check_join_key(self):
+        if "Fire" not in self.mapping:
+            raise ValueError(
+                "realtime mapping must include 'Fire'; it is the join key "
+                "between the points and perimeters layers"
+            )
+        return self
+
+
 class DataFile(BaseModel):
     location: str
     filename: str
     mapping: Dict[str, Any]
     status_map: Dict[str, List[str]]
+    realtime: Optional[RealtimeFireConfig] = None
 
 
 class Settings(BaseSettings):

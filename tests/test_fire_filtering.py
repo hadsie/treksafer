@@ -318,7 +318,7 @@ class TestFireFilteringIntegration:
         find = FindFires((49.25, -123.1))
         find.sources = ['BC']
         with patch.object(FindFires, 'sources_map', return_value={'BC': 'dummy'}), \
-             patch.object(FindFires, '_load_shapefile', return_value=None), \
+             patch.object(FindFires, '_load_shapefile', return_value=object()), \
              patch.object(FindFires, 'search', return_value=fires):
             return find.nearby()
 
