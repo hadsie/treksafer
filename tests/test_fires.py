@@ -16,6 +16,7 @@ REALTIME = RealtimeFireConfig(
     enabled=True,
     points_url='https://example.test/points/query',
     perimeters_url='https://example.test/perims/query',
+    perimeter_fire_field='FIRE_NUMBER',
     mapping={
         'Fire': 'FIRE_NUMBER',
         'Name': 'INCIDENT_NAME',

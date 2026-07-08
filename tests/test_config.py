@@ -25,6 +25,7 @@ class TestRealtimeFireConfig:
         config = RealtimeFireConfig(
             points_url="https://example.test/points/query",
             perimeters_url="https://example.test/perims/query",
+            perimeter_fire_field="FIRE_NUMBER",
             mapping={"Fire": "FIRE_NUMBER"},
             status_map={"active": ["Out of Control"]},
         )
@@ -36,6 +37,16 @@ class TestRealtimeFireConfig:
             RealtimeFireConfig(
                 points_url="https://example.test/points/query",
                 perimeters_url="https://example.test/perims/query",
+                perimeter_fire_field="FIRE_NUMBER",
                 mapping={"Name": "INCIDENT_NAME"},
+                status_map={"active": ["Out of Control"]},
+            )
+
+    def test_missing_perimeter_fire_field_rejected(self):
+        with pytest.raises(ValidationError, match="perimeter_fire_field"):
+            RealtimeFireConfig(
+                points_url="https://example.test/points/query",
+                perimeters_url="https://example.test/perims/query",
+                mapping={"Fire": "FIRE_NUMBER"},
                 status_map={"active": ["Out of Control"]},
             )

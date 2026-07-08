@@ -55,6 +55,33 @@ transports:
 data:
   - location: AB
     filename: AB_Fire_Perimeters_{DATE}.zip
+    # Realtime Alberta Wildfire ArcGIS layers; the downloaded file below is
+    # the fallback when the API is unavailable. The points layer holds active
+    # fires only, matching the active-perimeters download (out: []).
+    realtime:
+      enabled: ${TREKSAFER_AB_REALTIME:-true}
+      points_url: https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/Active_Wildfires_(PROD)/FeatureServer/0/query
+      perimeters_url: https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/Wildfire_Perimeter_Active_(PROD)/FeatureServer/3/query
+      perimeter_fire_field: FireNumber
+      cache_timeout: 900
+      mapping:
+        # LABEL ("HWF-096-2026") matches the perimeter layer's FireNumber
+        # values and the fire-number format of the downloaded file; the
+        # points layer's FIRE_NUMBER ("HWF096") matches neither.
+        Fire: LABEL
+        Location: FIRE_COMPLEX_NAME
+        Size: AREA_ESTIMATE
+        Status: FIRE_STATUS
+        # Initial assessment date; the closest AB publishes to a discovery
+        # date, so it drives the new-fire size exemption.
+        Discovered: ASSESSMENT_ASSISTANCE_DATE
+      transforms:
+        Discovered: epoch_ms
+      status_map:
+        active: ['Out of Control']
+        managed: ['Being Held']
+        controlled: ['Under Control']
+        out: []
     mapping:
       fields:
         Fire: FIRE_NUMBE
@@ -70,11 +97,12 @@ data:
   - location: BC
     filename: BC_Fire_Perimeters_{DATE}.zip
     # Realtime BCWS ArcGIS layers; the downloaded file below is the fallback
-    # when the API is unavailable. See specs/bc-realtime-fires.md.
+    # when the API is unavailable.
     realtime:
       enabled: ${TREKSAFER_BC_REALTIME:-true}
       points_url: https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0/query
       perimeters_url: https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0/query
+      perimeter_fire_field: FIRE_NUMBER
       cache_timeout: 900
       mapping:
         Fire: FIRE_NUMBER
