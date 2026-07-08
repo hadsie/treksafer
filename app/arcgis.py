@@ -84,14 +84,17 @@ def fetch_fires(config: RealtimeFireConfig, coords: tuple,
         the caller can fall back to downloaded data
     """
     fire_key = config.mapping['Fire']
+    perimeter_key = config.perimeter_fire_field
     try:
         points = _query(config.points_url, coords, radius_km,
                         list(config.mapping.values()), config.cache_timeout)
         perimeters = _query(config.perimeters_url, coords, radius_km,
-                            [fire_key], config.cache_timeout)
+                            [perimeter_key], config.cache_timeout)
     except (RequestException, ValueError) as e:
         logging.warning(f"Realtime fire query failed: {e}")
         return None
+
+    perimeters = perimeters.rename(columns={perimeter_key: fire_key})
 
     if points.empty:
         return points.to_crs(epsg=3857)

@@ -16,6 +16,7 @@ PERIMS_URL = 'https://example.test/perims/FeatureServer/0/query'
 CONFIG = RealtimeFireConfig(
     points_url=POINTS_URL,
     perimeters_url=PERIMS_URL,
+    perimeter_fire_field='FIRE_NUMBER',
     mapping={
         'Fire': 'FIRE_NUMBER',
         'Name': 'INCIDENT_NAME',
@@ -48,12 +49,12 @@ def point_feature(number, status='Out of Control', lon=-120.35, lat=50.65):
     }
 
 
-def perimeter_feature(number, lon=-120.35, lat=50.65):
+def perimeter_feature(number, lon=-120.35, lat=50.65, fire_field='FIRE_NUMBER'):
     ring = [(lon, lat), (lon + 0.01, lat), (lon + 0.01, lat + 0.01), (lon, lat + 0.01), (lon, lat)]
     return {
         'type': 'Feature',
         'geometry': {'type': 'Polygon', 'coordinates': [ring]},
-        'properties': {'FIRE_NUMBER': number},
+        'properties': {fire_field: number},
     }
 
 
@@ -89,6 +90,21 @@ class TestFetchFires:
         geoms = dict(zip(gdf['FIRE_NUMBER'], gdf.geometry))
         assert geoms['K1'].geom_type == 'Polygon'
         assert geoms['K2'].geom_type == 'Point'
+
+    def test_perimeter_fire_field_joins_differently_named_layers(self, mocked_responses):
+        """AB-style layers where the perimeter fire-number field differs from the points layer."""
+        config = CONFIG.model_copy(update={'perimeter_fire_field': 'FireNumber'})
+        mocked_responses.get(POINTS_URL, json=collection([point_feature('HWF096')]))
+        mocked_responses.get(PERIMS_URL, json=collection([
+            perimeter_feature('HWF096', fire_field='FireNumber'),
+        ]))
+
+        gdf = fetch_fires(config, COORDS, 50)
+
+        assert set(gdf['FIRE_NUMBER']) == {'HWF096'}
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+        params = mocked_responses.calls[1].request.params
+        assert params['outFields'] == 'FireNumber'
 
     def test_empty_results_return_empty_dataframe(self, mocked_responses):
         mocked_responses.get(POINTS_URL, json=collection([]))
@@ -182,3 +198,13 @@ class TestLiveEndpoint:
         assert gdf is not None
         assert str(gdf.crs) == 'EPSG:3857'
         assert 'FIRE_NUMBER' in gdf.columns
+
+    def test_alberta_layers_respond(self):
+        """The real Alberta Wildfire layers answer a point-radius query near Edmonton."""
+        from app.config import get_config
+        ab = next(d for d in get_config().data if d.location == 'AB')
+        gdf = fetch_fires(ab.realtime, (53.55, -113.49), 150)
+
+        assert gdf is not None
+        assert str(gdf.crs) == 'EPSG:3857'
+        assert 'LABEL' in gdf.columns

@@ -11,8 +11,9 @@ def pytest_configure(config):
     os.environ.setdefault("TREKSAFER_ENV", "test")
     # Point at the bundled test fixtures regardless of the working directory
     os.environ.setdefault("TREKSAFER_SHAPEFILES", str(Path(__file__).parent / "shapefiles"))
-    # Unit tests run against bundled shapefiles, never the realtime API
+    # Unit tests run against bundled shapefiles, never the realtime APIs
     os.environ.setdefault("TREKSAFER_BC_REALTIME", "false")
+    os.environ.setdefault("TREKSAFER_AB_REALTIME", "false")
 
 @pytest.fixture
 def mock_bc_fire_api():

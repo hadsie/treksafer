@@ -95,6 +95,9 @@ class RealtimeFireConfig(BaseModel):
     mapping: Dict[str, str]
     transforms: Dict[str, str] = {}
     status_map: Dict[str, List[str]]
+    # Fire-number field on the perimeters layer; may differ from the points
+    # layer's (e.g. Alberta uses FireNumber vs the points layer's LABEL).
+    perimeter_fire_field: str
 
     @model_validator(mode="after")
     def check_join_key(self):
