@@ -138,8 +138,9 @@ def convert_geojson_to_filegdb(
             shutil.rmtree(temp_dir)
 
 
-# Locations whose fixtures are FileGDB (real field names) rather than shapefile.
-FILEGDB_LOCATIONS = {'US'}
+# Locations whose fixtures are FileGDB rather than shapefile (none currently;
+# every production download now writes zipped shapefiles).
+FILEGDB_LOCATIONS = set()
 
 
 def main():

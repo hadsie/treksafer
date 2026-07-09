@@ -82,22 +82,42 @@ def _status_from_percent_contained(value):
     return f"{round(pct)}% contained", STATUS_LEVELS['active']
 
 
+def _status_from_wfigs(value, get_value):
+    """Derive (display, level) for a WFIGS incident.
+
+    Prescribed burns display as "Prescribed" at the controlled level;
+    wildfires derive their status from percent contained. The incident type
+    field is IncidentTypeCategory on the live layer and INCID_TYPE in the
+    downloaded file.
+    """
+    category = get_value('IncidentTypeCategory') or get_value('INCID_TYPE')
+    if category == 'RX':
+        return "Prescribed", STATUS_LEVELS['controlled']
+    return _status_from_percent_contained(value)
+
+
 STATUS_TRANSFORMS = {
-    "percent_contained": _status_from_percent_contained,
+    "wfigs_status": _status_from_wfigs,
 }
 
 
-def _resolve_status(raw_value, data_file):
+def _resolve_status(raw_value, data_file, get_value_fn=None):
     """Return (display_status, status_level) for a source's raw status value.
 
     Sources with a stage-of-control field map raw codes via status_map; sources
-    with only a numeric signal use a status_transform (e.g. percent_contained).
-    An unmapped code is logged and treated as active rather than silently
-    dropped, so a provider status change is visible and no fire is hidden.
+    without one use a status_transform (e.g. wfigs_status). An unmapped code
+    is logged and treated as active rather than silently dropped, so a
+    provider status change is visible and no fire is hidden.
+
+    Args:
+        raw_value: The source's raw status value
+        data_file: Data file config for the source
+        get_value_fn: Accessor for other raw fields on the same record, for
+            transforms that need more than the status value itself
     """
     transform_name = data_file.mapping.get("status_transform")
     if transform_name:
-        return STATUS_TRANSFORMS[transform_name](raw_value)
+        return STATUS_TRANSFORMS[transform_name](raw_value, get_value_fn)
 
     level = status_to_level(raw_value, data_file.status_map)
     if level is None:
@@ -142,7 +162,7 @@ def _process_fields(field_mapping, data_file, get_value_fn):
     for data_key, source_key in field_mapping.items():
         raw_value = get_value_fn(source_key)
         if data_key == 'Status':
-            result['Status'], result['StatusLevel'] = _resolve_status(raw_value, data_file)
+            result['Status'], result['StatusLevel'] = _resolve_status(raw_value, data_file, get_value_fn)
         else:
             result[data_key] = _apply_transform(data_key, raw_value, data_file.mapping)
 
