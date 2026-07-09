@@ -25,6 +25,7 @@ class TestRealtimeFireConfig:
         config = RealtimeFireConfig(
             points_url="https://example.test/points/query",
             perimeters_url="https://example.test/perims/query",
+            key_fields=["FIRE_NUMBER"],
             join_field="FIRE_NUMBER",
             perimeter_fire_field="FIRE_NUMBER",
             mapping={"Fire": "FIRE_NUMBER"},
@@ -38,6 +39,7 @@ class TestRealtimeFireConfig:
             RealtimeFireConfig(
                 points_url="https://example.test/points/query",
                 perimeters_url="https://example.test/perims/query",
+                key_fields=["FIRE_NUMBER"],
                 join_field="FIRE_NUMBER",
                 perimeter_fire_field="FIRE_NUMBER",
                 mapping={"Name": "INCIDENT_NAME"},
@@ -49,6 +51,7 @@ class TestRealtimeFireConfig:
             RealtimeFireConfig(
                 points_url="https://example.test/points/query",
                 perimeters_url="https://example.test/perims/query",
+                key_fields=["FIRE_NUMBER"],
                 join_field="FIRE_NUMBER",
                 mapping={"Fire": "FIRE_NUMBER"},
                 status_map={"active": ["Out of Control"]},
@@ -59,6 +62,7 @@ class TestRealtimeFireConfig:
             RealtimeFireConfig(
                 points_url="https://example.test/points/query",
                 perimeters_url="https://example.test/perims/query",
+                key_fields=["FIRE_NUMBER"],
                 perimeter_fire_field="FIRE_NUMBER",
                 mapping={"Fire": "FIRE_NUMBER"},
                 status_map={"active": ["Out of Control"]},
@@ -68,9 +72,11 @@ class TestRealtimeFireConfig:
         config = RealtimeFireConfig(
             points_url="https://example.test/points/query",
             perimeters_url="https://example.test/perims/query",
+            key_fields=["FIRE_NUMBER"],
             join="spatial",
             mapping={"Fire": "Fire_Name"},
             status_map={"active": ["OC"]},
         )
         assert config.join == "spatial"
         assert config.points_where == "1=1"
+        assert config.perimeters_where == "1=1"

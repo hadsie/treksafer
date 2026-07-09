@@ -7,8 +7,7 @@ import pytest
 import requests
 import responses
 
-from app.arcgis import _session  # noqa: F401 (patched by plain_session)
-from app.fire_sources import fetch_fires
+from app.fires.sources import fetch_fires
 from app.config import RealtimeFireConfig
 
 POINTS_URL = 'https://example.test/points/FeatureServer/0/query'
@@ -19,6 +18,7 @@ CONFIG = RealtimeFireConfig(
     perimeters_url=PERIMS_URL,
     join_field='FIRE_NUMBER',
     perimeter_fire_field='FIRE_NUMBER',
+    key_fields=['FIRE_NUMBER'],
     mapping={
         'Fire': 'FIRE_NUMBER',
         'Name': 'INCIDENT_NAME',
@@ -245,6 +245,7 @@ SPATIAL_CONFIG = RealtimeFireConfig(
     points_url=POINTS_URL,
     perimeters_url=PERIMS_URL,
     join='spatial',
+    key_fields=['Fire_Name'],
     points_where="Agency NOT IN ('BC','AB')",
     mapping={
         'Fire': 'Fire_Name',
@@ -328,6 +329,17 @@ class TestFetchFiresSpatial:
 
         assert mocked_responses.calls[0].request.params['where'] == "Agency NOT IN ('BC','AB')"
 
+    def test_province_filter_sent_with_perimeters_query(self, mocked_responses):
+        config = SPATIAL_CONFIG.model_copy(
+            update={'perimeters_where': "Province NOT IN ('British Columbia','Alberta')"})
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(PERIMS_URL, json=collection([]))
+
+        fetch_fires(config, CA_COORDS, 100)
+
+        perimeter_call = mocked_responses.calls[1].request.params
+        assert perimeter_call['where'] == "Province NOT IN ('British Columbia','Alberta')"
+
     def test_perimeter_with_distant_fire_point_is_recovered(self, mocked_responses):
         """A megafire's polygon reaches the radius while its report point sits outside it."""
         mocked_responses.get(POINTS_URL, json=collection([]))
@@ -343,6 +355,38 @@ class TestFetchFiresSpatial:
         envelope_call = mocked_responses.calls[2].request.params
         assert envelope_call['geometryType'] == 'esriGeometryEnvelope'
         assert envelope_call['where'] == "Agency NOT IN ('BC','AB')"
+
+    def test_detached_patch_unions_into_nearby_fire(self, mocked_responses):
+        """A fire's disconnected burn patches merge into one geometry."""
+        mocked_responses.get(POINTS_URL, json=collection([ca_point_feature('F1')]))
+        mocked_responses.get(PERIMS_URL, json=collection([
+            ca_perimeter_feature(),                        # contains F1's point
+            ca_perimeter_feature(lon=-105.25, lat=55.15),  # detached patch ~6km east
+        ]))
+
+        gdf = fetch_fires(SPATIAL_CONFIG, CA_COORDS, 100)
+
+        assert len(gdf) == 1
+        assert gdf.geometry.iloc[0].geom_type == 'MultiPolygon'
+        assert len(mocked_responses.calls) == 2  # both patches claimed, no recovery
+
+    def test_in_radius_patch_with_far_point_reports_the_fire(self, mocked_responses):
+        """The field case: only a detached patch is in radius; the fire's
+        point is beyond it. The fire must still be reported."""
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(PERIMS_URL, json=collection([ca_perimeter_feature()]))
+        mocked_responses.get(POINTS_URL, json=collection([
+            ca_point_feature('FAR', size=40000.0, lon=-105.6, lat=55.25),  # ~18km away
+        ]))
+
+        gdf = fetch_fires(SPATIAL_CONFIG, CA_COORDS, 100)
+
+        assert list(gdf['Fire_Name']) == ['FAR']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+        # Recovery envelope grew past the patch's own bounding box.
+        envelope = mocked_responses.calls[2].request.params['geometry']
+        minx, miny, maxx, maxy = (float(v) for v in envelope.split(','))
+        assert maxx - minx > 0.3  # the patch alone is 0.04 degrees wide
 
     def test_orphaned_perimeter_dropped_with_warning(self, mocked_responses, caplog):
         mocked_responses.get(POINTS_URL, json=collection([]))

@@ -2,7 +2,7 @@
 
 import logging
 from datetime import date
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 
 from .config import get_config
 from .helpers import parse_message, get_aqi
@@ -18,6 +18,9 @@ class Messages:
 
     def outside_of_area(self) -> str:
         return 'TrekSafer ERROR: GPS coordinates outside of supported fire perimeter area. No data available.'
+
+    def data_unavailable(self) -> str:
+        return 'TrekSafer ERROR: Fire data is temporarily unavailable for your area. Try again later.'
 
     def no_fires(self, distance: float, status_filter: str = None) -> str:
         """Generate no fires message with optional status filter context.
@@ -196,6 +199,9 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
 
     fires = findfires.nearby()
     if not fires:
+        # A source that produced no data at all must not read as "no fires".
+        if findfires.unavailable_sources:
+            return aqi_message + responses.data_unavailable()
         distance = min(findfires.filters['distance'], settings.max_radius)
         status_filter = fire_filters.get('status')
         return aqi_message + responses.no_fires(distance, status_filter)
@@ -217,7 +223,6 @@ def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dic
     Returns:
         str: Formatted avalanche forecast
     """
-    responses = Messages()
     avalanche = AvalancheReport(coords)
 
     if avalanche.out_of_range():

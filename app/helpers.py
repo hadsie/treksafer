@@ -4,8 +4,11 @@ import osmnx as ox
 import pytz
 import re
 import requests
+import requests_cache
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from functools import lru_cache
+from pathlib import Path
 from pyproj import Transformer
 from shapely.geometry import Point
 from urllib.parse import urlparse, parse_qs, unquote_plus
@@ -73,6 +76,18 @@ def compass_direction(pointA, pointB):
     bearing = ox.bearing.calculate_bearing(pointa[0], pointa[1], pointb[0], pointb[1])
     return directions[round(bearing/22.5)]
 
+@lru_cache(maxsize=1)
+def _aqi_session():
+    """Cached HTTP session for AQI lookups (the data is hourly)."""
+    Path('cache').mkdir(exist_ok=True)
+    return requests_cache.CachedSession(
+        cache_name='cache/aqi',
+        expire_after=timedelta(hours=1),
+        allowable_methods=['GET'],
+        stale_if_error=True,
+    )
+
+
 def get_aqi(coords):
     """
     Fetch the current US Air Quality Index (AQI) for given coordinates.
@@ -93,7 +108,7 @@ def get_aqi(coords):
             "&hourly=us_aqi&timezone=America%2FLos_Angeles&forecast_days=1"
         )
 
-        resp = requests.get(url, timeout=10)
+        resp = _aqi_session().get(url, timeout=10)
         resp.raise_for_status()  # Raise for 4xx/5xx errors
         data = resp.json()
 

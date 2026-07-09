@@ -16,5 +16,7 @@ venv/
 /logs/
 /shapefiles/
 /specs/
+/data/*.db
+/data/*.db-*
 # Environment / secrets
 .env*

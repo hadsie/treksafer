@@ -19,7 +19,7 @@ STATUS_LEVELS = {
 }
 
 
-def apply_status_filter(items, status_filter, data_file, **kwargs):
+def apply_status_filter(items, status_filter, **kwargs):
     """Apply status filtering to items."""
     if status_filter == 'all':
         return items
@@ -54,7 +54,7 @@ def _within_new_fire_window(item, settings):
     return datetime.now(timezone.utc) - discovered < timedelta(days=settings.new_fire_age_days)
 
 
-def apply_size_filter(items, min_size_ha, data_file, settings=None, **kwargs):
+def apply_size_filter(items, min_size_ha, settings=None, **kwargs):
     """Apply size filtering to items.
 
     Fires discovered within settings.new_fire_age_days bypass the size
@@ -86,15 +86,13 @@ FILTER_HANDLERS = {
 }
 
 
-def apply_filters(items, filters, data_file, location, settings):
+def apply_filters(items, filters, settings):
     """
     Apply multiple filters to items generically.
 
     Args:
         items (list): List of data item dictionaries
         filters (dict): Dictionary of filter_type: filter_value pairs
-        data_file: Data file configuration for this source
-        location: Point location for distance calculations
         settings: Application settings
 
     Returns:
@@ -102,8 +100,6 @@ def apply_filters(items, filters, data_file, location, settings):
     """
     for filter_type, filter_value in filters.items():
         if filter_type in FILTER_HANDLERS:
-            items = FILTER_HANDLERS[filter_type](
-                items, filter_value, data_file, location=location, settings=settings
-            )
+            items = FILTER_HANDLERS[filter_type](items, filter_value, settings=settings)
 
     return items
