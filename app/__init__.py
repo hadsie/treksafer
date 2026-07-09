@@ -11,8 +11,6 @@ import logging
 from pathlib import Path
 from typing import Iterable
 
-import requests_cache
-
 from .config import get_config, Settings
 from .transport import get_transports, BaseTransport
 
@@ -37,11 +35,12 @@ def _configure_logging(settings: Settings) -> None:
         sh.setFormatter(formatter)
         logger.addHandler(sh)
 
-def _install_caches(settings: Settings) -> None:
+def _validate_cache_dir() -> None:
+    """Fail at startup if the HTTP response caches can't be written."""
     cache_dir = Path("cache")
     cache_dir.mkdir(exist_ok=True)
 
-    # Test write permission on cache directory
+    # Test write permission on cache directory.
     test_file = cache_dir / '.write_test'
     try:
         test_file.touch()
@@ -49,38 +48,14 @@ def _install_caches(settings: Settings) -> None:
     except (PermissionError, OSError) as e:
         raise PermissionError(f"Cannot write to cache directory: {cache_dir}. Error: {e}")
 
-    # Check write permissions on all existing cache files
+    # Check write permissions on all existing cache files.
     for cache_file in cache_dir.glob('*'):
         if cache_file.is_file():
             try:
                 cache_file.touch()
             except (PermissionError, OSError) as e:
                 raise PermissionError(f"Cannot write to cache file: {cache_file}. Error: {e}")
-
-    # Check shapefiles directory and all subdirectories
-    shapefiles_dir = Path("shapefiles")
-    if shapefiles_dir.exists():
-        # Check shapefiles root directory
-        test_file = shapefiles_dir / '.write_test'
-        try:
-            test_file.touch()
-            test_file.unlink()
-        except (PermissionError, OSError) as e:
-            raise PermissionError(f"Cannot write to shapefiles directory: {shapefiles_dir}. Error: {e}")
-
-        # Check all subdirectories
-        for subdir in shapefiles_dir.rglob('*'):
-            if subdir.is_dir():
-                test_file = subdir / '.write_test'
-                try:
-                    test_file.touch()
-                    test_file.unlink()
-                except (PermissionError, OSError) as e:
-                    raise PermissionError(f"Cannot write to shapefiles subdirectory: {subdir}. Error: {e}")
     logging.getLogger(__name__).info("File permissions validated")
-
-    bc_api_cache_name = f"cache/bc_fire_api_cache_{settings.env}"
-    requests_cache.install_cache(bc_api_cache_name, expire_after=settings.request_cache_timeout)
 
 async def _run_transports(transports: Iterable[BaseTransport]) -> None:
     """Start every transport and keep them alive until explicitly stopped."""
@@ -99,7 +74,7 @@ def run() -> None:
     """Bootstrap TrekSafer and launch all message transport listeners."""
     settings = get_config()
     _configure_logging(settings)
-    _install_caches(settings)
+    _validate_cache_dir()
     logging.getLogger(__name__).info("TrekSafer starting in %s environment", settings.env)
     print(f"TrekSafer running — environment: {settings.env}")
 

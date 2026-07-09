@@ -1,9 +1,6 @@
 """Tests for the fire database refresh script (scripts/downloads.py)."""
 
-from datetime import datetime, timezone
-
 import geopandas as gpd
-import pytest
 import requests
 from shapely.geometry import Point
 

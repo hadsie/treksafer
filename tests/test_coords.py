@@ -1,6 +1,5 @@
 """Integration tests for fire finding at specific coordinates."""
 
-import pytest
 from app.fires import FindFires
 from app.config import get_config
 

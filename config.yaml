@@ -22,9 +22,6 @@ new_fire_age_days: 7
 fire_season_start: "05-15"
 fire_season_end: "08-15"
 
-# The amount of time to wait for a download before giving up, in seconds.
-download_timeout: 600
-
 # Avalanche forecast settings
 avalanche_distance_buffer: 5  # Distance buffer for avalanche provider selection (km)
 

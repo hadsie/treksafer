@@ -315,7 +315,7 @@ class FindFires:
             fires.append(data)
 
         # Return filtered fires.
-        return apply_filters(fires, filters, data_file, self.location, self.settings)
+        return apply_filters(fires, filters, self.settings)
 
 
     def _record(self, location: str, fires: gpd.GeoDataFrame, realtime: RealtimeFireConfig):

@@ -171,9 +171,10 @@ class TestCompassDirection:
 class TestGetAqi:
     """Test Air Quality Index API integration."""
 
-    @patch('app.helpers.requests.get')
+    @patch('app.helpers._aqi_session')
     @patch('app.helpers.datetime')
-    def test_success_response(self, mock_datetime, mock_get):
+    def test_success_response(self, mock_datetime, mock_session):
+        mock_get = mock_session.return_value.get
         """Successful API response returns AQI value."""
         # Mock current time
         mock_now = Mock()
@@ -197,9 +198,10 @@ class TestGetAqi:
         # Should return current hour's AQI
         assert aqi == 42
 
-    @patch('app.helpers.requests.get')
+    @patch('app.helpers._aqi_session')
     @patch('app.helpers.datetime')
-    def test_first_hour_in_array(self, mock_datetime, mock_get):
+    def test_first_hour_in_array(self, mock_datetime, mock_session):
+        mock_get = mock_session.return_value.get
         """Returns correct AQI when current hour is first in array."""
         mock_now = Mock()
         mock_now.strftime.return_value = "2025-12-24T00:00"
@@ -218,9 +220,10 @@ class TestGetAqi:
         aqi = get_aqi((50.0, -120.0))
         assert aqi == 25
 
-    @patch('app.helpers.requests.get')
+    @patch('app.helpers._aqi_session')
     @patch('app.helpers.datetime')
-    def test_last_hour_in_array(self, mock_datetime, mock_get):
+    def test_last_hour_in_array(self, mock_datetime, mock_session):
+        mock_get = mock_session.return_value.get
         """Returns correct AQI when current hour is last in array."""
         mock_now = Mock()
         mock_now.strftime.return_value = "2025-12-24T23:00"
@@ -239,9 +242,10 @@ class TestGetAqi:
         aqi = get_aqi((50.0, -120.0))
         assert aqi == 40
 
-    @patch('app.helpers.requests.get')
+    @patch('app.helpers._aqi_session')
     @patch('app.helpers.datetime')
-    def test_constructs_correct_url(self, mock_datetime, mock_get):
+    def test_constructs_correct_url(self, mock_datetime, mock_session):
+        mock_get = mock_session.return_value.get
         """API URL is constructed correctly with coordinates."""
         # Mock current time
         mock_now = Mock()
@@ -268,8 +272,9 @@ class TestGetAqi:
         assert "longitude=-123.01" in url
         assert "air-quality-api.open-meteo.com" in url
 
-    @patch('app.helpers.requests.get')
-    def test_network_error_returns_none(self, mock_get):
+    @patch('app.helpers._aqi_session')
+    def test_network_error_returns_none(self, mock_session):
+        mock_get = mock_session.return_value.get
         """Network errors return None gracefully."""
         mock_get.side_effect = RequestException("Network timeout")
 

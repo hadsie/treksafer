@@ -2,7 +2,7 @@
 
 import logging
 from datetime import date
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 
 from .config import get_config
 from .helpers import parse_message, get_aqi
@@ -223,7 +223,6 @@ def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dic
     Returns:
         str: Formatted avalanche forecast
     """
-    responses = Messages()
     avalanche = AvalancheReport(coords)
 
     if avalanche.out_of_range():

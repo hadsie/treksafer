@@ -4,7 +4,6 @@ import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-import pytest
 from app.filters import (STATUS_LEVELS, apply_filters,
                         apply_status_filter, apply_size_filter,
                         FILTER_HANDLERS)
@@ -142,17 +141,17 @@ class TestGenericFilterSystem:
             status_map = {}  # Not used in new implementation
 
         # Test active filter (level <= 1)
-        result = apply_status_filter(test_fires, 'active', MockDataFile())
+        result = apply_status_filter(test_fires, 'active')
         assert len(result) == 1
         assert result[0]['Fire'] == 'Fire1'
 
         # Test controlled filter (level <= 3)
-        result = apply_status_filter(test_fires, 'controlled', MockDataFile())
+        result = apply_status_filter(test_fires, 'controlled')
         assert len(result) == 2
         assert set(f['Fire'] for f in result) == {'Fire1', 'Fire2'}
 
         # Test all filter (no filtering)
-        result = apply_status_filter(test_fires, 'all', MockDataFile())
+        result = apply_status_filter(test_fires, 'all')
         assert len(result) == 3
 
     def test_apply_size_filter(self):
@@ -166,7 +165,7 @@ class TestGenericFilterSystem:
         ]
 
         # Test 1.0 hectare minimum
-        result = apply_size_filter(test_fires, 1.0, None)
+        result = apply_size_filter(test_fires, 1.0)
         assert len(result) == 2
         fire_names = [f['Fire'] for f in result]
         assert set(fire_names) == {'Fire1', 'Fire3'}
@@ -186,7 +185,7 @@ class TestGenericFilterSystem:
             {'Fire': 'OldBig', 'Size': 50.0, 'Discovered': now - timedelta(days=30)},
         ]
 
-        result = apply_size_filter(test_fires, 1.0, None, settings=MockSettings())
+        result = apply_size_filter(test_fires, 1.0, settings=MockSettings())
         assert set(f['Fire'] for f in result) == {'NewSmall', 'NewNoSize', 'OldBig'}
 
     def test_size_filter_without_settings_has_no_exemption(self):
@@ -196,7 +195,7 @@ class TestGenericFilterSystem:
              'Discovered': datetime.now(timezone.utc) - timedelta(days=1)},
         ]
 
-        result = apply_size_filter(test_fires, 1.0, None)
+        result = apply_size_filter(test_fires, 1.0)
         assert result == []
 
     def test_apply_filters_multiple(self):
@@ -209,18 +208,16 @@ class TestGenericFilterSystem:
             {'Fire': 'Fire4', 'StatusLevel': 1, 'Size': 3.0}    # Pass both
         ]
 
-        class MockDataFile:
-            status_map = {}  # Not used in new implementation
-
         class MockSettings:
             max_radius = 150
+            new_fire_age_days = 7
 
         filters = {
             'status': 'active',  # Level <= 1
             'size': 1.0,         # >= 1.0 hectares
         }
 
-        result = apply_filters(test_fires, filters, MockDataFile(), None, MockSettings())
+        result = apply_filters(test_fires, filters, MockSettings())
         assert len(result) == 2
         assert set(f['Fire'] for f in result) == {'Fire1', 'Fire4'}
 
@@ -259,7 +256,7 @@ class TestUnmappedStatusFailsLoud:
         display, level = _resolve_status('Some New Code', self._data_file())
         fire = {'Fire': 'F1', 'Status': display, 'StatusLevel': level}
 
-        kept = apply_status_filter([fire], 'controlled', self._data_file())
+        kept = apply_status_filter([fire], 'controlled')
         assert len(kept) == 1
 
 
@@ -302,7 +299,7 @@ class TestFireFilteringIntegration:
         class MockDataFile:
             status_map = {}  # Not used in new implementation
 
-        filtered_fires = apply_status_filter(test_fires, 'active', MockDataFile())
+        filtered_fires = apply_status_filter(test_fires, 'active')
 
         assert len(filtered_fires) == 1
         assert filtered_fires[0]['Fire'] == 'Fire1'
@@ -321,7 +318,7 @@ class TestFireFilteringIntegration:
         class MockDataFile:
             status_map = {}  # Not used in new implementation
 
-        filtered_fires = apply_status_filter(test_fires, 'controlled', MockDataFile())
+        filtered_fires = apply_status_filter(test_fires, 'controlled')
 
         assert len(filtered_fires) == 3
         fire_names = [f['Fire'] for f in filtered_fires]
@@ -340,7 +337,7 @@ class TestFireFilteringIntegration:
             status_map = {}
 
         # 'all' filter should return all fires
-        filtered_fires = apply_status_filter(test_fires, 'all', MockDataFile())
+        filtered_fires = apply_status_filter(test_fires, 'all')
         assert len(filtered_fires) == 4
 
     def _nearby_with_fires(self, fires):
@@ -388,7 +385,7 @@ class TestFireFilteringIntegration:
         class MockDataFile:
             status_map = {}
 
-        filtered_fires = apply_status_filter(test_fires, 'controlled', MockDataFile())
+        filtered_fires = apply_status_filter(test_fires, 'controlled')
 
         # Should only include fires with status levels <= 3
         # None is treated as float('inf') so it's filtered out

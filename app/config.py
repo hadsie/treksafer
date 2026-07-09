@@ -160,10 +160,7 @@ class Settings(BaseSettings):
     # Auto-detected requests default to fire data within this window (MM-DD, inclusive).
     fire_season_start: str = "05-15"
     fire_season_end: str = "08-15"
-    download_timeout: int = 600
     include_aqi: bool = True
-
-    request_cache_timeout: int = 14400  # 4 hours.
 
     # Avalanche forecast configuration
     avalanche: Optional[AvalancheConfig] = None

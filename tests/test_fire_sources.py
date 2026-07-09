@@ -7,7 +7,6 @@ import pytest
 import requests
 import responses
 
-from app.arcgis import _session  # noqa: F401 (patched by plain_session)
 from app.fires.sources import fetch_fires
 from app.config import RealtimeFireConfig
 
