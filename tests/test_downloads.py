@@ -149,26 +149,62 @@ class TestFetchABSchemaAdaptation:
             downloads.fetch_AB()
 
 
-class TestFetchUSReplicaValidation:
-    """fetch_US must surface a clear error instead of silently swallowing a
-    failed or incomplete async replica export (the old bare-except behaviour)."""
+class TestFetchUS:
+    """fetch_US saves the realtime WFIGS source as the recovery file, with
+    sizes converted to hectares and the shapefile column names config reads."""
 
-    def _resp(self, payload):
-        class FakeResponse:
-            def json(self_inner):
-                return payload
-        return FakeResponse()
+    def _points(self):
+        return gpd.GeoDataFrame(
+            {
+                'IncidentName': ['Snake River', 'Lava Spot'],
+                'IncidentShortDescription': ['10 Miles N from Jackson, WY', None],
+                'IncidentSize': [5000.0, None],
+                'PercentContained': [0.0, None],
+                'IncidentTypeCategory': ['WF', 'RX'],
+                'FireDiscoveryDateTime': [1782000000000, 1782000000000],
+            },
+            geometry=[Point(-110.0, 44.0), Point(-110.5, 44.2)],
+            crs='EPSG:4326',
+        )
 
-    def test_raises_when_no_status_url(self, monkeypatch):
-        monkeypatch.setattr(downloads.requests, 'post',
-                            lambda url, data=None: self._resp({}))
-        with pytest.raises(ValueError, match="no statusUrl"):
-            downloads.fetch_US()
+    def _perimeters(self):
+        # Covers Snake River only; Lava Spot must get a synthesized circle.
+        return gpd.GeoDataFrame(
+            {'attr_IrwinID': ['{AAA}']}, geometry=[_square(-110.0, 44.0)], crs='EPSG:4326',
+        )
 
-    def test_raises_when_export_not_completed(self, monkeypatch):
-        monkeypatch.setattr(downloads.requests, 'post',
-                            lambda url, data=None: self._resp({'statusUrl': 'http://x/job'}))
-        monkeypatch.setattr(downloads.requests, 'get',
-                            lambda url, params=None: self._resp({'status': 'Failed'}))
-        with pytest.raises(ValueError, match="did not complete"):
+    @pytest.fixture
+    def captured(self, monkeypatch):
+        def fake_fetch_layer(url, out_fields, where='1=1'):
+            return self._perimeters() if 'Perimeters' in url else self._points()
+
+        monkeypatch.setattr(downloads, 'fetch_layer', fake_fetch_layer)
+        result = {}
+        monkeypatch.setattr(downloads, 'write_shapefile',
+                            lambda location, gdf: result.update(location=location, gdf=gdf))
+        downloads.fetch_US()
+        return result
+
+    def test_writes_config_column_names(self, captured):
+        assert list(captured['gdf'].columns) == [
+            'FIRE_NAME', 'LOCATION', 'SIZE_HA', 'PCT_CONT',
+            'INCID_TYPE', 'DISCOVERED', 'geometry']
+
+    def test_converts_acres_to_hectares(self, captured):
+        gdf = captured['gdf']
+        snake = gdf[gdf['FIRE_NAME'] == 'Snake River'].iloc[0]
+        assert snake['SIZE_HA'] == 2023.43
+
+    def test_all_geometry_is_polygonal(self, captured):
+        assert set(captured['gdf'].geom_type) == {'Polygon'}
+
+    def test_writes_wgs84(self, captured):
+        assert captured['gdf'].crs.to_epsg() == 4326
+
+    def test_raises_when_no_fires_returned(self, monkeypatch):
+        empty = gpd.GeoDataFrame(columns=['IncidentName', 'geometry'],
+                                 geometry='geometry', crs='EPSG:4326')
+        monkeypatch.setattr(downloads, 'fetch_layer',
+                            lambda url, out_fields, where='1=1': empty)
+        with pytest.raises(ValueError, match="No fires"):
             downloads.fetch_US()

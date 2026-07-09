@@ -9,7 +9,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import geopandas as gpd
 import requests
 import tempfile
-import time
 import zipfile
 
 from datetime import date
@@ -18,57 +17,46 @@ from pathlib import Path
 from app.arcgis import fetch_layer
 from app.config import get_config
 from app.fire_sources import spatial_merge
-
-max_wait_time = 600
+from app.helpers import acres_to_hectares
 
 def fetch_US():
+    """Download the WFIGS layers and save the merged result.
+
+    Uses the exact source the realtime US path uses, so the saved file is a
+    recovery mode for when the API is unavailable at request time. Sizes are
+    converted to hectares up front so the synthesized circles and the saved
+    SIZE_HA column agree.
+    """
     settings = get_config()
-    today = date.today().strftime("%Y%m%d")
-
-    data_obj = None
-    for data_file in settings.data:
-        if data_file.location == 'US':
-            data_obj = data_file
-    if not data_obj:
-        print("No data settings found for US.")
+    data_obj = next((d for d in settings.data if d.location == 'US'), None)
+    if not data_obj or not data_obj.realtime:
+        print("No realtime US data settings found.")
         return
+    realtime = data_obj.realtime
 
-    filename = data_obj.filename.format(DATE=today)
-    target_dir = Path(settings.shapefiles) / data_obj.location
-    target_dir.mkdir(parents=True, exist_ok=True)
-    target_path = target_dir / filename
+    points = fetch_layer(realtime.points_url, list(realtime.mapping.values()),
+                         realtime.points_where)
+    if points.empty:
+        raise ValueError("No fires returned by the US points layer.")
+    perimeters = fetch_layer(realtime.perimeters_url, [realtime.perimeter_fire_field])
+    print(f"Loaded {len(points)} fires and {len(perimeters)} perimeters.")
 
-    # Found at https://data-nifc.opendata.arcgis.com/datasets/d1c32af3212341869b3c810f1a215824_0/explore
-    fire_perimeters_url = "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/createReplica"
+    points['SIZE_HA'] = points['IncidentSize'].astype(float).map(acres_to_hectares)
+    merged, used = spatial_merge(points, perimeters, 'SIZE_HA')
+    print(f"{len(perimeters) - len(used)} perimeters had no fire record.")
 
-    start_time = time.time()
-    response = requests.post(fire_perimeters_url,
-                             data = {
-                                 'f': 'json',
-                                 'layers': '0',
-                                 'layerQueries': '{"0":{"queryOption":"all"}}',
-                                 'returnAttachments': 'false',
-                                 'async': 'true',
-                                 'syncModel': 'none',
-                                 'targetType': 'client',
-                                 'syncDirection': 'bidirectional',
-                                 'dataFormat': 'filegdb',
-                             }
-                            )
-    status_url = response.json().get('statusUrl')
-    if not status_url:
-        raise ValueError(f"US replica request returned no statusUrl: {response.json()}")
-
-    job = requests.get(status_url, params={'f': 'json'}).json()
-    while job.get('status') in ('Pending', 'ExportingData') and time.time() - start_time < max_wait_time:
-        time.sleep(10)
-        job = requests.get(status_url, params={'f': 'json'}).json()
-
-    if job.get('status') != 'Completed' or not job.get('resultUrl'):
-        raise ValueError(f"US replica export did not complete: {job}")
-
-    file = requests.get(job['resultUrl'])
-    target_path.write_bytes(file.content)
+    # Shapefile field names are capped at 10 chars; use the names the US
+    # fallback mapping in config.yaml reads.
+    merged = merged.rename(columns={
+        'IncidentName': 'FIRE_NAME',
+        'IncidentShortDescription': 'LOCATION',
+        'PercentContained': 'PCT_CONT',
+        'IncidentTypeCategory': 'INCID_TYPE',
+        'FireDiscoveryDateTime': 'DISCOVERED',
+    })
+    merged = merged[['FIRE_NAME', 'LOCATION', 'SIZE_HA', 'PCT_CONT',
+                     'INCID_TYPE', 'DISCOVERED', 'geometry']]
+    write_shapefile("US", merged.to_crs(epsg=4326))
 
 def fetch_AB():
     fire_perimeters_url = 'https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/Wildfire_Perimeter_Active_(PROD)/FeatureServer/3/query?where=1=1&outFields=*&f=geojson'

@@ -62,6 +62,7 @@ data:
       enabled: ${TREKSAFER_AB_REALTIME:-true}
       points_url: https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/Active_Wildfires_(PROD)/FeatureServer/0/query
       perimeters_url: https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/Wildfire_Perimeter_Active_(PROD)/FeatureServer/3/query
+      join_field: LABEL
       perimeter_fire_field: FireNumber
       cache_timeout: 900
       mapping:
@@ -102,6 +103,7 @@ data:
       enabled: ${TREKSAFER_BC_REALTIME:-true}
       points_url: https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0/query
       perimeters_url: https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0/query
+      join_field: FIRE_NUMBER
       perimeter_fire_field: FIRE_NUMBER
       cache_timeout: 900
       mapping:
@@ -175,17 +177,44 @@ data:
       out: []
   - location: US
     filename: "WFIGS_Interagency_Perimeters_{DATE}.zip"
+    # Realtime NIFC WFIGS layers; the downloaded file below is the fallback
+    # when the API is unavailable. The layers share IrwinID (a GUID), so it
+    # is the join key while IncidentName is the displayed identifier. Status
+    # is derived via wfigs_status: prescribed burns show as "Prescribed",
+    # wildfires by percent contained, so status_map is unused.
+    realtime:
+      enabled: ${TREKSAFER_US_REALTIME:-true}
+      points_url: https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query
+      perimeters_url: https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query
+      join_field: IrwinID
+      perimeter_fire_field: attr_IrwinID
+      cache_timeout: 900
+      mapping:
+        Fire: IncidentName
+        Location: IncidentShortDescription
+        Size: IncidentSize
+        Status: PercentContained
+        Type: IncidentTypeCategory
+        Discovered: FireDiscoveryDateTime
+      transforms:
+        Size: acres_to_hectares
+        Status: wfigs_status
+        Discovered: epoch_ms
+      status_map:
+        active: []
+        managed: []
+        controlled: []
+        out: []
     mapping:
       fields:
-        Fire: attr_FireCode
-        Name: attr_IncidentName
-        Location: attr_IncidentShortDescription
-        Size: attr_IncidentSize
-        Status: attr_PercentContained
-      size_transform: acres_to_hectares
-      status_transform: percent_contained
-    # WFIGS has no stage-of-control field; status is derived from
-    # attr_PercentContained via status_transform, so status_map is unused.
+        Fire: FIRE_NAME
+        Location: LOCATION
+        Size: SIZE_HA
+        Status: PCT_CONT
+        Type: INCID_TYPE
+        Discovered: DISCOVERED
+      status_transform: wfigs_status
+      discovered_transform: epoch_ms
     status_map:
       active: []
       managed: []

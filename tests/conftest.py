@@ -15,6 +15,7 @@ def pytest_configure(config):
     os.environ.setdefault("TREKSAFER_BC_REALTIME", "false")
     os.environ.setdefault("TREKSAFER_AB_REALTIME", "false")
     os.environ.setdefault("TREKSAFER_CA_REALTIME", "false")
+    os.environ.setdefault("TREKSAFER_US_REALTIME", "false")
 
 @pytest.fixture
 def mock_bc_fire_api():

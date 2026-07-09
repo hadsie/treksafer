@@ -395,3 +395,36 @@ class TestFireFilteringIntegration:
         assert len(filtered_fires) == 2
         fire_names = [f['Fire'] for f in filtered_fires]
         assert set(fire_names) == {'Fire1', 'Fire3'}
+
+
+class TestWfigsStatus:
+    """The wfigs_status transform: prescribed burns vs percent-contained wildfires."""
+
+    def _data_file(self):
+        return DataFile(
+            location='US',
+            filename='x_{DATE}.zip',
+            mapping={'fields': {}, 'status_transform': 'wfigs_status'},
+            status_map={},
+        )
+
+    def test_prescribed_burn(self):
+        get_value = {'IncidentTypeCategory': 'RX'}.get
+        display, level = _resolve_status(None, self._data_file(), get_value)
+
+        assert display == 'Prescribed'
+        assert level == STATUS_LEVELS['controlled']
+
+    def test_prescribed_burn_from_fallback_column(self):
+        get_value = {'INCID_TYPE': 'RX'}.get
+        display, level = _resolve_status(None, self._data_file(), get_value)
+
+        assert display == 'Prescribed'
+        assert level == STATUS_LEVELS['controlled']
+
+    def test_wildfire_uses_percent_contained(self):
+        get_value = {'IncidentTypeCategory': 'WF'}.get
+        display, level = _resolve_status(60, self._data_file(), get_value)
+
+        assert display == '60% contained'
+        assert level == STATUS_LEVELS['active']

@@ -90,15 +90,23 @@ def spatial_merge(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
     return merged, used
 
 
+def _points_fields(config: RealtimeFireConfig) -> list[str]:
+    """Columns to request from the points layer: mapped fields plus the join field."""
+    fields = list(config.mapping.values())
+    if config.join_field and config.join_field not in fields:
+        fields.append(config.join_field)
+    return fields
+
+
 def _points_by_fire_number(fire_numbers, config: RealtimeFireConfig) -> Optional[gpd.GeoDataFrame]:
     """Fetch points-layer records for specific fire numbers.
 
     Returns None when the query fails.
     """
     quoted = "','".join(str(n).replace("'", "''") for n in fire_numbers)
-    where = f"({config.points_where}) AND {config.mapping['Fire']} IN ('{quoted}')"
+    where = f"({config.points_where}) AND {config.join_field} IN ('{quoted}')"
     try:
-        return query_layer(config.points_url, {}, list(config.mapping.values()),
+        return query_layer(config.points_url, {}, _points_fields(config),
                            config.cache_timeout, where)
     except (RequestException, ValueError) as e:
         logging.warning(
@@ -111,7 +119,7 @@ def _points_by_fire_number(fire_numbers, config: RealtimeFireConfig) -> Optional
 def _merge_by_field(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
                     config: RealtimeFireConfig) -> gpd.GeoDataFrame:
     """Join points and perimeters on a shared fire-number field."""
-    fire_key = config.mapping['Fire']
+    fire_key = config.join_field
     perimeters = perimeters.rename(columns={config.perimeter_fire_field: fire_key})
     perimeters = perimeters.drop_duplicates(subset=fire_key)
 
@@ -214,7 +222,7 @@ def fetch_fires(config: RealtimeFireConfig, coords: tuple,
     perimeter_fields = [config.perimeter_fire_field] if config.join == 'field' else []
     try:
         points = query_layer(config.points_url, spatial_filter,
-                             list(config.mapping.values()), config.cache_timeout,
+                             _points_fields(config), config.cache_timeout,
                              config.points_where)
         perimeters = query_layer(config.perimeters_url, spatial_filter,
                                  perimeter_fields, config.cache_timeout)

@@ -17,6 +17,7 @@ PERIMS_URL = 'https://example.test/perims/FeatureServer/0/query'
 CONFIG = RealtimeFireConfig(
     points_url=POINTS_URL,
     perimeters_url=PERIMS_URL,
+    join_field='FIRE_NUMBER',
     perimeter_fire_field='FIRE_NUMBER',
     mapping={
         'Fire': 'FIRE_NUMBER',
@@ -91,6 +92,25 @@ class TestFetchFires:
         geoms = dict(zip(gdf['FIRE_NUMBER'], gdf.geometry))
         assert geoms['K1'].geom_type == 'Polygon'
         assert geoms['K2'].geom_type == 'Point'
+
+    def test_join_field_joins_on_stable_key(self, mocked_responses):
+        """US-style layers join on a GUID while displaying a human-readable name."""
+        config = CONFIG.model_copy(update={
+            'join_field': 'IRWIN',
+            'perimeter_fire_field': 'attr_IRWIN',
+        })
+        point = point_feature('K1')
+        point['properties']['IRWIN'] = '{GUID-1}'
+        mocked_responses.get(POINTS_URL, json=collection([point]))
+        mocked_responses.get(PERIMS_URL, json=collection([
+            perimeter_feature('{GUID-1}', fire_field='attr_IRWIN'),
+        ]))
+
+        gdf = fetch_fires(config, COORDS, 50)
+
+        assert list(gdf['FIRE_NUMBER']) == ['K1']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+        assert 'IRWIN' in mocked_responses.calls[0].request.params['outFields']
 
     def test_perimeter_fire_field_joins_differently_named_layers(self, mocked_responses):
         """AB-style layers where the perimeter fire-number field differs from the points layer."""
@@ -383,3 +403,13 @@ class TestLiveEndpoint:
         assert str(gdf.crs) == 'EPSG:3857'
         assert 'Fire_Name' in gdf.columns
         assert not (gdf['Agency'].isin(['BC', 'AB'])).any()
+
+    def test_wfigs_layers_respond(self):
+        """The real NIFC WFIGS layers answer a query near Boise ID."""
+        from app.config import get_config
+        us = next(d for d in get_config().data if d.location == 'US')
+        gdf = fetch_fires(us.realtime, (43.6, -116.2), 150)
+
+        assert gdf is not None
+        assert str(gdf.crs) == 'EPSG:3857'
+        assert 'IncidentName' in gdf.columns

@@ -25,6 +25,7 @@ class TestRealtimeFireConfig:
         config = RealtimeFireConfig(
             points_url="https://example.test/points/query",
             perimeters_url="https://example.test/perims/query",
+            join_field="FIRE_NUMBER",
             perimeter_fire_field="FIRE_NUMBER",
             mapping={"Fire": "FIRE_NUMBER"},
             status_map={"active": ["Out of Control"]},
@@ -37,6 +38,7 @@ class TestRealtimeFireConfig:
             RealtimeFireConfig(
                 points_url="https://example.test/points/query",
                 perimeters_url="https://example.test/perims/query",
+                join_field="FIRE_NUMBER",
                 perimeter_fire_field="FIRE_NUMBER",
                 mapping={"Name": "INCIDENT_NAME"},
                 status_map={"active": ["Out of Control"]},
@@ -47,11 +49,22 @@ class TestRealtimeFireConfig:
             RealtimeFireConfig(
                 points_url="https://example.test/points/query",
                 perimeters_url="https://example.test/perims/query",
+                join_field="FIRE_NUMBER",
                 mapping={"Fire": "FIRE_NUMBER"},
                 status_map={"active": ["Out of Control"]},
             )
 
-    def test_spatial_join_needs_no_perimeter_fire_field(self):
+    def test_field_join_requires_join_field(self):
+        with pytest.raises(ValidationError, match="join_field"):
+            RealtimeFireConfig(
+                points_url="https://example.test/points/query",
+                perimeters_url="https://example.test/perims/query",
+                perimeter_fire_field="FIRE_NUMBER",
+                mapping={"Fire": "FIRE_NUMBER"},
+                status_map={"active": ["Out of Control"]},
+            )
+
+    def test_spatial_join_needs_no_join_fields(self):
         config = RealtimeFireConfig(
             points_url="https://example.test/points/query",
             perimeters_url="https://example.test/perims/query",

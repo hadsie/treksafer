@@ -103,6 +103,10 @@ class RealtimeFireConfig(BaseModel):
     # layer's (e.g. Alberta uses FireNumber vs the points layer's LABEL).
     # Required for (and only used by) the 'field' join.
     perimeter_fire_field: Optional[str] = None
+    # Points-layer field to join on; may differ from the displayed Fire
+    # identifier (e.g. WFIGS joins on the IrwinID GUID). Required for (and
+    # only used by) the 'field' join.
+    join_field: Optional[str] = None
     # Attribute filter applied to points-layer queries, e.g. to exclude
     # agencies covered by a dedicated source.
     points_where: str = "1=1"
@@ -114,8 +118,11 @@ class RealtimeFireConfig(BaseModel):
                 "realtime mapping must include 'Fire'; it identifies each "
                 "fire from the points layer"
             )
-        if self.join == "field" and not self.perimeter_fire_field:
-            raise ValueError("the 'field' join requires perimeter_fire_field")
+        if self.join == "field":
+            missing = [name for name in ("perimeter_fire_field", "join_field")
+                       if not getattr(self, name)]
+            if missing:
+                raise ValueError(f"the 'field' join requires {' and '.join(missing)}")
         return self
 
 
