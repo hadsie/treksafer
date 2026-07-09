@@ -8,7 +8,8 @@ import pytest
 from app.filters import (STATUS_LEVELS, apply_filters,
                         apply_status_filter, apply_size_filter,
                         FILTER_HANDLERS)
-from app.fires import FindFires, _resolve_status
+from app.fires import FindFires
+from app.fires.find import _resolve_status
 from app.config import DataFile
 from app.helpers import parse_message
 from app.config import get_config
@@ -346,8 +347,7 @@ class TestFireFilteringIntegration:
         """Run FindFires.nearby() with search()/shapefile I/O stubbed out."""
         find = FindFires((49.25, -123.1))
         find.sources = ['BC']
-        with patch.object(FindFires, 'sources_map', return_value={'BC': 'dummy'}), \
-             patch.object(FindFires, '_load_shapefile', return_value=object()), \
+        with patch.object(FindFires, '_load_source', return_value=(object(), object())), \
              patch.object(FindFires, 'search', return_value=fires):
             return find.nearby()
 

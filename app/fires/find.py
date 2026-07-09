@@ -11,32 +11,39 @@ Usage:
 
 Design notes
 ------------
-* Data sources (shapefiles + optional REST APIs) are declared in config/<env>.yaml.
-* The heavy geopandas look-ups are memoised with `@lru_cache`, so repeated
-  calls for the same coords are cheap.
+* Fire sources (realtime ArcGIS layers) are declared in config.yaml.
+* Every successful fetch is recorded to the fire database, which is also
+  the fallback when a source's API is unavailable.
 """
 from __future__ import annotations
 
 import logging
 import math
-import re
-import zipfile
+import sqlite3
+from datetime import datetime, timezone
 from functools import lru_cache
-from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 import geopandas as gpd
-import requests
+import pytz
 from shapely.ops import nearest_points
 
-from .config import get_config, DataFile
-from .fire_sources import fetch_fires
-from .helpers import acres_to_hectares, compass_direction, coords_to_point_meters, epoch_ms_to_datetime
-from .filters import apply_filters, STATUS_LEVELS
+from . import db as firedb
+from ..config import get_config, DataFile, RealtimeFireConfig
+from .sources import fetch_fires
+from ..helpers import acres_to_hectares, compass_direction, coords_to_point_meters, epoch_ms_to_datetime
+from ..filters import apply_filters, STATUS_LEVELS
+
+
+def _iso_datetime(value):
+    """Parse an ISO8601 string (as stored in the fire database) to a datetime."""
+    return datetime.fromisoformat(value) if value else None
+
 
 TRANSFORMS = {
     "acres_to_hectares": acres_to_hectares,
     "epoch_ms": epoch_ms_to_datetime,
+    "iso_datetime": _iso_datetime,
 }
 
 def _apply_transform(data_key, raw_value, mapping):
@@ -96,8 +103,14 @@ def _status_from_wfigs(value, get_value):
     return _status_from_percent_contained(value)
 
 
+def _status_from_stored(value, get_value):
+    """Database rows carry the already-resolved status and level."""
+    return value, get_value('StatusLevel')
+
+
 STATUS_TRANSFORMS = {
     "wfigs_status": _status_from_wfigs,
+    "stored": _status_from_stored,
 }
 
 
@@ -130,22 +143,6 @@ def _resolve_status(raw_value, data_file, get_value_fn=None):
     return raw_value, level
 
 
-def _gdal_path(filepath):
-    """Return a GDAL-readable path for a fire source file.
-
-    FileGDB sources arrive as a .zip wrapping a .gdb directory whose name varies
-    per export, so locate the .gdb and build a /vsizip/ path. Zipped shapefiles
-    are read directly.
-    """
-    if filepath.endswith(".zip"):
-        with zipfile.ZipFile(filepath) as archive:
-            entry = next((n for n in archive.namelist() if ".gdb/" in n), None)
-        if entry:
-            gdb_dir = entry[: entry.index(".gdb") + len(".gdb")]
-            return f"/vsizip/{filepath}/{gdb_dir}"
-    return filepath
-
-
 def _process_fields(field_mapping, data_file, get_value_fn):
     """
     Process a set of fields and return processed values.
@@ -170,44 +167,91 @@ def _process_fields(field_mapping, data_file, get_value_fn):
 
 def _normalize_row(data_file, row, location, closest_point, distance) -> dict:
     """
-    Normalizes a row of fire data from a shapefile according to the supplied
-    data_file.mapping dict.
+    Normalizes a row of fire data according to the supplied data_file.mapping.
     """
     data = {
         "Distance": distance,
         "Direction": compass_direction(location, closest_point),
     }
-
-    # Process shapefile fields
     data.update(_process_fields(
         field_mapping=data_file.mapping.get("fields", {}),
         data_file=data_file,
         get_value_fn=lambda key: getattr(row, key, None),
     ))
 
-    # Optionally call the API for additional attributes if available.
-    api_config = data_file.mapping.get("api")
-    if api_config:
-        try:
-            # Build the API requires URL, and replace the variables with row field data.
-            field_names = re.findall(r"{(\w+)}", api_config["url"])
-            row_dict = {field: getattr(row, field, None) for field in field_names}
-            url = api_config["url"].format(**row_dict)
-            # Note: These requests are cached for 4 hours (unless set otherwise in the config yaml)
-            response = requests.get(url, timeout=30).json()
-
-            data.update(_process_fields(
-                field_mapping=api_config["fields"],
-                data_file=data_file,
-                get_value_fn=lambda key: response.get(key),
-            ))
-        except (requests.RequestException, KeyError, ValueError) as e:
-            logging.warning(f"Failed to fetch API data for fire {data.get('Fire', 'unknown')}: {e}")
-
     # Strip None values
     data = {k: v for k, v in data.items() if v is not None}
 
     return data
+
+
+def _realtime_data_file(location: str, realtime: RealtimeFireConfig) -> DataFile:
+    """Build the DataFile that normalizes a source's realtime columns."""
+    mapping = {'fields': realtime.mapping}
+    mapping.update({
+        f'{key.lower()}_transform': name
+        for key, name in realtime.transforms.items()
+    })
+    return DataFile(location=location, mapping=mapping, status_map=realtime.status_map)
+
+
+# Database rows are stored pre-normalized, so every source shares this
+# identity mapping on the fallback read path.
+_DB_DATA_FILE = DataFile(
+    location='DB',
+    mapping={
+        'fields': {key: key for key in
+                   ('Fire', 'Name', 'Location', 'Type', 'Size', 'Status', 'Discovered')},
+        'status_transform': 'stored',
+        'discovered_transform': 'iso_datetime',
+    },
+    status_map={},
+)
+
+
+def _parse_source_timestamp(value, tz):
+    """Parse a source's per-fire update timestamp to an aware UTC datetime.
+
+    ArcGIS date fields arrive as epoch milliseconds; some sources publish
+    zoneless local strings instead, parsed in the source's configured IANA
+    zone (a zoneless string without a configured zone fails loudly).
+    """
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return None
+    if isinstance(value, (int, float)):
+        return epoch_ms_to_datetime(value)
+    if tz is None:
+        raise ValueError(f"Zoneless timestamp {value!r} needs a configured source timezone")
+    naive = datetime.strptime(str(value).strip(), '%Y/%m/%d %H:%M:%S')
+    return tz.localize(naive).astimezone(timezone.utc)
+
+
+def normalize_for_db(fires: gpd.GeoDataFrame, location: str,
+                     realtime: RealtimeFireConfig) -> gpd.GeoDataFrame:
+    """Normalize a merged realtime frame into fire database rows.
+
+    Applies the source's field mapping and transforms (the same ones the
+    search path uses), derives the season-stable fire_key from key_fields,
+    and parses the source's update timestamp. Returned in EPSG:4326 for
+    storage.
+    """
+    data_file = _realtime_data_file(location, realtime)
+    tz = pytz.timezone(realtime.timezone) if realtime.timezone else None
+    records = []
+    for _, row in fires.iterrows():
+        data = _process_fields(
+            field_mapping=realtime.mapping,
+            data_file=data_file,
+            get_value_fn=lambda key: getattr(row, key, None),
+        )
+        data['fire_key'] = '-'.join(str(getattr(row, field)) for field in realtime.key_fields)
+        data['Updated'] = (_parse_source_timestamp(getattr(row, realtime.updated_field, None), tz)
+                           if realtime.updated_field else None)
+        data['latitude'] = getattr(row, 'latitude', None)
+        data['longitude'] = getattr(row, 'longitude', None)
+        records.append(data)
+    gdf = gpd.GeoDataFrame(records, geometry=list(fires.geometry), crs=fires.crs)
+    return gdf.to_crs(epsg=4326)
 
 
 class FindFires:
@@ -232,6 +276,10 @@ class FindFires:
         # so small and not-yet-sized fires are included.
         if filters.get('status') == 'all' and 'size' not in filters:
             del self.filters['size']
+
+        # Sources that produced no data at all (API down, nothing stored),
+        # as opposed to sources with zero nearby fires.
+        self.unavailable_sources: list[str] = []
 
     def out_of_range(self) -> bool:
         """
@@ -270,43 +318,65 @@ class FindFires:
         return apply_filters(fires, filters, data_file, self.location, self.settings)
 
 
-    @staticmethod
-    @lru_cache(maxsize=16)
-    def _load_shapefile(filepath):
-        """Load and cache a fire source (zipped shapefile or FileGDB)."""
-        return gpd.read_file(_gdal_path(filepath)).to_crs(epsg=3857)
+    def _record(self, location: str, fires: gpd.GeoDataFrame, realtime: RealtimeFireConfig):
+        """Record fetched fires to the database.
 
-    def _load_source(self, data_file: DataFile, sources_map: Dict) -> tuple[gpd.GeoDataFrame | None, DataFile]:
+        Storage failures must never break the user's request; they are
+        logged and the response proceeds from the fetched data.
+        """
+        try:
+            normalized = normalize_for_db(fires, location, realtime)
+            conn = firedb.connect(self.settings.database)
+            try:
+                firedb.record_fires(conn, location, normalized, datetime.now(timezone.utc))
+            finally:
+                conn.close()
+        except (sqlite3.Error, OSError, ValueError, KeyError, AttributeError) as e:
+            logging.error(f"Failed to record {location} fires to the database: {e}")
+
+    def _load_stored(self, location: str) -> Optional[gpd.GeoDataFrame]:
+        """Serve a source from the database, at any age, logging staleness.
+
+        Returns None (and marks the source unavailable) when nothing is
+        stored: an empty database must produce "data unavailable", never a
+        confident "no fires".
+        """
+        fires = None
+        try:
+            conn = firedb.connect(self.settings.database)
+            try:
+                fires = firedb.load_source(conn, location)
+                fetched = firedb.latest_fetch(conn, location)
+            finally:
+                conn.close()
+        except sqlite3.Error as e:
+            logging.error(f"Fire database read failed for {location}: {e}")
+        if fires is None:
+            logging.error(f"No stored fire data for {location}; source unavailable.")
+            self.unavailable_sources.append(location)
+            return None
+        logging.warning(f"Serving {location} fires from the database (fetched {fetched}).")
+        return fires
+
+    def _load_source(self, data_file: DataFile) -> tuple[gpd.GeoDataFrame | None, DataFile]:
         """Return (fires GeoDataFrame, effective DataFile) for a source.
 
-        Realtime sources are queried live and use the realtime field mapping;
-        when the API is unavailable (or realtime is disabled) the newest
-        downloaded file is used with the source's regular mapping.
+        Realtime sources are queried live, recorded to the database, and
+        use the realtime field mapping; when the API is unavailable (or
+        realtime is disabled) the latest stored data is served with the
+        shared database mapping.
         """
         realtime = data_file.realtime
         if realtime and realtime.enabled:
             radius_km = min(self.filters['distance'], self.settings.max_radius)
             fires = fetch_fires(realtime, self.coords, radius_km)
             if fires is not None:
-                mapping = {'fields': realtime.mapping}
-                mapping.update({
-                    f'{key.lower()}_transform': name
-                    for key, name in realtime.transforms.items()
-                })
-                return fires, DataFile(
-                    location=data_file.location,
-                    filename=data_file.filename,
-                    mapping=mapping,
-                    status_map=realtime.status_map,
-                )
+                self._record(data_file.location, fires, realtime)
+                return fires, _realtime_data_file(data_file.location, realtime)
             logging.warning(
-                f"Realtime {data_file.location} fire data unavailable; using downloaded data."
+                f"Realtime {data_file.location} fire data unavailable; using stored data."
             )
-
-        filepath = sources_map.get(data_file.location)
-        if filepath is None:
-            return None, data_file
-        return self._load_shapefile(str(filepath)), data_file
+        return self._load_stored(data_file.location), _DB_DATA_FILE
 
     def nearby(self) -> list[Dict[str, Any]]:
         """Find all fires within distance limit.
@@ -315,13 +385,11 @@ class FindFires:
             List of normalized fire data dictionaries
         """
         fires = []
-        sources_map = self.sources_map()
-
         for source in self.sources:
             data_file = next((df for df in self.settings.data if df.location == source), None)
             if not data_file:
                 continue
-            fire_perimeters, data_file = self._load_source(data_file, sources_map)
+            fire_perimeters, data_file = self._load_source(data_file)
             if fire_perimeters is None:
                 continue
             fires += self.search(fire_perimeters, self.filters, data_file)
@@ -330,20 +398,6 @@ class FindFires:
         fires.sort(key=lambda f: (f.get('StatusLevel', float('inf')), f['Distance']))
 
         return fires
-
-    def sources_map(self):
-        """
-        Returns a dictionary mapping data source locations to their respective
-        filenames. Grabs the most recent shapefile in the folder ordered by date.
-        """
-        sources_map = {}
-        for data_file in self.settings.data:
-            filename = data_file.filename.replace(r'{DATE}', r'*')
-            target_dir = Path(self.settings.shapefiles) / data_file.location
-            matches = sorted(target_dir.glob(filename), reverse=True)
-            if matches:
-                sources_map[data_file.location] = matches[0]
-        return sources_map
 
     @lru_cache
     def _data_sources(self):

@@ -8,7 +8,7 @@ import requests
 import responses
 
 from app.arcgis import _session  # noqa: F401 (patched by plain_session)
-from app.fire_sources import fetch_fires
+from app.fires.sources import fetch_fires
 from app.config import RealtimeFireConfig
 
 POINTS_URL = 'https://example.test/points/FeatureServer/0/query'
@@ -19,6 +19,7 @@ CONFIG = RealtimeFireConfig(
     perimeters_url=PERIMS_URL,
     join_field='FIRE_NUMBER',
     perimeter_fire_field='FIRE_NUMBER',
+    key_fields=['FIRE_NUMBER'],
     mapping={
         'Fire': 'FIRE_NUMBER',
         'Name': 'INCIDENT_NAME',
@@ -245,6 +246,7 @@ SPATIAL_CONFIG = RealtimeFireConfig(
     points_url=POINTS_URL,
     perimeters_url=PERIMS_URL,
     join='spatial',
+    key_fields=['Fire_Name'],
     points_where="Agency NOT IN ('BC','AB')",
     mapping={
         'Fire': 'Fire_Name',

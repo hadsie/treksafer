@@ -8,7 +8,7 @@ from app.config import get_config
 class TestFireLocationBasics:
     """Basic fire finding at known locations."""
 
-    def test_lillooet_bc(self, mock_bc_fire_api):
+    def test_lillooet_bc(self):
         """Test Lillooet, BC - known fire location."""
         coords = (50.7021714,-121.9725246)
         ff = FindFires(coords, filters={'status': 'all', 'distance': 20})
@@ -18,7 +18,7 @@ class TestFireLocationBasics:
         assert isinstance(fires[0]['Status'], str), "Status should be a string, not a numeric level"
         assert ff.out_of_range() is False
 
-    def test_manning_park_bc(self, mock_bc_fire_api):
+    def test_manning_park_bc(self):
         """Test Manning Park, BC - known fire location. 'all' includes the sub-hectare fire."""
         coords = (49.064646, -120.7919022)
         ff = FindFires(coords, filters={'status': 'all', 'distance': 50})
@@ -31,7 +31,7 @@ class TestFireLocationBasics:
 class TestBorderCases:
     """Test coordinates near provincial/national borders."""
 
-    def test_jasper_bc_border(self, mock_bc_fire_api):
+    def test_jasper_bc_border(self):
         """Test BC/AB border west of Jasper - should find fires from both provinces."""
         # Coordinates on BC border west of Jasper
         coords = (53.012807, -118.649372)
@@ -55,7 +55,7 @@ class TestBorderCases:
 class TestOverlappingPerimeters:
     """Test locations with overlapping fire perimeters."""
 
-    def test_overlapping_fires(self, mock_bc_fire_api):
+    def test_overlapping_fires(self):
         """Test coordinates in overlapping fire perimeters."""
         coords = (58.164245, -121.038954)
         # Distance = 0 as the coordinates are directly in a perimeter.
@@ -72,7 +72,7 @@ class TestOverlappingPerimeters:
 class TestFilterBehavior:
     """Test filtering behavior at different locations."""
 
-    def test_active_filter_reduces_results(self, mock_bc_fire_api):
+    def test_active_filter_reduces_results(self):
         """Test that active filter reduces or maintains result count."""
         # In manning park. 3 fires, 1 holding, 1 out of control, 1 out.
         coords = (49.078353, -121.012207)
@@ -86,7 +86,7 @@ class TestFilterBehavior:
         # Active filter should never increase results
         assert len(active_fires) < len(all_fires)
 
-    def test_distance_filter_reduces_results(self, mock_bc_fire_api):
+    def test_distance_filter_reduces_results(self):
         """Test that smaller distance reduces or maintains results."""
         coords = (49.064646, -120.7919022)
 
@@ -99,7 +99,7 @@ class TestFilterBehavior:
         # Smaller radius should never increase results
         assert len(fires_25km) < len(fires_50km)
 
-    def test_combined_filters(self, mock_bc_fire_api):
+    def test_combined_filters(self):
         """Test combining multiple filters."""
         coords = (51.398720, -116.491640)
 
@@ -112,7 +112,7 @@ class TestFilterBehavior:
 
         assert len(filtered_fires) < len(all_fires)
 
-    def test_max_radius(self, mock_bc_fire_api):
+    def test_max_radius(self):
         """Test that max_radius is enforced."""
         coords = (49.078353, -121.012207)
         config = get_config()
@@ -164,7 +164,7 @@ class TestEdgeCases:
 class TestDataSources:
     """Test that correct data sources are selected."""
 
-    def test_bc_coordinates_use_bc_data(self, mock_bc_fire_api):
+    def test_bc_coordinates_use_bc_data(self):
         """Test that BC coordinates select BC data source."""
         coords = (49.064646, -120.7919022)  # Manning Park, BC
         ff = FindFires(coords)

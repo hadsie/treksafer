@@ -10,9 +10,12 @@ TREKSAFER_SW_NUMBER=[REPLACE WITH YOUR SIGNALWIRE PHONE NUMBER]
 # Messaging context configured on your SignalWire number. Defaults to 'treksafer'.
 # TREKSAFER_SW_CONTEXT=treksafer
 
-# Realtime fire data from the provincial ArcGIS APIs. Default to true; set to
-# false to serve fires from downloaded shapefiles only.
+# Realtime fire data from the provincial/national ArcGIS APIs. Default to
+# true; set to false to serve fires from the fire database only.
 # TREKSAFER_BC_REALTIME=true
 # TREKSAFER_AB_REALTIME=true
 # TREKSAFER_CA_REALTIME=true
 # TREKSAFER_US_REALTIME=true
+
+# Fire database path (snapshot history + fallback for API outages).
+# TREKSAFER_DATABASE=data/fires.db

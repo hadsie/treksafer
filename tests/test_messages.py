@@ -210,6 +210,38 @@ class TestFireMessageWithoutSize:
         assert 'ha' not in message
 
 
+class TestDataUnavailable:
+    """An unavailable source must never read as 'no fires reported'."""
+
+    @patch("app.messages.get_aqi", return_value=None)
+    @patch("app.messages.FindFires")
+    def test_unavailable_source_with_no_fires(self, mock_ff_cls, mock_aqi):
+        ff = mock_ff_cls.return_value
+        ff.out_of_range.return_value = False
+        ff.nearby.return_value = []
+        ff.unavailable_sources = ['BC']
+
+        from app.messages import handle_fire_request
+        message = handle_fire_request((50.0, -122.0), {})
+
+        assert 'temporarily unavailable' in message
+        assert 'No fires reported' not in message
+
+    @patch("app.messages.get_aqi", return_value=None)
+    @patch("app.messages.FindFires")
+    def test_all_sources_available_with_no_fires(self, mock_ff_cls, mock_aqi):
+        ff = mock_ff_cls.return_value
+        ff.out_of_range.return_value = False
+        ff.nearby.return_value = []
+        ff.unavailable_sources = []
+        ff.filters = {'distance': 50}
+
+        from app.messages import handle_fire_request
+        message = handle_fire_request((50.0, -122.0), {})
+
+        assert 'No fires reported' in message
+
+
 class TestAutoDetectRouting:
     """Bare coordinates auto-detect between avalanche and fire."""
 

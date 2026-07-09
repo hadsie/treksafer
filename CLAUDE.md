@@ -13,7 +13,7 @@ python -m app                # starts CLI transport on localhost:8888
 
 Connect via `python scripts/cli_connect.py` for local testing.
 
-Download fire perimeter data: `python scripts/downloads.py`
+Refresh the fire database: `python scripts/downloads.py` (runs daily via cron in production)
 
 ## Architecture
 
@@ -27,7 +27,8 @@ Download fire perimeter data: `python scripts/downloads.py`
 ### Key modules
 
 - `app/config.py` -- Pydantic settings loaded from `config.yaml` + `.env.<ENV>` + env vars
-- `app/fires.py` -- `FindFires` loads shapefiles, searches by radius, calls BC API for enrichment
+- `app/fires/` -- Wildfire package: `find.py` (FindFires search + normalization), `sources.py` (realtime fetching and point/perimeter merging), `db.py` (SQLite fire database: snapshot history + API-outage fallback)
+- `app/arcgis.py` -- ArcGIS FeatureServer transport client
 - `app/filters.py` -- Generic status/size filtering
 - `app/helpers.py` -- Coord parsing (decimal, hemisphere, map URLs), AQI, compass bearing
 - `app/messages.py` -- Response formatting with auto-downsize for SMS (160 char limit)
@@ -36,9 +37,9 @@ Download fire perimeter data: `python scripts/downloads.py`
 
 ### Data sources
 
-Fire perimeter shapefiles in `shapefiles/{BC,AB,CA,US}/`. Each source has field mappings and status maps in `config.yaml` under `data:`.
+All four fire sources (BC, AB, CA, US) are pairs of realtime ArcGIS layers (incident points + perimeters), configured with field mappings and status maps in `config.yaml` under `data:`. BC/AB/US join their layers on a fire-number field; CA's national hotspot perimeters carry no fire ID, so points join spatially, with fires that have no perimeter getting a circle of their reported size.
 
-BC, AB, and Canada-wide (CA) fires are queried in realtime from provincial/national ArcGIS APIs (`app/arcgis.py`), falling back to the downloaded file when an API is unavailable. BC/AB join their points and perimeters layers on a fire-number field; CA's national hotspot perimeters carry no fire ID, so points join spatially, with fires that have no perimeter getting a circle of their reported size. The CA daily download saves the same source (same merge) as its recovery file. The BC fallback path enriches fires via a REST API call (cached 4h). Set `TREKSAFER_{BC,AB,CA}_REALTIME=false` to disable realtime per source.
+Every successful fetch is recorded to the fire database (`data/fires.db`): fire identities plus a snapshot history gated on the source's own update signal (per-fire timestamp where published, field comparison otherwise). When an API is unavailable, the source serves from the database at any age (logged); a source with no stored data returns "data unavailable", never "no fires". Set `TREKSAFER_{BC,AB,CA,US}_REALTIME=false` to disable realtime per source.
 
 Avalanche providers are configured in `config.yaml` under `avalanche.providers:` and selected dynamically based on location.
 
@@ -46,10 +47,8 @@ Boundary files in `boundaries/` determine which data sources are nearby.
 
 ### Caching
 
-- `requests_cache` for the realtime ArcGIS fire queries (SQLite in `cache/`, 15m TTL)
-- `requests_cache` for BC fire API (SQLite in `cache/`, 4h TTL)
+- `requests_cache` for the realtime ArcGIS fire queries (SQLite in `cache/`, 15m TTL); cache misses are what trigger database snapshot writes
 - Each avalanche provider has its own `CachedSession` (1h default)
-- Shapefile loading is memoized via `@lru_cache`
 
 ## Dependencies
 
@@ -66,9 +65,9 @@ pytest -m smoke                  # end-to-end with running transports
 pytest -m live                   # hits real APIs
 ```
 
-Tests live in `tests/` mirroring the source tree. Test data (GeoJSON, JSON samples, compiled shapefiles) in `tests/data/` and `tests/shapefiles/`.
+Tests live in `tests/` mirroring the source tree. Test data (GeoJSON, JSON samples) in `tests/data/`.
 
-The `conftest.py` sets `TREKSAFER_ENV=test` and provides a `mock_bc_fire_api` fixture using the `responses` library.
+The `conftest.py` sets `TREKSAFER_ENV=test`, disables realtime, and builds a fixture fire database from the GeoJSONs in `tests/data/`. HTTP is mocked with the `responses` library.
 
 ## Configuration
 

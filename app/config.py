@@ -107,6 +107,17 @@ class RealtimeFireConfig(BaseModel):
     # identifier (e.g. WFIGS joins on the IrwinID GUID). Required for (and
     # only used by) the 'field' join.
     join_field: Optional[str] = None
+    # Points-layer fields whose combined values identify a fire across
+    # seasons in the database (BC fire numbers recycle annually, so BC uses
+    # [FIRE_YEAR, FIRE_NUMBER]).
+    key_fields: List[str]
+    # Points-layer field holding the source's per-fire update timestamp,
+    # where one exists; it gates snapshot writes. Sources without one gate
+    # on field comparison instead.
+    updated_field: Optional[str] = None
+    # IANA zone for parsing zoneless local timestamp strings (e.g.
+    # America/Edmonton for AB's FIRE_STATUS_DATE).
+    timezone: Optional[str] = None
     # Attribute filter applied to points-layer queries, e.g. to exclude
     # agencies covered by a dedicated source.
     points_where: str = "1=1"
@@ -128,9 +139,8 @@ class RealtimeFireConfig(BaseModel):
 
 class DataFile(BaseModel):
     location: str
-    filename: str
-    mapping: Dict[str, Any]
-    status_map: Dict[str, List[str]]
+    mapping: Dict[str, Any] = {}
+    status_map: Dict[str, List[str]] = {}
     realtime: Optional[RealtimeFireConfig] = None
 
 
@@ -143,6 +153,8 @@ class Settings(BaseSettings):
     max_radius: int = 150
     fire_status: str = "controlled"
     fire_size: int = 1
+    # Fire database: snapshot history and the fallback for API outages.
+    database: str = "data/fires.db"
     # Fires discovered within this many days bypass the minimum size filter.
     new_fire_age_days: int = 7
     # Auto-detected requests default to fire data within this window (MM-DD, inclusive).
@@ -157,7 +169,6 @@ class Settings(BaseSettings):
     avalanche: Optional[AvalancheConfig] = None
     avalanche_distance_buffer: int = 5  # Distance buffer for avalanche provider selection (km)
 
-    shapefiles: str = "shapefiles"
     data: List[DataFile] = []
 
     transports: List[TransportConfig] = []

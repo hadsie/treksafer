@@ -7,6 +7,7 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import Point
 
+from app.fires import db as firedb
 from app.config import get_config, RealtimeFireConfig
 from app.fires import FindFires
 
@@ -18,6 +19,7 @@ REALTIME = RealtimeFireConfig(
     perimeters_url='https://example.test/perims/query',
     join_field='FIRE_NUMBER',
     perimeter_fire_field='FIRE_NUMBER',
+    key_fields=['FIRE_NUMBER'],
     mapping={
         'Fire': 'FIRE_NUMBER',
         'Name': 'INCIDENT_NAME',
@@ -36,12 +38,18 @@ REALTIME = RealtimeFireConfig(
 )
 
 
-def realtime_settings(enabled=True):
-    """Settings copy where BC is the only source and has realtime enabled."""
+def realtime_settings(enabled=True, database=':memory:'):
+    """Settings copy where BC is the only source and has realtime enabled.
+
+    Recording goes to a throwaway in-memory database by default so tests
+    never write into the session fixture database.
+    """
     settings = get_config().model_copy(deep=True)
     bc = next(df for df in settings.data if df.location == 'BC')
     bc.realtime = REALTIME.model_copy(update={'enabled': enabled})
     settings.data = [bc]
+    if database is not None:
+        settings.database = database
     return settings
 
 
@@ -63,49 +71,79 @@ def realtime_gdf(lat, lon, status='Out of Control', size=25.0, ignition_date=Non
 class TestLoadSource:
     def test_realtime_success_uses_realtime_mapping(self):
         gdf = realtime_gdf(*BC_COORDS)
-        with patch('app.fires.get_config', return_value=realtime_settings()), \
-             patch('app.fires.fetch_fires', return_value=gdf) as mock_fetch:
+        with patch('app.fires.find.get_config', return_value=realtime_settings()), \
+             patch('app.fires.find.fetch_fires', return_value=gdf) as mock_fetch:
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 20})
             data_file = ff.settings.data[0]
-            fires_gdf, effective = ff._load_source(data_file, {})
+            fires_gdf, effective = ff._load_source(data_file)
 
         assert fires_gdf is gdf
         assert effective.mapping == {'fields': REALTIME.mapping, 'discovered_transform': 'epoch_ms'}
         assert effective.status_map == REALTIME.status_map
         mock_fetch.assert_called_once_with(data_file.realtime, BC_COORDS, 20)
 
-    def test_realtime_failure_falls_back_to_downloaded_file(self, caplog):
-        with patch('app.fires.get_config', return_value=realtime_settings()), \
-             patch('app.fires.fetch_fires', return_value=None):
+    def test_realtime_success_records_to_database(self, tmp_path):
+        db = str(tmp_path / 'fires.db')
+        gdf = realtime_gdf(*BC_COORDS)
+        with patch('app.fires.find.get_config', return_value=realtime_settings(database=db)), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 20})
-            data_file = ff.settings.data[0]
-            fires_gdf, effective = ff._load_source(data_file, ff.sources_map())
+            ff._load_source(ff.settings.data[0])
+
+        conn = firedb.connect(db)
+        assert conn.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0] == 1
+        assert conn.execute("SELECT fire FROM fires").fetchone()[0] == 'K1'
+        conn.close()
+
+    def test_recording_failure_never_breaks_the_request(self, caplog):
+        """A broken database degrades to logging; the fetched fires still serve."""
+        gdf = realtime_gdf(*BC_COORDS)
+        settings = realtime_settings(database='/dev/null/nope/fires.db')
+        with patch('app.fires.find.get_config', return_value=settings), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
+            ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 20})
+            fires_gdf, _ = ff._load_source(ff.settings.data[0])
+
+        assert fires_gdf is gdf
+        assert 'Failed to record' in caplog.text
+
+    def test_realtime_failure_falls_back_to_database(self, caplog):
+        """API down: the source serves from the session fixture database."""
+        with patch('app.fires.find.get_config', return_value=realtime_settings(database=None)), \
+             patch('app.fires.find.fetch_fires', return_value=None):
+            ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 20})
+            fires_gdf, effective = ff._load_source(ff.settings.data[0])
 
         assert fires_gdf is not None
         assert not fires_gdf.empty
-        assert effective is data_file
-        assert 'using downloaded data' in caplog.text
+        assert 'Status' in fires_gdf.columns
+        assert effective.mapping.get('status_transform') == 'stored'
+        assert 'Serving BC fires from the database' in caplog.text
 
     def test_realtime_disabled_never_queries_api(self):
-        with patch('app.fires.get_config', return_value=realtime_settings(enabled=False)), \
-             patch('app.fires.fetch_fires') as mock_fetch:
+        with patch('app.fires.find.get_config', return_value=realtime_settings(enabled=False, database=None)), \
+             patch('app.fires.find.fetch_fires') as mock_fetch:
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 20})
-            ff._load_source(ff.settings.data[0], ff.sources_map())
+            fires_gdf, _ = ff._load_source(ff.settings.data[0])
 
         mock_fetch.assert_not_called()
+        assert fires_gdf is not None
 
-    def test_no_realtime_and_no_file_returns_none(self):
-        with patch('app.fires.get_config', return_value=realtime_settings(enabled=False)):
+    def test_no_api_and_empty_database_marks_source_unavailable(self, tmp_path, caplog):
+        db = str(tmp_path / 'empty.db')
+        with patch('app.fires.find.get_config', return_value=realtime_settings(enabled=False, database=db)):
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 20})
-            fires_gdf, _ = ff._load_source(ff.settings.data[0], {})
+            fires_gdf, _ = ff._load_source(ff.settings.data[0])
 
         assert fires_gdf is None
+        assert ff.unavailable_sources == ['BC']
+        assert 'source unavailable' in caplog.text
 
     def test_radius_capped_at_max_radius(self):
-        with patch('app.fires.get_config', return_value=realtime_settings()), \
-             patch('app.fires.fetch_fires', return_value=realtime_gdf(*BC_COORDS)) as mock_fetch:
+        with patch('app.fires.find.get_config', return_value=realtime_settings()), \
+             patch('app.fires.find.fetch_fires', return_value=realtime_gdf(*BC_COORDS)) as mock_fetch:
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 9999})
-            ff._load_source(ff.settings.data[0], {})
+            ff._load_source(ff.settings.data[0])
 
         radius = mock_fetch.call_args.args[2]
         assert radius == ff.settings.max_radius
@@ -115,8 +153,8 @@ class TestNearbyRealtime:
     def test_nearby_returns_normalized_realtime_fire(self):
         """End to end: a realtime fire is normalized, statused, and sorted."""
         gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1])
-        with patch('app.fires.get_config', return_value=realtime_settings()), \
-             patch('app.fires.fetch_fires', return_value=gdf):
+        with patch('app.fires.find.get_config', return_value=realtime_settings()), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50, 'size': 0})
             fires = ff.nearby()
 
@@ -133,8 +171,8 @@ class TestNearbyRealtime:
 
     def test_nearby_status_filter_applies_to_realtime_fires(self):
         gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1], status='Out')
-        with patch('app.fires.get_config', return_value=realtime_settings()), \
-             patch('app.fires.fetch_fires', return_value=gdf):
+        with patch('app.fires.find.get_config', return_value=realtime_settings()), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
             ff = FindFires(BC_COORDS, filters={'status': 'active', 'distance': 50, 'size': 0})
             fires = ff.nearby()
 
@@ -145,8 +183,8 @@ class TestNearbyRealtime:
         two_days_ago_ms = (datetime.now(timezone.utc) - timedelta(days=2)).timestamp() * 1000
         gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1],
                            size=0.01, ignition_date=two_days_ago_ms)
-        with patch('app.fires.get_config', return_value=realtime_settings()), \
-             patch('app.fires.fetch_fires', return_value=gdf):
+        with patch('app.fires.find.get_config', return_value=realtime_settings()), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50, 'size': 1})
             fires = ff.nearby()
 
@@ -158,8 +196,8 @@ class TestNearbyRealtime:
         last_month_ms = (datetime.now(timezone.utc) - timedelta(days=30)).timestamp() * 1000
         gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1],
                            size=0.01, ignition_date=last_month_ms)
-        with patch('app.fires.get_config', return_value=realtime_settings()), \
-             patch('app.fires.fetch_fires', return_value=gdf):
+        with patch('app.fires.find.get_config', return_value=realtime_settings()), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50, 'size': 1})
             fires = ff.nearby()
 
@@ -184,10 +222,39 @@ class TestAllStatusDropsSizeFilter:
     def test_all_includes_fire_with_no_size(self):
         """With 'all', even a fire without a size estimate is shown."""
         gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1], size=None)
-        with patch('app.fires.get_config', return_value=realtime_settings()), \
-             patch('app.fires.fetch_fires', return_value=gdf):
+        with patch('app.fires.find.get_config', return_value=realtime_settings()), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 50})
             fires = ff.nearby()
 
         assert len(fires) == 1
         assert 'Size' not in fires[0]
+
+
+class TestFallbackMatchesRealtime:
+    """Identical source data must produce identical responses from the
+    realtime path and the database fallback path."""
+
+    def test_paths_agree(self, tmp_path):
+        db = str(tmp_path / 'fires.db')
+        gdf = realtime_gdf(BC_COORDS[0] + 0.05, BC_COORDS[1], ignition_date=1782000000000)
+        filters = {'status': 'all', 'distance': 50, 'size': 0}
+
+        # Realtime path (records to the database as a side effect).
+        with patch('app.fires.find.get_config', return_value=realtime_settings(database=db)), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
+            realtime_fires = FindFires(BC_COORDS, filters=filters).nearby()
+
+        # Fallback path reads what the realtime path recorded.
+        with patch('app.fires.find.get_config', return_value=realtime_settings(database=db)), \
+             patch('app.fires.find.fetch_fires', return_value=None):
+            fallback_fires = FindFires(BC_COORDS, filters=filters).nearby()
+
+        assert len(realtime_fires) == len(fallback_fires) == 1
+        realtime_fire, fallback_fire = realtime_fires[0], fallback_fires[0]
+        assert set(realtime_fire) == set(fallback_fire)
+        for key in realtime_fire:
+            if key in ('Distance',):
+                assert fallback_fire[key] == pytest.approx(realtime_fire[key], rel=1e-6)
+            else:
+                assert fallback_fire[key] == realtime_fire[key], key

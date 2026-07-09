@@ -31,8 +31,8 @@ avalanche_distance_buffer: 5  # Distance buffer for avalanche provider selection
 # Include the AQI at the specified coordinates in the response.
 include_aqi: true
 
-# Path to shapefiles
-shapefiles: "${TREKSAFER_SHAPEFILES:-shapefiles}"
+# Fire database: snapshot history and the fallback for API outages.
+database: "${TREKSAFER_DATABASE:-data/fires.db}"
 
 # Logging
 log_file: "logs/${TREKSAFER_ENV}.log"
@@ -51,30 +51,29 @@ transports:
     host: ${TREKSAFER_CLI_HOST:-localhost}
     port: "${TREKSAFER_CLI_PORT:-8888}"
 
-# Data files, located at {shapefiles}/{location}/{filename}.
+# Fire data sources. Each is a pair of realtime ArcGIS layers; every fetch
+# is recorded to the fire database, which is also the fallback when an API
+# is unavailable.
 data:
   - location: AB
-    filename: AB_Fire_Perimeters_{DATE}.zip
-    # Realtime Alberta Wildfire ArcGIS layers; the downloaded file below is
-    # the fallback when the API is unavailable. The points layer holds active
-    # fires only, matching the active-perimeters download (out: []).
+    # The points layer holds active fires only, matching out: []. LABEL
+    # ("HWF-096-2026") matches the perimeter layer's FireNumber values;
+    # FIRE_STATUS_DATE is a zoneless Mountain-time string.
     realtime:
       enabled: ${TREKSAFER_AB_REALTIME:-true}
       points_url: https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/Active_Wildfires_(PROD)/FeatureServer/0/query
       perimeters_url: https://services.arcgis.com/Eb8P5h4CJk8utIBz/arcgis/rest/services/Wildfire_Perimeter_Active_(PROD)/FeatureServer/3/query
       join_field: LABEL
       perimeter_fire_field: FireNumber
+      key_fields: [LABEL]
+      updated_field: FIRE_STATUS_DATE
+      timezone: America/Edmonton
       cache_timeout: 900
       mapping:
-        # LABEL ("HWF-096-2026") matches the perimeter layer's FireNumber
-        # values and the fire-number format of the downloaded file; the
-        # points layer's FIRE_NUMBER ("HWF096") matches neither.
         Fire: LABEL
         Location: FIRE_COMPLEX_NAME
         Size: AREA_ESTIMATE
         Status: FIRE_STATUS
-        # Initial assessment date; the closest AB publishes to a discovery
-        # date, so it drives the new-fire size exemption.
         Discovered: ASSESSMENT_ASSISTANCE_DATE
       transforms:
         Discovered: epoch_ms
@@ -83,28 +82,15 @@ data:
         managed: ['Being Held']
         controlled: ['Under Control']
         out: []
-    mapping:
-      fields:
-        Fire: FIRE_NUMBE
-        Size: AREA
-        Name: ALIAS
-        Location: COMPLEX
-        Status: STATUS
-    status_map:
-      active: ['Out of Control']
-      managed: ['Being Held']
-      controlled: ['Under Control']
-      out: []
   - location: BC
-    filename: BC_Fire_Perimeters_{DATE}.zip
-    # Realtime BCWS ArcGIS layers; the downloaded file below is the fallback
-    # when the API is unavailable.
+    # BC fire numbers recycle annually, so the database key includes the year.
     realtime:
       enabled: ${TREKSAFER_BC_REALTIME:-true}
       points_url: https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_ActiveFires_PublicView/FeatureServer/0/query
       perimeters_url: https://services6.arcgis.com/ubm4tcTYICKBpist/ArcGIS/rest/services/BCWS_FirePerimeters_PublicView/FeatureServer/0/query
       join_field: FIRE_NUMBER
       perimeter_fire_field: FIRE_NUMBER
+      key_fields: [FIRE_YEAR, FIRE_NUMBER]
       cache_timeout: 900
       mapping:
         Fire: FIRE_NUMBER
@@ -120,35 +106,18 @@ data:
         managed: ['Being Held']
         controlled: ['Under Control']
         out: ['Out']
-    mapping:
-      fields:
-        Fire: FIRE_NUM
-        Size: FIRE_SZ_HA
-      api:
-        url: https://wildfiresituation-api.nrs.gov.bc.ca/publicPublishedIncident/{FIRE_NUM}?fireYear={FIRE_YEAR}
-        fields:
-          Name: incidentName
-          Location: incidentLocation
-          Status: stageOfControlCode
-    status_map:
-      active: ['OUT_CNTRL']
-      managed: ['HOLDING']
-      controlled: ['UNDR_CNTRL']
-      out: ['OUT']
   - location: CA
-    filename: CA_Fire_Perimeters_{DATE}.zip
-    # Realtime national CWFIS layers (via Esri Canada). BC and AB are
-    # excluded here because they have dedicated sources above. The hotspot
-    # perimeters carry no fire ID, so points join to polygons spatially;
-    # fires with no polygon get a circle of their reported size. The daily
-    # download (scripts/downloads.py) saves this same source to the file
-    # below as a recovery mode.
+    # National CWFIS layers (via Esri Canada). BC and AB are excluded; they
+    # have dedicated sources. The hotspot perimeters carry no fire ID, so
+    # points join to polygons by location; fires with no polygon get a
+    # circle of their reported size.
     realtime:
       enabled: ${TREKSAFER_CA_REALTIME:-true}
       points_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/activefires/FeatureServer/0/query
       perimeters_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/Active_Wildfire_Perimeters_in_Canada/FeatureServer/0/query
       join: spatial
       points_where: Agency NOT IN ('BC','AB')
+      key_fields: [Fire_Name]
       cache_timeout: 900
       mapping:
         Fire: Fire_Name
@@ -163,31 +132,19 @@ data:
         managed: ['BH']
         controlled: ['UC']
         out: []
-    mapping:
-      fields:
-        Fire: firename
-        Name: firename
-        Location: agency
-        Size: hectares
-        Status: stage_of_c
-    status_map:
-      active: ['OC']
-      managed: ['BH']
-      controlled: ['UC']
-      out: []
   - location: US
-    filename: "WFIGS_Interagency_Perimeters_{DATE}.zip"
-    # Realtime NIFC WFIGS layers; the downloaded file below is the fallback
-    # when the API is unavailable. The layers share IrwinID (a GUID), so it
-    # is the join key while IncidentName is the displayed identifier. Status
-    # is derived via wfigs_status: prescribed burns show as "Prescribed",
-    # wildfires by percent contained, so status_map is unused.
+    # NIFC WFIGS layers. IrwinID (a GUID) is the stable join and identity
+    # key; IncidentName is the displayed identifier. Status derives from
+    # percent contained via wfigs_status, with prescribed burns (RX) shown
+    # as "Prescribed", so status_map is unused.
     realtime:
       enabled: ${TREKSAFER_US_REALTIME:-true}
       points_url: https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Incident_Locations_Current/FeatureServer/0/query
       perimeters_url: https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query
       join_field: IrwinID
       perimeter_fire_field: attr_IrwinID
+      key_fields: [IrwinID]
+      updated_field: ModifiedOnDateTime_dt
       cache_timeout: 900
       mapping:
         Fire: IncidentName
@@ -205,21 +162,6 @@ data:
         managed: []
         controlled: []
         out: []
-    mapping:
-      fields:
-        Fire: FIRE_NAME
-        Location: LOCATION
-        Size: SIZE_HA
-        Status: PCT_CONT
-        Type: INCID_TYPE
-        Discovered: DISCOVERED
-      status_transform: wfigs_status
-      discovered_transform: epoch_ms
-    status_map:
-      active: []
-      managed: []
-      controlled: []
-      out: []
 
 avalanche:
   providers:
