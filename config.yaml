@@ -114,6 +114,9 @@ data:
       perimeters_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/Active_Wildfire_Perimeters_in_Canada/FeatureServer/0/query
       join: spatial
       points_where: Agency NOT IN ('BC','AB')
+      # Composite values like Manitoba/Saskatchewan survive NOT IN, so a
+      # border-straddling patch whose fire we do cover still comes through.
+      perimeters_where: Province NOT IN ('British Columbia','Alberta')
       key_fields: [Fire_Name]
       cache_timeout: 900
       mapping:

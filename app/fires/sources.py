@@ -216,9 +216,8 @@ def _merge_spatial(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
     A large fire's polygon can reach into the query radius while its point
     sits outside it, so unmatched polygons get one follow-up query for
     points within their bounding box. Polygons that still match nothing
-    have no active fire record (stale data, or an agency excluded by
-    points_where) and are logged and dropped. If the follow-up query fails,
-    the radius results are returned as-is.
+    have no active fire record (stale data) and are logged and dropped.
+    If the follow-up query fails, the radius results are returned as-is.
     """
     size_field = config.mapping.get('Size')
     fire_key = config.mapping['Fire']
@@ -252,8 +251,7 @@ def _merge_spatial(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
     leftover = len(unused) - len(recovered_used)
     if leftover:
         logging.warning(
-            f"{leftover} fire perimeter(s) in range have no active fire record "
-            f"(stale or excluded agency); dropped."
+            f"{leftover} fire perimeter(s) in range have no active fire record; dropped."
         )
     if recovered.empty:
         return merged
@@ -285,7 +283,8 @@ def fetch_fires(config: RealtimeFireConfig, coords: tuple,
                              config.points_where)
         points = _stash_report_point(points)
         perimeters = query_layer(config.perimeters_url, spatial_filter,
-                                 perimeter_fields, config.cache_timeout)
+                                 perimeter_fields, config.cache_timeout,
+                                 config.perimeters_where)
         if config.join == 'field':
             return _merge_by_field(points, perimeters, config)
         return _merge_spatial(points, perimeters, config)
@@ -304,7 +303,7 @@ def fetch_all_fires(config: RealtimeFireConfig) -> gpd.GeoDataFrame:
     points = fetch_layer(config.points_url, _points_fields(config), config.points_where)
     points = _stash_report_point(points)
     perimeter_fields = [config.perimeter_fire_field] if config.join == 'field' else []
-    perimeters = fetch_layer(config.perimeters_url, perimeter_fields)
+    perimeters = fetch_layer(config.perimeters_url, perimeter_fields, config.perimeters_where)
     if config.join == 'field':
         return _merge_by_field(points, perimeters, config, recover=False)
     merged, used = spatial_merge(points, perimeters, config.mapping.get('Size'))

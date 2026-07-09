@@ -121,6 +121,9 @@ class RealtimeFireConfig(BaseModel):
     # Attribute filter applied to points-layer queries, e.g. to exclude
     # agencies covered by a dedicated source.
     points_where: str = "1=1"
+    # Attribute filter applied to perimeters-layer queries, e.g. to skip
+    # fetching polygons whose fires points_where excludes.
+    perimeters_where: str = "1=1"
 
     @model_validator(mode="after")
     def check_join_key(self):

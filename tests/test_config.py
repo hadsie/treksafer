@@ -79,3 +79,4 @@ class TestRealtimeFireConfig:
         )
         assert config.join == "spatial"
         assert config.points_where == "1=1"
+        assert config.perimeters_where == "1=1"

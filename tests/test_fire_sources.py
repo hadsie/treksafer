@@ -329,6 +329,17 @@ class TestFetchFiresSpatial:
 
         assert mocked_responses.calls[0].request.params['where'] == "Agency NOT IN ('BC','AB')"
 
+    def test_province_filter_sent_with_perimeters_query(self, mocked_responses):
+        config = SPATIAL_CONFIG.model_copy(
+            update={'perimeters_where': "Province NOT IN ('British Columbia','Alberta')"})
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(PERIMS_URL, json=collection([]))
+
+        fetch_fires(config, CA_COORDS, 100)
+
+        perimeter_call = mocked_responses.calls[1].request.params
+        assert perimeter_call['where'] == "Province NOT IN ('British Columbia','Alberta')"
+
     def test_perimeter_with_distant_fire_point_is_recovered(self, mocked_responses):
         """A megafire's polygon reaches the radius while its report point sits outside it."""
         mocked_responses.get(POINTS_URL, json=collection([]))
