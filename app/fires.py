@@ -29,8 +29,8 @@ import geopandas as gpd
 import requests
 from shapely.ops import nearest_points
 
-from .arcgis import fetch_fires
 from .config import get_config, DataFile
+from .fire_sources import fetch_fires
 from .helpers import acres_to_hectares, compass_direction, coords_to_point_meters, epoch_ms_to_datetime
 from .filters import apply_filters, STATUS_LEVELS
 

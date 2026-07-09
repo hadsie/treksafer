@@ -7,8 +7,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import geopandas as gpd
-import pandas as pd
-import networkx as nx
 import requests
 import tempfile
 import time
@@ -16,9 +14,10 @@ import zipfile
 
 from datetime import date
 from pathlib import Path
-from shapely.geometry import Point
 
+from app.arcgis import fetch_layer
 from app.config import get_config
+from app.fire_sources import spatial_merge
 
 max_wait_time = 600
 
@@ -119,244 +118,42 @@ def fetch_BC():
     open(target_path, 'wb').write(file.content)
 
 def fetch_CA():
-    """Download Canadian active-fire CSV + perimeter shapefile and return a
-     GeoDataFrame to merge active fire names into the geometry polygons."""
+    """Download the national ArcGIS layers and save the merged result.
 
-    # Load the hotspot perimeter shapefile
-    perim_url = "https://cwfis.cfs.nrcan.gc.ca/downloads/hotspots/perimeters.shp"
-    gdf_perim = gpd.read_file(perim_url)  # EPSG:3978
-    print(f"Loaded {len(gdf_perim)} perimeters.")
+    Uses the exact source and merge the realtime CA path uses, so the saved
+    file is a recovery mode for when the API is unavailable at request time.
+    Because the whole country is fetched, every fire report is already
+    present and no follow-up lookups are needed; leftover perimeters have
+    no active fire record (stale data, or an agency covered by its own
+    dedicated source).
+    """
+    settings = get_config()
+    data_obj = next((d for d in settings.data if d.location == 'CA'), None)
+    if not data_obj or not data_obj.realtime:
+        print("No realtime CA data settings found.")
+        return
+    realtime = data_obj.realtime
 
-    # Load active-fire metadata.
-    active_fires_url = (
-        "https://geoserver.cwfif.nrcan.gc.ca/geoserver/wfs"
-        "?service=WFS&version=2.0.1&request=GetFeature&outputFormat=csv"
-        "&typeName=public:cwfif_national_activefires"
-        "&sortBy=agency_code+A,record_start+D"
-        "&CQL_FILTER=now()%3E=record_start%20AND%20now()%3C=record_end"
-    )
-    df_meta = pd.read_csv(active_fires_url)
-    df_meta.columns = df_meta.columns.str.strip()
-    df_meta = df_meta.rename(columns={
-        "agency_code": "agency",
-        "longitude": "lon",
-        "latitude": "lat",
-        "agency_fire_id": "firename",
-        "fire_size": "hectares",
-        "stage_of_control_status": "stage_of_c",
+    points = fetch_layer(realtime.points_url, list(realtime.mapping.values()),
+                         realtime.points_where)
+    if points.empty:
+        raise ValueError("No fires returned by the CA points layer.")
+    perimeters = fetch_layer(realtime.perimeters_url, [])
+    print(f"Loaded {len(points)} fires and {len(perimeters)} perimeters.")
+
+    merged, used = spatial_merge(points, perimeters, realtime.mapping.get('Size'))
+    print(f"{len(perimeters) - len(used)} perimeters had no fire record.")
+
+    # Shapefile field names are capped at 10 chars; use the legacy names the
+    # CA fallback mapping in config.yaml reads.
+    merged = merged.rename(columns={
+        'Fire_Name': 'firename',
+        'Agency': 'agency',
+        'Hectares__Ha_': 'hectares',
+        'Stage_of_Control': 'stage_of_c',
     })
-    df_meta = df_meta.map(lambda x: x.strip() if isinstance(x, str) else x)
-    # Remove agencies sourced from their own dedicated shapefiles (BC, AB).
-    excluded_agencies = ["BC", "AB"]
-    original_count = len(df_meta)
-    df_meta = df_meta[~df_meta["agency"].str.upper().isin(excluded_agencies)]
-    print(f"Filtered out {original_count - len(df_meta)} fires.")
-
-    # Convert fire lat/lon to Point geometries
-    df_meta["geometry"] = [Point(xy) for xy in zip(df_meta["lon"], df_meta["lat"])]
-    gdf_meta = gpd.GeoDataFrame(df_meta, geometry="geometry", crs="EPSG:4326")
-    print(f"Loaded {len(gdf_meta)} ignition points.")
-
-    merged = merge_fires_with_perimeters(gdf_meta, gdf_perim, {
-        'fireId': 'firename',
-        'fireArea': 'agency',
-        'fireSize': 'hectares',
-        'fireStage': 'stage_of_c',
-        'perimId': 'UID',
-    })
-
-    write_shapefile("CA", merged)
-
-def merge_fires_with_perimeters(
-        gdf_meta: gpd.GeoDataFrame,
-        gdf_perim: gpd.GeoDataFrame,
-        keys: dict[str, str],
-        *,
-        search_radius_m: float = 1_000
-    ) -> gpd.GeoDataFrame:
-    """
-    Match every fire point (4326) to at most one perimeter polygon (3978).
-
-    Required keys
-    -------------
-    keys["fireId"]   : column in *gdf_meta* that uniquely IDs each point
-    keys["perimId"]  : column in *gdf_perim* that uniquely IDs each polygon
-                      (MUST be different from fireId)
-
-    Optional keys (if present in *keys* and in the dataframe, they’re kept)
-    ----------------------------------------------------------------------
-    keys["fireArea"] , keys["fireSize"] , keys["fireStage"]
-
-    Returns
-    -------
-    GeoDataFrame (EPSG:3978) with one row per *matched polygon* and the
-    chosen fire-attribute columns appended.
-    """
-    # ---- sanity on required keys ---------------------------------------
-    fire_id  = keys["fireId"]
-    perim_id = keys["perimId"]
-    if fire_id == perim_id:
-        raise ValueError("fireId and perimId must refer to different columns")
-
-    # ---- 1. build point➜polygon assignment -----------------------------
-    assignments: dict[int, str] = {}
-    collisions : dict[int, set[str]] = {}
-    free_ids   = set(gdf_perim[perim_id])
-
-    for idx, fire in gdf_meta.iterrows():
-        # project point to metres (3978) once
-        point_m = (
-            gpd.GeoSeries([fire.geometry], crs="EPSG:4326")
-            .to_crs(gdf_perim.crs)
-            .iloc[0]
-        )
-
-        candidates = gdf_perim[gdf_perim.covers(point_m)]
-        if candidates.empty:
-            candidates = _get_nearby_perimeters(gdf_perim, point_m, search_radius_m)
-            if candidates.empty:
-                print(f"No perimeter found for fire '{fire[fire_id]}')")
-                continue
-
-        id_set = set(candidates[perim_id]) & free_ids
-        if id_set:
-            if len(id_set) == 1:
-                chosen = id_set.pop()
-                assignments[idx] = chosen
-                free_ids.remove(chosen)
-            else:
-                collisions[idx] = id_set
-        else:
-            largest = (
-                candidates.assign(_area=candidates.geometry.area)
-                          .sort_values("_area", ascending=False)
-                          .iloc[0][perim_id]
-            )
-            assignments[idx] = largest
-            print(
-                f"All candidate polygons already assigned for fire "
-                f"'{fire[fire_id]}'; reused largest perimeter {largest}."
-            )
-
-    if collisions:
-        extra = _assign_by_matching(collisions, free_ids)
-        assignments.update(extra)
-        unmatched = set(collisions) - set(extra)
-        if unmatched:
-            print(f"{len(unmatched)} fire(s) still have no unique polygon.")
-
-    # ---- 2. tag fires that got a polygon -------------------------------
-    gdf_meta[perim_id] = gdf_meta.index.map(assignments)       # NaN if none
-
-    # columns to keep (only if they exist in the dataframe)
-    keep_cols = [perim_id]
-    for k in ("fireArea", "fireSize", "fireStage"):
-        col = keys.get(k)
-        if col and col in gdf_meta.columns and col not in keep_cols:
-            keep_cols.append(col)
-    if fire_id not in keep_cols:
-        keep_cols.append(fire_id)
-
-    fire_attrs = gdf_meta.loc[gdf_meta[perim_id].notna(), keep_cols]
-
-    # Notify for any dropped fires or polygons before writing the data.
-    unmatched_fires   = gdf_meta[gdf_meta[perim_id].isna()]
-    unmatched_polys   = gdf_perim[~gdf_perim[perim_id].isin(fire_attrs[perim_id])]
-    print(f"{len(unmatched_fires)} fires had no polygon.")
-    print(f"{len(unmatched_polys)} polygons are not associated with any active fire.")
-
-    # ---- 3. inner-join → only matched polygons survive -----------------
-    merged = (
-        gdf_perim.merge(fire_attrs, on=perim_id, how="inner")
-        .reset_index(drop=True)
-    )
-    return merged
-
-# ----------------------------------------------------------------------
-# helper: Turns the “many-candidates” dictionary (fire => polygons)
-#         into a bipartite graph and runs maximum matching
-# ----------------------------------------------------------------------
-def _assign_by_matching(collision_dict, free_uids):
-    """
-    Parameters
-    ----------
-    collision_dict : dict[int, set[str]]
-        fire_row_idx -> {UID, UID, …} (polygons still viable for that fire)
-    free_ids : set[str]
-        polygons that are not yet taken by a unique match pass
-
-    Returns
-    -------
-    dict[int, str]
-        mapping fire_row_idx -> chosen UID (only for rows in collision_dict)
-    """
-    # --- make labels that can't collide ------------------------------
-    fire2label = {idx: f"F_{i}" for i, idx in enumerate(collision_dict)}
-    poly2label = {uid: f"P_{uid}" for uid in free_uids}
-
-    G = nx.Graph()
-    G.add_nodes_from(fire2label.values(), bipartite=0)
-    G.add_nodes_from(poly2label.values(), bipartite=1)
-
-    for idx, uid_set in collision_dict.items():
-        f_lab = fire2label[idx]
-        for uid in uid_set:
-            if uid in free_uids:
-                G.add_edge(f_lab, poly2label[uid])
-
-    # --- run Hopcroft–Karp with the explicit left set ----------------
-    raw = nx.algorithms.bipartite.matching.maximum_matching(
-        G, top_nodes=fire2label.values()
-    )
-
-    # --- convert labels back to originals ----------------------------
-    resolved = {}
-    for f_lab, p_lab in raw.items():
-        if f_lab.startswith("F_"):            # keep only fire→poly pairs
-            # reverse lookup
-            idx = next(k for k, v in fire2label.items() if v == f_lab)
-            uid = next(k for k, v in poly2label.items() if v == p_lab)
-            resolved[idx] = uid
-    return resolved
-
-def _get_nearby_perimeters(perim3978: gpd.GeoDataFrame,
-                          point3978: Point,
-                          distance_m: float = 1_000) -> gpd.GeoDataFrame:
-    """
-    Return polygons whose true Euclidean distance to `point3978`
-    is <= `distance_m`.
-
-    Parameters
-    ----------
-    perim3978  : GeoDataFrame
-        Polygon layer *already* in EPSG:3978 (units = metres).
-    point3978  : shapely.geometry.Point
-        Point *already* in EPSG:3978.
-    distance_m : float
-        Search radius in metres (default 1 km).
-
-    Returns
-    -------
-    GeoDataFrame
-        Subset of `perim3978` (still in EPSG:3978) that lie within `distance_m`.
-    """
-
-    # 0. quick sanity (optional but catches accidental CRS mix-ups)
-    if perim3978.crs is None or perim3978.crs.to_epsg() != 3978:
-        raise ValueError("perim3978 must be in EPSG:3978")
-
-    # 1. bounding-box pre-filter using the spatial index
-    buffer_geom = point3978.buffer(distance_m)          # metre-based buffer
-    #bbox = buffer_geom.bounds                           # (minx, miny, maxx, maxy)
-    cand_idx = perim3978.sindex.query(buffer_geom, predicate="intersects")
-    if len(cand_idx) == 0:
-        return perim3978.iloc[[]]                       # empty GDF, same CRS
-
-    candidates = perim3978.iloc[cand_idx].copy()
-
-    # 2. precise distance filter
-    within = candidates.geometry.distance(point3978) <= distance_m
-    return candidates.loc[within].copy()
+    merged = merged[['firename', 'agency', 'hectares', 'stage_of_c', 'geometry']]
+    write_shapefile("CA", merged.to_crs(epsg=4326))
 
 def write_shapefile(location, gdf):
     settings = get_config()

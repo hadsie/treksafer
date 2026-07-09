@@ -1,25 +1,15 @@
-"""Unit tests for the Canada-wide fire downloader (scripts/downloads.py).
+"""Unit tests for the fire data downloader (scripts/downloads.py).
 
-These cover the logic that broke when CWFIS retired the static activefires.csv
-and replaced it with the GeoServer WFS feed: the column rename back to the
-legacy schema, the agency exclusion, and point-to-polygon merging. The HTTP
-boundary (pandas/geopandas readers) is mocked so no network calls happen.
+The HTTP boundary is mocked so no network calls happen. fetch_CA is covered
+by mocking the arcgis layer fetches it delegates to; the spatial merge logic
+itself is tested in tests/test_arcgis.py.
 """
 
 import geopandas as gpd
-import pandas as pd
 import pytest
 from shapely.geometry import Point, Polygon
 
 from scripts import downloads
-
-CA_KEYS = {
-    'fireId': 'firename',
-    'fireArea': 'agency',
-    'fireSize': 'hectares',
-    'fireStage': 'stage_of_c',
-    'perimId': 'UID',
-}
 
 
 def _square(cx, cy, half=0.02):
@@ -30,61 +20,73 @@ def _square(cx, cy, half=0.02):
     ])
 
 
-class TestFetchCASchemaAdaptation:
-    """fetch_CA must adapt the new WFS schema to the legacy column names."""
+class TestFetchCA:
+    """fetch_CA saves the realtime CA source, merged the same way requests
+    use it, as the recovery file for API outages."""
+
+    def _points(self):
+        return gpd.GeoDataFrame(
+            {
+                'Fire_Name': ['2026_SK_F1', '2026_ON_F2'],
+                'Agency': ['SK', 'ON'],
+                'Hectares__Ha_': [10.0, 250.0],
+                'Stage_of_Control': ['OC', 'UC'],
+                'Start_Date': [1782000000000, 1782000000000],
+            },
+            geometry=[Point(-105.0, 55.0), Point(-79.0, 48.0)],
+            crs='EPSG:4326',
+        )
+
+    def _perimeters(self):
+        # Covers F1 only; F2 must get a synthesized circle.
+        return gpd.GeoDataFrame(
+            {'UID': ['P1']}, geometry=[_square(-105.0, 55.0)], crs='EPSG:4326',
+        )
 
     @pytest.fixture
-    def wfs_csv(self):
-        """A stand-in for the GeoServer WFS CSV, with new-schema columns."""
-        return pd.DataFrame({
-            'agency_code': ['QC', 'BC', 'AB', 'ON', 'bc'],
-            'longitude': [-72.0, -123.0, -114.0, -79.0, -124.0],
-            'latitude': [48.5, 49.0, 51.0, 45.0, 50.0],
-            'agency_fire_id': ['QC-1', 'BC-9', 'AB-9', 'ON-1', 'BC-8'],
-            'fire_size': [10.0, 5.0, 7.0, 20.0, 3.0],
-            'stage_of_control_status': ['OC', 'OC', 'UC', 'BH', 'OC'],
-        })
+    def captured(self, monkeypatch):
+        calls = []
 
-    @pytest.fixture
-    def captured_meta(self, monkeypatch, wfs_csv):
-        """Run fetch_CA with the HTTP boundary mocked, capturing the
-        GeoDataFrame handed to the merge step (after rename + exclusion)."""
-        captured = {}
+        def fake_fetch_layer(url, out_fields, where='1=1'):
+            calls.append({'url': url, 'out_fields': out_fields, 'where': where})
+            return self._perimeters() if 'Perimeter' in url else self._points()
 
-        empty_perim = gpd.GeoDataFrame({'UID': []}, geometry=[], crs='EPSG:3978')
-        monkeypatch.setattr(downloads.pd, 'read_csv', lambda url: wfs_csv.copy())
-        monkeypatch.setattr(downloads.gpd, 'read_file', lambda url: empty_perim)
-
-        def fake_merge(meta, perim, keys, **kwargs):
-            captured['meta'] = meta
-            captured['keys'] = keys
-            return empty_perim
-
-        monkeypatch.setattr(downloads, 'merge_fires_with_perimeters', fake_merge)
-        monkeypatch.setattr(downloads, 'write_shapefile', lambda location, gdf: None)
-
+        monkeypatch.setattr(downloads, 'fetch_layer', fake_fetch_layer)
+        result = {}
+        monkeypatch.setattr(downloads, 'write_shapefile',
+                            lambda location, gdf: result.update(location=location, gdf=gdf))
         downloads.fetch_CA()
-        return captured
+        result['calls'] = calls
+        return result
 
-    def test_renames_wfs_columns_to_legacy_names(self, captured_meta):
-        meta = captured_meta['meta']
-        assert {'agency', 'lon', 'lat', 'firename', 'hectares',
-                'stage_of_c'} <= set(meta.columns)
+    def test_writes_legacy_column_names(self, captured):
+        assert list(captured['gdf'].columns) == [
+            'firename', 'agency', 'hectares', 'stage_of_c', 'geometry']
 
-    def test_drops_new_schema_column_names(self, captured_meta):
-        meta = captured_meta['meta']
-        for new_name in ('agency_code', 'longitude', 'latitude',
-                         'agency_fire_id', 'fire_size', 'stage_of_control_status'):
-            assert new_name not in meta.columns
+    def test_excludes_bc_and_ab_server_side(self, captured):
+        assert "NOT IN ('BC','AB')" in captured['calls'][0]['where']
 
-    def test_excludes_bc_and_ab_case_insensitively(self, captured_meta):
-        meta = captured_meta['meta']
-        # QC and ON survive; both BC rows (upper and lower) and AB are removed.
-        assert set(meta['agency']) == {'QC', 'ON'}
-        assert not {'BC-9', 'BC-8', 'AB-9'} & set(meta['firename'])
+    def test_matched_fire_gets_perimeter_polygon(self, captured):
+        gdf = captured['gdf']
+        f1 = gdf[gdf['firename'] == '2026_SK_F1'].iloc[0]
+        assert f1.geometry.geom_type == 'Polygon'
+        assert f1.geometry.area > 0
 
-    def test_passes_ca_field_mapping_to_merge(self, captured_meta):
-        assert captured_meta['keys'] == CA_KEYS
+    def test_unmatched_fire_gets_size_circle(self, captured):
+        gdf = captured['gdf']
+        f2 = gdf[gdf['firename'] == '2026_ON_F2'].iloc[0]
+        assert f2.geometry.geom_type == 'Polygon'
+
+    def test_writes_wgs84(self, captured):
+        assert captured['gdf'].crs.to_epsg() == 4326
+
+    def test_raises_when_no_fires_returned(self, monkeypatch):
+        empty = gpd.GeoDataFrame(columns=['Fire_Name', 'geometry'],
+                                 geometry='geometry', crs='EPSG:4326')
+        monkeypatch.setattr(downloads, 'fetch_layer',
+                            lambda url, out_fields, where='1=1': empty)
+        with pytest.raises(ValueError, match="No fires"):
+            downloads.fetch_CA()
 
 
 class TestFetchABSchemaAdaptation:
@@ -170,44 +172,3 @@ class TestFetchUSReplicaValidation:
                             lambda url, params=None: self._resp({'status': 'Failed'}))
         with pytest.raises(ValueError, match="did not complete"):
             downloads.fetch_US()
-
-
-class TestMergeFiresWithPerimeters:
-    """Point-to-polygon assignment, independent of any network access."""
-
-    def _perimeters(self):
-        # Built in 4326 then projected to 3978 (metres), which the merge and
-        # its nearby-search helper require.
-        return gpd.GeoDataFrame(
-            {'UID': ['P1', 'P2']},
-            geometry=[_square(-72.0, 48.5), _square(-71.0, 48.5)],
-            crs='EPSG:4326',
-        ).to_crs(3978)
-
-    def test_each_fire_matches_its_covering_polygon(self):
-        perim = self._perimeters()
-        meta = gpd.GeoDataFrame(
-            {'firename': ['F1', 'F2'], 'agency': ['QC', 'QC'],
-             'hectares': [10.0, 20.0], 'stage_of_c': ['OC', 'UC']},
-            geometry=[Point(-72.0, 48.5), Point(-71.0, 48.5)],
-            crs='EPSG:4326',
-        )
-
-        merged = downloads.merge_fires_with_perimeters(meta, perim, CA_KEYS)
-
-        assert len(merged) == 2
-        assert dict(zip(merged['UID'], merged['firename'])) == {'P1': 'F1', 'P2': 'F2'}
-
-    def test_fire_with_no_nearby_polygon_is_dropped(self):
-        perim = self._perimeters()
-        meta = gpd.GeoDataFrame(
-            {'firename': ['F1', 'FAR'], 'agency': ['QC', 'QC'],
-             'hectares': [10.0, 5.0], 'stage_of_c': ['OC', 'OC']},
-            # FAR sits hundreds of km away, outside the 1km search radius.
-            geometry=[Point(-72.0, 48.5), Point(-60.0, 45.0)],
-            crs='EPSG:4326',
-        )
-
-        merged = downloads.merge_fires_with_perimeters(meta, perim, CA_KEYS)
-
-        assert set(merged['firename']) == {'F1'}
