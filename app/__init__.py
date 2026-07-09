@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sqlite3
 from pathlib import Path
 from typing import Iterable
 
 from .config import get_config, Settings
+from .fires import db as firedb
 from .transport import get_transports, BaseTransport
 
 def _configure_logging(settings: Settings) -> None:
@@ -57,6 +59,25 @@ def _validate_cache_dir() -> None:
                 raise PermissionError(f"Cannot write to cache file: {cache_file}. Error: {e}")
     logging.getLogger(__name__).info("File permissions validated")
 
+def _validate_database(settings: Settings) -> None:
+    """Fail at startup if the fire database can't be opened for writing.
+
+    An unwritable database silently disables both snapshot recording and
+    the API-outage fallback; better to refuse to boot.
+    """
+    try:
+        conn = firedb.connect(settings.database)
+        conn.execute("BEGIN IMMEDIATE")
+        conn.rollback()
+        conn.close()
+    except (OSError, sqlite3.OperationalError) as e:
+        raise PermissionError(
+            f"Cannot open the fire database at {settings.database} for "
+            f"writing (check ownership/permissions of the file and its "
+            f"directory): {e}"
+        )
+
+
 async def _run_transports(transports: Iterable[BaseTransport]) -> None:
     """Start every transport and keep them alive until explicitly stopped."""
     tasks = [asyncio.create_task(t.listen()) for t in transports]
@@ -75,6 +96,7 @@ def run() -> None:
     settings = get_config()
     _configure_logging(settings)
     _validate_cache_dir()
+    _validate_database(settings)
     logging.getLogger(__name__).info("TrekSafer starting in %s environment", settings.env)
     print(f"TrekSafer running — environment: {settings.env}")
 

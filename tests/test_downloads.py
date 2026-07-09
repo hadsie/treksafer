@@ -65,25 +65,52 @@ class TestRefreshSource:
 
 
 class TestMain:
-    def test_failed_source_reported_without_stopping_others(self, tmp_path, monkeypatch, capsys):
-        calls = []
+    def _empty(self):
+        return gpd.GeoDataFrame(columns=['FIRE_NUMBER', 'geometry'],
+                                geometry='geometry', crs='EPSG:4326')
 
-        empty = gpd.GeoDataFrame(columns=['FIRE_NUMBER', 'geometry'],
-                                 geometry='geometry', crs='EPSG:4326')
+    def _settings(self, tmp_path):
+        settings = get_config().model_copy(deep=True)
+        settings.database = str(tmp_path / 'fires.db')
+        return settings
+
+    def test_transient_failure_recovered_by_retry(self, tmp_path, monkeypatch, capsys):
+        """A rate-limited source succeeds on the retry round; exit code 0."""
+        calls = []
 
         def fake_fetch(config):
             calls.append(config)
             if len(calls) == 1:
-                raise requests.ConnectionError('boom')
-            return empty
+                raise requests.ConnectionError('429 too many requests')
+            return self._empty()
 
-        settings = get_config().model_copy(deep=True)
-        settings.database = str(tmp_path / 'fires.db')
-        monkeypatch.setattr(downloads, 'get_config', lambda: settings)
+        sleeps = []
+        monkeypatch.setattr(downloads, 'get_config', lambda: self._settings(tmp_path))
         monkeypatch.setattr(downloads, 'fetch_all_fires', fake_fetch)
+        monkeypatch.setattr(downloads.time, 'sleep', sleeps.append)
+
+        exit_code = downloads.main()
+
+        # Recovered on the first retry round; no further attempts.
+        assert exit_code == 0
+        assert sleeps == [downloads.RETRY_DELAY_S]
+        assert 'Retrying 1 failed source(s)' in capsys.readouterr().out
+
+    def test_persistent_failure_reported_after_retry(self, tmp_path, monkeypatch, capsys):
+        """A source that fails both rounds is reported; the others complete."""
+        def fake_fetch(config):
+            if config.points_where.startswith('Agency'):  # the CA source
+                raise requests.ConnectionError('boom')
+            return self._empty()
+
+        sleeps = []
+        monkeypatch.setattr(downloads, 'get_config', lambda: self._settings(tmp_path))
+        monkeypatch.setattr(downloads, 'fetch_all_fires', fake_fetch)
+        monkeypatch.setattr(downloads.time, 'sleep', sleeps.append)
 
         exit_code = downloads.main()
 
         assert exit_code == 1
-        assert len(calls) == len(settings.data)
-        assert 'failed' in capsys.readouterr().out
+        assert len(sleeps) == downloads.MAX_RETRIES
+        out = capsys.readouterr().out
+        assert '1 source(s) failed: CA' in out
