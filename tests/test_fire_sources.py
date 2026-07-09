@@ -345,6 +345,38 @@ class TestFetchFiresSpatial:
         assert envelope_call['geometryType'] == 'esriGeometryEnvelope'
         assert envelope_call['where'] == "Agency NOT IN ('BC','AB')"
 
+    def test_detached_patch_unions_into_nearby_fire(self, mocked_responses):
+        """A fire's disconnected burn patches merge into one geometry."""
+        mocked_responses.get(POINTS_URL, json=collection([ca_point_feature('F1')]))
+        mocked_responses.get(PERIMS_URL, json=collection([
+            ca_perimeter_feature(),                        # contains F1's point
+            ca_perimeter_feature(lon=-105.25, lat=55.15),  # detached patch ~6km east
+        ]))
+
+        gdf = fetch_fires(SPATIAL_CONFIG, CA_COORDS, 100)
+
+        assert len(gdf) == 1
+        assert gdf.geometry.iloc[0].geom_type == 'MultiPolygon'
+        assert len(mocked_responses.calls) == 2  # both patches claimed, no recovery
+
+    def test_in_radius_patch_with_far_point_reports_the_fire(self, mocked_responses):
+        """The field case: only a detached patch is in radius; the fire's
+        point is beyond it. The fire must still be reported."""
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(PERIMS_URL, json=collection([ca_perimeter_feature()]))
+        mocked_responses.get(POINTS_URL, json=collection([
+            ca_point_feature('FAR', size=40000.0, lon=-105.6, lat=55.25),  # ~18km away
+        ]))
+
+        gdf = fetch_fires(SPATIAL_CONFIG, CA_COORDS, 100)
+
+        assert list(gdf['Fire_Name']) == ['FAR']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+        # Recovery envelope grew past the patch's own bounding box.
+        envelope = mocked_responses.calls[2].request.params['geometry']
+        minx, miny, maxx, maxy = (float(v) for v in envelope.split(','))
+        assert maxx - minx > 0.3  # the patch alone is 0.04 degrees wide
+
     def test_orphaned_perimeter_dropped_with_warning(self, mocked_responses, caplog):
         mocked_responses.get(POINTS_URL, json=collection([]))
         mocked_responses.get(PERIMS_URL, json=collection([ca_perimeter_feature()]))

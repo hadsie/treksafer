@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 import responses
 
-from app.arcgis import fetch_layer, _session
+from app.arcgis import fetch_layer, _cacheable, _session
 
 LAYER_URL = 'https://example.test/points/FeatureServer/0'
 QUERY_URL = f'{LAYER_URL}/query'
@@ -90,6 +90,19 @@ class TestFetchLayer:
 
 
 class TestSession:
+    def test_arcgis_error_bodies_are_not_cacheable(self):
+        """A rate-limit error arrives as HTTP 200; caching it would serve
+        the error for the full TTL."""
+        class FakeResponse:
+            def __init__(self, content):
+                self.content = content
+
+        error = FakeResponse(b'{"error":{"code":429,"message":"Too many requests."}}')
+        data = FakeResponse(b'{"type":"FeatureCollection","features":[]}')
+
+        assert _cacheable(error) is False
+        assert _cacheable(data) is True
+
     def test_session_is_cached_with_configured_ttl(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         _session.cache_clear()

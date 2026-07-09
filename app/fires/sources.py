@@ -22,6 +22,10 @@ from ..config import RealtimeFireConfig
 
 # A point within this many true meters of a polygon counts as the same fire.
 _SPATIAL_JOIN_M = 1000
+# A fire's hotspot perimeter can be several disconnected burn patches while
+# the fire has a single point; an unclaimed polygon within this many true
+# meters of a matched fire is treated as one of its patches.
+_FRAGMENT_ASSOC_M = 20_000
 # Circle radius in true meters for fires that report no size.
 _MIN_CIRCLE_M = 100
 
@@ -44,32 +48,37 @@ def _size_circle(point_3857, hectares, latitude):
 
 
 def spatial_merge(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
-                  size_field: Optional[str], unmatched: str = 'buffer'):
+                  size_field: Optional[str], unmatched: str = 'buffer',
+                  threshold_m: float = _SPATIAL_JOIN_M):
     """Give each point a polygon geometry, matching the two by location.
 
     A point takes the polygon it falls inside, or the nearest one within
-    _SPATIAL_JOIN_M meters; no shared identifier is needed. Unmatched
-    points get a circle sized from the fire's reported area ('buffer') or
-    are discarded ('drop'). Polygons never add rows of their own.
+    threshold_m meters; no shared identifier is needed. Unmatched points
+    get a circle sized from the fire's reported area ('buffer') or are
+    discarded ('drop'). Polygons left unclaimed are then treated as
+    detached burn patches: each one within _FRAGMENT_ASSOC_M of a matched
+    fire is unioned into that fire's geometry. Polygons never add rows of
+    their own.
 
     Args:
         points: Fire points with attribute columns, in EPSG:4326 (lat/lon)
         perimeters: Polygons in EPSG:4326
         size_field: Points column holding the fire size in hectares
         unmatched: 'buffer' or 'drop'
+        threshold_m: How close a point must be to a polygon to claim it
 
     Returns:
         Tuple of (points with their new geometry, in the meter-based
-        EPSG:3857, and the index labels of the matched polygons).
+        EPSG:3857, and the index labels of the polygons used).
     """
     latitudes = points.geometry.y
     points_m = points.to_crs(epsg=3857)
     perimeters_m = perimeters.to_crs(epsg=3857)
 
     used: set = set()
-    keep, geometries = [], []
+    keep, geometries, kept_latitudes = [], [], []
     for (idx, row), latitude in zip(points_m.iterrows(), latitudes):
-        threshold = _SPATIAL_JOIN_M / math.cos(math.radians(latitude))
+        threshold = threshold_m / math.cos(math.radians(latitude))
         match = None
         if not perimeters_m.empty:
             distances = perimeters_m.geometry.distance(row.geometry)
@@ -79,11 +88,30 @@ def spatial_merge(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
         if match is not None:
             keep.append(idx)
             geometries.append(perimeters_m.geometry[match])
+            kept_latitudes.append(latitude)
             used.add(match)
         elif unmatched == 'buffer':
             hectares = row.get(size_field) if size_field else None
             keep.append(idx)
             geometries.append(_size_circle(row.geometry, hectares, latitude))
+            kept_latitudes.append(latitude)
+
+    # Attach detached burn patches to the nearest matched fire.
+    associated = 0
+    if geometries:
+        for perim_idx in perimeters_m.index:
+            if perim_idx in used:
+                continue
+            patch = perimeters_m.geometry[perim_idx]
+            distances = [geom.distance(patch) for geom in geometries]
+            nearest = distances.index(min(distances))
+            threshold = _FRAGMENT_ASSOC_M / math.cos(math.radians(kept_latitudes[nearest]))
+            if distances[nearest] <= threshold:
+                geometries[nearest] = geometries[nearest].union(patch)
+                used.add(perim_idx)
+                associated += 1
+    if associated:
+        logging.info(f"{associated} detached burn patch(es) merged into nearby fires.")
 
     merged = points_m.loc[keep].copy()
     merged.geometry = geometries
@@ -97,6 +125,14 @@ def _points_fields(config: RealtimeFireConfig) -> list[str]:
     extras = [config.join_field, *config.key_fields, config.updated_field]
     fields += [f for f in extras if f and f not in fields]
     return fields
+
+
+def _expanded_bounds(gdf: gpd.GeoDataFrame, meters: float):
+    """Grow a frame's lat/lon bounds by a true-meter margin on every side."""
+    minx, miny, maxx, maxy = gdf.total_bounds
+    dlat = meters / 111_000
+    dlon = meters / (111_000 * math.cos(math.radians((miny + maxy) / 2)))
+    return (minx - dlon, miny - dlat, maxx + dlon, maxy + dlat)
 
 
 def _stash_report_point(points: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -192,9 +228,13 @@ def _merge_spatial(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
     if unused.empty:
         return merged
 
+    # The report point of a detached burn patch can sit well outside the
+    # patch itself, so the recovery envelope grows by the association
+    # distance and recovered points may claim a patch from that far away.
     try:
         extra = _stash_report_point(
-            query_layer(config.points_url, envelope_filter(unused.total_bounds),
+            query_layer(config.points_url,
+                        envelope_filter(_expanded_bounds(unused, _FRAGMENT_ASSOC_M)),
                         _points_fields(config), config.cache_timeout,
                         config.points_where))
     except (RequestException, ValueError) as e:
@@ -207,7 +247,8 @@ def _merge_spatial(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
     if not extra.empty and not points.empty:
         extra = extra[~extra[fire_key].isin(points[fire_key])]
 
-    recovered, recovered_used = spatial_merge(extra, unused, size_field, unmatched='drop')
+    recovered, recovered_used = spatial_merge(extra, unused, size_field, unmatched='drop',
+                                              threshold_m=_FRAGMENT_ASSOC_M)
     leftover = len(unused) - len(recovered_used)
     if leftover:
         logging.warning(

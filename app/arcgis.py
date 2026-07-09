@@ -21,6 +21,12 @@ _REQUEST_TIMEOUT = 30
 _MAX_PAGES = 100
 
 
+def _cacheable(response) -> bool:
+    """ArcGIS delivers errors (including rate limits) inside HTTP 200
+    responses; caching one would serve the error for the full TTL."""
+    return b'"error"' not in response.content[:200]
+
+
 @lru_cache(maxsize=None)
 def _session(cache_timeout: int) -> requests_cache.CachedSession:
     cache_dir = Path('cache')
@@ -29,6 +35,7 @@ def _session(cache_timeout: int) -> requests_cache.CachedSession:
         cache_name=str(cache_dir / 'arcgis_fires'),
         expire_after=timedelta(seconds=cache_timeout),
         allowable_methods=['GET'],
+        filter_fn=_cacheable,
         stale_if_error=True,
     )
 
