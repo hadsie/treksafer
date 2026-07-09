@@ -38,7 +38,7 @@ Download fire perimeter data: `python scripts/downloads.py`
 
 Fire perimeter shapefiles in `shapefiles/{BC,AB,CA,US}/`. Each source has field mappings and status maps in `config.yaml` under `data:`.
 
-BC fires are queried in realtime from the BCWS ArcGIS API (`app/arcgis.py`, see `specs/bc-realtime-fires.md`), falling back to the downloaded shapefile when the API is unavailable. The fallback path enriches fires via a REST API call (cached 4h). Set `TREKSAFER_BC_REALTIME=false` to disable realtime.
+BC, AB, and Canada-wide (CA) fires are queried in realtime from provincial/national ArcGIS APIs (`app/arcgis.py`), falling back to the downloaded file when an API is unavailable. BC/AB join their points and perimeters layers on a fire-number field; CA's national hotspot perimeters carry no fire ID, so points join spatially, with fires that have no perimeter getting a circle of their reported size. The CA daily download saves the same source (same merge) as its recovery file. The BC fallback path enriches fires via a REST API call (cached 4h). Set `TREKSAFER_{BC,AB,CA}_REALTIME=false` to disable realtime per source.
 
 Avalanche providers are configured in `config.yaml` under `avalanche.providers:` and selected dynamically based on location.
 

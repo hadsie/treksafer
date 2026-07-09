@@ -42,7 +42,7 @@ class TestRealtimeFireConfig:
                 status_map={"active": ["Out of Control"]},
             )
 
-    def test_missing_perimeter_fire_field_rejected(self):
+    def test_field_join_requires_perimeter_fire_field(self):
         with pytest.raises(ValidationError, match="perimeter_fire_field"):
             RealtimeFireConfig(
                 points_url="https://example.test/points/query",
@@ -50,3 +50,14 @@ class TestRealtimeFireConfig:
                 mapping={"Fire": "FIRE_NUMBER"},
                 status_map={"active": ["Out of Control"]},
             )
+
+    def test_spatial_join_needs_no_perimeter_fire_field(self):
+        config = RealtimeFireConfig(
+            points_url="https://example.test/points/query",
+            perimeters_url="https://example.test/perims/query",
+            join="spatial",
+            mapping={"Fire": "Fire_Name"},
+            status_map={"active": ["OC"]},
+        )
+        assert config.join == "spatial"
+        assert config.points_where == "1=1"

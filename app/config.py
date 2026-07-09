@@ -95,17 +95,27 @@ class RealtimeFireConfig(BaseModel):
     mapping: Dict[str, str]
     transforms: Dict[str, str] = {}
     status_map: Dict[str, List[str]]
+    # How points and perimeters relate: 'field' joins on a shared fire-number
+    # field; 'spatial' assigns each point the polygon it falls in (for
+    # sources whose perimeters carry no fire ID).
+    join: Literal["field", "spatial"] = "field"
     # Fire-number field on the perimeters layer; may differ from the points
     # layer's (e.g. Alberta uses FireNumber vs the points layer's LABEL).
-    perimeter_fire_field: str
+    # Required for (and only used by) the 'field' join.
+    perimeter_fire_field: Optional[str] = None
+    # Attribute filter applied to points-layer queries, e.g. to exclude
+    # agencies covered by a dedicated source.
+    points_where: str = "1=1"
 
     @model_validator(mode="after")
     def check_join_key(self):
         if "Fire" not in self.mapping:
             raise ValueError(
-                "realtime mapping must include 'Fire'; it is the join key "
-                "between the points and perimeters layers"
+                "realtime mapping must include 'Fire'; it identifies each "
+                "fire from the points layer"
             )
+        if self.join == "field" and not self.perimeter_fire_field:
+            raise ValueError("the 'field' join requires perimeter_fire_field")
         return self
 
 

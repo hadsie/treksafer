@@ -135,6 +135,32 @@ data:
       out: ['OUT']
   - location: CA
     filename: CA_Fire_Perimeters_{DATE}.zip
+    # Realtime national CWFIS layers (via Esri Canada). BC and AB are
+    # excluded here because they have dedicated sources above. The hotspot
+    # perimeters carry no fire ID, so points join to polygons spatially;
+    # fires with no polygon get a circle of their reported size. The daily
+    # download (scripts/downloads.py) saves this same source to the file
+    # below as a recovery mode.
+    realtime:
+      enabled: ${TREKSAFER_CA_REALTIME:-true}
+      points_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/activefires/FeatureServer/0/query
+      perimeters_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/Active_Wildfire_Perimeters_in_Canada/FeatureServer/0/query
+      join: spatial
+      points_where: Agency NOT IN ('BC','AB')
+      cache_timeout: 900
+      mapping:
+        Fire: Fire_Name
+        Location: Agency
+        Size: Hectares__Ha_
+        Status: Stage_of_Control
+        Discovered: Start_Date
+      transforms:
+        Discovered: epoch_ms
+      status_map:
+        active: ['OC']
+        managed: ['BH']
+        controlled: ['UC']
+        out: []
     mapping:
       fields:
         Fire: firename
