@@ -22,17 +22,22 @@ class Messages:
     def data_unavailable(self) -> str:
         return 'TrekSafer ERROR: Fire data is temporarily unavailable for your area. Try again later.'
 
-    def no_fires(self, distance: float, status_filter: str = None) -> str:
+    def no_fires(self, distance: float, coords: tuple, status_filter: str = None) -> str:
         """Generate no fires message with optional status filter context.
+
+        The searched coordinates are echoed so the user can verify what
+        location their message parsed to.
 
         Args:
             distance: Search radius in km
+            coords: The (latitude, longitude) that was searched
             status_filter: Status filter applied ('active', 'managed', 'controlled', 'out', 'all', or None)
 
         Returns:
             Formatted message string
         """
-        base_msg = f'No fires reported within {distance}km of your location.'
+        location = f'({coords[0]:.5f}, {coords[1]:.5f})'
+        base_msg = f'No fires reported within {distance}km of your location {location}.'
 
         # If no filter or 'all'/'out', return simple message
         if not status_filter or status_filter in ('all', 'out'):
@@ -52,7 +57,7 @@ class Messages:
 
         # Format message with included statuses
         status_list = ', '.join(included_statuses)
-        return f'No fires reported within {distance}km of your location. (Showing: {status_list})'
+        return f'No fires reported within {distance}km of your location {location}. (Showing: {status_list})'
 
     def fires(self, fires: list[Dict]) -> list[str]:
         messages = []
@@ -204,7 +209,7 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
             return aqi_message + responses.data_unavailable()
         distance = min(findfires.filters['distance'], settings.max_radius)
         status_filter = fire_filters.get('status')
-        return aqi_message + responses.no_fires(distance, status_filter)
+        return aqi_message + responses.no_fires(distance, coords, status_filter)
 
     # Format response
     fire_messages = []
