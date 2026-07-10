@@ -123,22 +123,22 @@ class TestMessages:
 
     def test_no_fires_basic_message(self):
         """No fires message without filter returns simple message."""
-        msg = Messages().no_fires(50)
-        assert msg == 'No fires reported within 50km of your location.'
+        msg = Messages().no_fires(50, (50.12345, -122.54321))
+        assert msg == 'No fires reported within 50km of your location (50.12345, -122.54321).'
 
         # 'all' filter also returns simple message
-        msg_all = Messages().no_fires(50, 'all')
-        assert msg_all == 'No fires reported within 50km of your location.'
+        msg_all = Messages().no_fires(50, (50.12345, -122.54321), 'all')
+        assert msg_all == 'No fires reported within 50km of your location (50.12345, -122.54321).'
 
     def test_no_fires_with_active_filter(self):
         """No fires message with 'active' filter shows single status."""
-        msg = Messages().no_fires(50, 'active')
-        assert msg == 'No fires reported within 50km of your location. (Showing: active)'
+        msg = Messages().no_fires(50, (50.12345, -122.54321), 'active')
+        assert msg == 'No fires reported within 50km of your location (50.12345, -122.54321). (Showing: active)'
 
     def test_no_fires_with_controlled_filter(self):
         """No fires message with 'controlled' filter shows multiple statuses."""
-        msg = Messages().no_fires(50, 'controlled')
-        assert msg == 'No fires reported within 50km of your location. (Showing: active, managed, controlled)'
+        msg = Messages().no_fires(50, (50.12345, -122.54321), 'controlled')
+        assert msg == 'No fires reported within 50km of your location (50.12345, -122.54321). (Showing: active, managed, controlled)'
 
 
 class TestDistanceFormatting:

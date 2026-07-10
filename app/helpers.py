@@ -199,6 +199,64 @@ def parse_message(message):
         "avalanche_filters": avalanche_filters
     }
 
+def _expand_short_link(url):
+    """Resolve a shortened map link to its final URL.
+
+    Chains can be multi-hop (ZOLEO hops through an intermediate shortener
+    before landing on a Google Maps URL), so redirects are followed to the
+    end and the final URL returned.
+    """
+    try:
+        resp = requests.get(url, timeout=10)
+        return resp.url
+    except requests.RequestException as e:
+        logging.warning(f"Failed to expand short map link {url}: {e}")
+        return None
+
+
+_DEVICE_LINK_RE = re.compile(
+    r'(?:https?://)?(?:www\.)?(inreachlink\.com|sms2zoleo\.com)/(\w+)', re.IGNORECASE)
+
+
+def _coords_from_device_link(message):
+    """Resolve a satellite messenger's own share link (inReach, ZOLEO) to
+    the device's send location.
+
+    inReach share pages embed the location as JSON; ZOLEO links redirect
+    (via an intermediate shortener) to a Google Maps URL. Network failures
+    and pages without coordinates return None.
+    """
+    m = _DEVICE_LINK_RE.search(message)
+    if not m:
+        return None
+    domain, code = m.group(1).lower(), m.group(2)
+    url = f'https://{domain}/{code}'
+
+    if domain == 'sms2zoleo.com':
+        expanded = _expand_short_link(url)
+        if expanded:
+            parsed = urlparse(expanded)
+            if 'google.' in parsed.netloc and '/maps' in parsed.path:
+                return _coords_from_google(parsed) or None
+        logging.warning(f"ZOLEO link {url} resolved without usable coordinates")
+        return None
+
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+    except requests.RequestException as e:
+        logging.warning(f"Failed to resolve inReach link {url}: {e}")
+        return None
+    lat_m = re.search(r'"Latitude"\s*:\s*(-?\d+\.\d+)', resp.text)
+    lon_m = re.search(r'"Longitude"\s*:\s*(-?\d+\.\d+)', resp.text)
+    if lat_m and lon_m:
+        lat, lon = float(lat_m.group(1)), float(lon_m.group(1))
+        if _valid_coords(lat, lon):
+            return lat, lon
+    logging.warning(f"inReach link {url} resolved without usable coordinates")
+    return None
+
+
 def coords_from_message(message: str) -> tuple[float, float]|None:
     """Extract latitude, longitude coordinates from a plain text message.
 
@@ -208,59 +266,63 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
         - Google Maps links
         - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
 
+    Every format is matched across the whole message and the earliest valid
+    match wins, so coordinates a user typed take precedence over the
+    device location a satellite messenger appends at the end.
+
     Returns:
       tuple of (lat, long) coordinates, or None if no valid patterns were found.
     """
+    candidates = []  # (position in message, lat, lon)
 
-    # Check for Google or Apple map shares.
-    for url_txt in re.findall(r'https?://\S+', message):
-        parsed = urlparse(url_txt)
+    # Google or Apple map shares.
+    for m in re.finditer(r'https?://\S+', message):
+        parsed = urlparse(m.group())
         coords = False
+        # Short share domains redirect to a full map URL.
+        host = parsed.netloc.removeprefix('www.')
+        if (host in ('maps.apple', 'maps.app.goo.gl')
+                or (host == 'goo.gl' and parsed.path.startswith('/maps'))):
+            expanded = _expand_short_link(m.group())
+            if expanded:
+                parsed = urlparse(expanded)
         if 'maps.apple.com' in parsed.netloc:
             coords = _coords_from_apple(parsed)
         elif any(domain in parsed.netloc for domain in ('google.', 'goo.gl')) and '/maps' in parsed.path:
             coords = _coords_from_google(parsed)
         if coords:
-            return coords
+            candidates.append((m.start(), *coords))
 
-    # Coordinates must include a decimal point. Every satellite messenger and
-    # map share emits decimals, so requiring them avoids matching incidental
-    # integers (e.g. "party of 2, ...") as coordinates.
+    # Degree + hemisphere letters.
+    for pattern in _DEG_HEMI_PATTERNS:
+        for m in pattern.finditer(message):
+            lat = _apply_hemisphere(float(m.group('lat')), m.group('lat_dir'), for_lat=True)
+            lon = _apply_hemisphere(float(m.group('lon')), m.group('lon_dir'), for_lat=False)
+            if _valid_coords(lat, lon):
+                candidates.append((m.start(), lat, lon))
+
+    # Plain decimal pairs. Coordinates must include a decimal point: every
+    # satellite messenger and map share emits decimals, so requiring them
+    # avoids matching incidental integers (e.g. "party of 2, ...") as
+    # coordinates. The lookbehind/lookahead stop a pair from matching a
+    # fragment of a longer number (e.g. "122.09" must not yield "09") and
+    # keep leading signs intact.
     lat_coord = r'[-+]?\d{1,2}\.\d+'
     long_coord = r'[-+]?\d{1,3}\.\d+'
-
-    # inReach appends the coordinates in brackets at the end of the message;
-    # prefer those over any earlier pair in the free-text body.
-    m = re.search(r'\(\s*(%s)\s*,\s*(%s)\s*\)\s*$' % (lat_coord, long_coord), message)
-    if m:
+    pair_re = r'(?<![\d.])(%s)\s*,\s*(%s)(?!\.?\d)' % (lat_coord, long_coord)
+    for m in re.finditer(pair_re, message):
         lat, lon = float(m.group(1)), float(m.group(2))
         if _valid_coords(lat, lon):
-            return lat, lon
+            candidates.append((m.start(), lat, lon))
 
-    # Otherwise take the first valid pair anywhere in the message. The
-    # lookbehind/lookahead stop a pair from matching a fragment of a longer
-    # number (e.g. "122.09" must not yield "09") and keep leading signs intact.
-    pair_re = r'(?<![\d.])(%s)\s*,\s*(%s)(?!\.?\d)' % (lat_coord, long_coord)
-    for lat_s, lon_s in re.findall(pair_re, message):
-        lat, lon = float(lat_s), float(lon_s)
-        if _valid_coords(lat, lon):
-            return lat, lon
+    if candidates:
+        _, lat, lon = min(candidates, key=lambda c: c[0])
+        return lat, lon
 
-    # If decimal parsing didn't hit, try degree+hemisphere patterns.
-    for pattern in _DEG_HEMI_PATTERNS:
-        m = pattern.search(message)
-        if m:
-            lat_val = float(m.group('lat'))
-            lon_val = float(m.group('lon'))
-            lat_dir = m.group('lat_dir')
-            lon_dir = m.group('lon_dir')
-            lat = _apply_hemisphere(lat_val, lat_dir, for_lat=True)
-            lon = _apply_hemisphere(lon_val, lon_dir, for_lat=False)
-            # Sanity check bounds
-            if _valid_coords(lat, lon):
-                return lat, lon
-
-    return None
+    # Last resort: a message carrying only a satellite messenger's share
+    # link (inReach, ZOLEO) resolves to the device's send location. These
+    # links are appended automatically, so anything else wins first.
+    return _coords_from_device_link(message)
 
 def _apply_hemisphere(value: float, hemi: str, for_lat: bool) -> float:
     """Apply hemisphere direction to coordinate value.
@@ -294,10 +356,20 @@ def _coords_from_google(url):
 
     Tries multiple parsing strategies in order:
     1. Path-based: maps.google.com/@lat,lon,zoom
-    2. Query-based: ...?q=lat,lon or ...?query=lat,lon
+    2. Pin data blob (!3dlat!4dlon) or a path pair (/maps/place/lat,lon/)
+    3. Query-based: ...?q=lat,lon or ...?query=lat,lon
     """
     # Attempt 1: Path format (@lat,lon)
     m = re.search(r'@(' + _LAT + r'),(' + _LON + r')', url.path)
+    if m and _valid_coords(*(float(x) for x in m.groups())):
+        return float(m.group(1)), float(m.group(2))
+
+    # Attempt 1b: the data blob's pin location (!3dlat!4dlon), the exact
+    # shared point; then a bare path pair (/maps/place/lat,lon/).
+    m = re.search(r'!3d(' + _LAT + r')!4d(' + _LON + r')', url.path)
+    if m and _valid_coords(*(float(x) for x in m.groups())):
+        return float(m.group(1)), float(m.group(2))
+    m = re.search(r'/(' + _LAT + r'),(' + _LON + r')(?:/|$)', url.path)
     if m and _valid_coords(*(float(x) for x in m.groups())):
         return float(m.group(1)), float(m.group(2))
 

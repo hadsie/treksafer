@@ -6,6 +6,7 @@ Tests parse_message() which extracts:
 - Avalanche forecast filters
 """
 import pytest
+import responses
 
 from app.helpers import parse_message
 
@@ -87,10 +88,20 @@ class TestCoordinateParsing:
         result = parse_message("-45.5, -120.5")
         assert result["coords"] == (-45.5, -120.5)
 
-    def test_end_bracketed_coords_beat_earlier_decimal_pair(self):
-        """Bracketed coords at the end of the message win over an earlier decimal pair."""
+    def test_typed_pair_beats_appended_device_location(self):
+        """The earliest coordinates win: a pair the user typed outranks the
+        device location the inReach gateway appends at the end."""
+        result = parse_message(
+            "Fires (38.11111, -119.22222) inreachlink.com/ABC123  (-43.51234, 172.61234)")
+        assert result["coords"] == (38.11111, -119.22222)
+
+    def test_first_valid_pair_wins_even_over_end_bracketed_pair(self):
+        """Earliest-match-wins is uniform: free text that parses as a valid
+        coordinate pair beats a later bracketed pair. Accepted trade-off of
+        the explicit-before-automatic rule; the decimal and bounds guards
+        keep this rare."""
         result = parse_message("temp 12.5, 20.3 at (52.5092, -115.6182)")
-        assert result["coords"] == (52.5092, -115.6182)
+        assert result["coords"] == (12.5, 20.3)
 
     def test_skip_invalid_find_valid(self):
         """Skip invalid pairs, find first valid one."""
@@ -135,6 +146,17 @@ class TestHemisphereCoordinates:
         """Hemisphere letter overrides positive sign."""
         result = parse_message("+50° S, 122° E")
         assert result["coords"] == (-50, 122)
+
+    def test_typed_hemisphere_beats_appended_device_location(self):
+        """A deliberately typed hemisphere pair outranks the trailing decimal
+        pair the inReach gateway appends (the device's own location).
+
+        Models a user abroad asking about North American fires.
+        """
+        message = ("Fires(N 33.11111° W 116.22222°) "
+                   "inreachlink.com/ABC123XYZ  (-43.51234, 172.61234)")
+        result = parse_message(message)
+        assert result["coords"] == (33.11111, -116.22222)
 
 
 class TestCoordinateValidation:
@@ -383,3 +405,129 @@ class TestIntegration:
         assert result["coords"] == (49.25, -123.01)
         assert result["data_type"] == "avalanche"
         assert result["avalanche_filters"]["forecast"] == "tomorrow"
+
+
+class TestInreachLinkResolution:
+    """A message with only an inReach share link resolves coordinates by
+    fetching the share page (the one network call in parsing)."""
+
+    LINK_PAGE = '{"messages":[{"Latitude":44.11111,"Longitude":-73.22222}]}'
+
+    @responses.activate
+    def test_link_only_message_resolves(self):
+        responses.get('https://inreachlink.com/FAKE123', body=self.LINK_PAGE)
+
+        result = parse_message('Fires inreachlink.com/FAKE123')
+        assert result["coords"] == (44.11111, -73.22222)
+
+    @responses.activate
+    def test_typed_coordinates_skip_the_fetch(self):
+        """No HTTP when the message already has coordinates."""
+        # No mock registered: any request would raise a ConnectionError.
+        result = parse_message('Fires (52.11111, -115.22222) inreachlink.com/FAKE123')
+        assert result["coords"] == (52.11111, -115.22222)
+
+    @responses.activate
+    def test_fetch_failure_returns_no_coordinates(self):
+        responses.get('https://inreachlink.com/FAKE123', status=503)
+
+        assert parse_message('Fires inreachlink.com/FAKE123') is None
+
+    @responses.activate
+    def test_page_without_coordinates_returns_none(self):
+        responses.get('https://inreachlink.com/FAKE123', body='<html>no location</html>')
+
+        assert parse_message('Fires inreachlink.com/FAKE123') is None
+
+
+class TestAppleShortLinks:
+    """Apple's maps.apple short domain redirects to a full maps.apple.com URL."""
+
+    TARGET = ('https://maps.apple.com/place'
+              '?coordinate=49.11111,-123.22222&name=Pin&map=h')
+
+    @responses.activate
+    def test_short_link_resolves(self):
+        responses.get('https://maps.apple/p/FAKE.abc', status=301,
+                      headers={'Location': self.TARGET})
+        responses.get(self.TARGET, body='')
+
+        result = parse_message('https://maps.apple/p/FAKE.abc')
+        assert result["coords"] == (49.11111, -123.22222)
+
+    @responses.activate
+    def test_short_link_beats_appended_device_location(self):
+        """A shared pin is deliberate; it outranks the device tail."""
+        responses.get('https://maps.apple/p/FAKE.abc', status=301,
+                      headers={'Location': self.TARGET})
+        responses.get(self.TARGET, body='')
+
+        result = parse_message('https://maps.apple/p/FAKE.abc (-43.51234, 172.61234)')
+        assert result["coords"] == (49.11111, -123.22222)
+
+    @responses.activate
+    def test_failed_expansion_falls_back_to_device_tail(self):
+        responses.get('https://maps.apple/p/FAKE.abc', status=503)
+
+        result = parse_message('https://maps.apple/p/FAKE.abc (-43.51234, 172.61234)')
+        assert result["coords"] == (-43.51234, 172.61234)
+
+
+class TestGoogleShortLinks:
+    """Google's maps.app.goo.gl short domain redirects to a full maps URL
+    whose coordinates live in the path and the !3d/!4d pin blob."""
+
+    TARGET = ('https://www.google.com/maps/place/49.11111,-123.22222/'
+              'data=!4m6!3m5!1s0!7e2!8m2!3d49.1111199!4d-123.2222299!18m1!1e1')
+
+    @responses.activate
+    def test_short_link_resolves_to_pin_precision(self):
+        responses.get('https://maps.app.goo.gl/FAKE123', status=302,
+                      headers={'Location': self.TARGET})
+        responses.get(self.TARGET, body='')
+
+        result = parse_message('https://maps.app.goo.gl/FAKE123?g_st=ac'.replace('?g_st=ac', ''))
+        assert result["coords"] == (49.1111199, -123.2222299)
+
+    def test_expanded_place_url_parses_directly(self):
+        """The full URL form parses without any network, preferring the
+        !3d/!4d pin over the lower-precision path pair."""
+        result = parse_message(self.TARGET)
+        assert result["coords"] == (49.1111199, -123.2222299)
+
+    @responses.activate
+    def test_failed_expansion_falls_back_to_device_tail(self):
+        responses.get('https://maps.app.goo.gl/FAKE123', status=503)
+
+        result = parse_message('https://maps.app.goo.gl/FAKE123 (-43.51234, 172.61234)')
+        assert result["coords"] == (-43.51234, 172.61234)
+
+
+class TestZoleoLinks:
+    """ZOLEO share links are the device's own location (like inReach):
+    resolved only as a last resort, through an intermediate shortener to
+    a Google Maps q= URL."""
+
+    @responses.activate
+    def test_zoleo_link_resolves_through_the_chain(self):
+        responses.get('https://sms2zoleo.com/FAKE1', status=302,
+                      headers={'Location': 'https://d.example.ms/FAKE1'})
+        responses.get('https://d.example.ms/FAKE1', status=302,
+                      headers={'Location': 'https://www.google.com/maps?q=49.11111,-123.22222'})
+        responses.get('https://www.google.com/maps?q=49.11111,-123.22222', body='')
+
+        result = parse_message('Fires? http://sms2zoleo.com/FAKE1')
+        assert result["coords"] == (49.11111, -123.22222)
+
+    @responses.activate
+    def test_typed_coordinates_skip_the_fetch(self):
+        """A device link never outranks typed coordinates; no HTTP happens."""
+        # No mock registered: any request would raise a ConnectionError.
+        result = parse_message('Fires (52.11111, -115.22222) http://sms2zoleo.com/FAKE1')
+        assert result["coords"] == (52.11111, -115.22222)
+
+    @responses.activate
+    def test_failed_zoleo_expansion_returns_none(self):
+        responses.get('https://sms2zoleo.com/FAKE1', status=503)
+
+        assert parse_message('Fires? http://sms2zoleo.com/FAKE1') is None
