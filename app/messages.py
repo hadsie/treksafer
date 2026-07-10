@@ -19,6 +19,10 @@ class Messages:
     def outside_of_area(self) -> str:
         return 'TrekSafer ERROR: GPS coordinates outside of supported fire perimeter area. No data available.'
 
+    def system_error(self) -> str:
+        return ('TrekSafer ERROR: Something went wrong and your request could not be '
+                'processed. The failure has been logged and reported.')
+
     def data_unavailable(self) -> str:
         return 'TrekSafer ERROR: Fire data is temporarily unavailable for your area. Try again later.'
 
@@ -235,6 +239,15 @@ def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dic
 
     forecast = avalanche.get_forecast(avalanche_filters)
     return forecast
+
+
+def safe_handle_message(message: str) -> str:
+    """Transport boundary for handle_message to ensure the user always gets a reply."""
+    try:
+        return handle_message(message)
+    except Exception:
+        logging.exception(f"handle_message crashed on message: {message!r}")
+        return Messages().system_error()
 
 
 def in_fire_season(today: Optional[date] = None) -> bool:

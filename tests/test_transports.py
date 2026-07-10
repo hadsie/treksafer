@@ -52,14 +52,14 @@ class TestCLITransport:
         test_message = "FIRECHECK: (49.25,-123.10)"
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
-        # Mock handle_message to return a response
-        with patch("app.transport.cli.handle_message") as mock_handle:
+        # Mock safe_handle_message to return a response
+        with patch("app.transport.cli.safe_handle_message") as mock_handle:
             mock_handle.return_value = "No fires reported within 100km"
 
             # Process the message
             await transport._handle_client(mock_reader, mock_writer)
 
-            # Verify handle_message was called with correct input
+            # Verify safe_handle_message was called with correct input
             mock_handle.assert_called_once_with(test_message)
 
             # Verify response was written
@@ -87,7 +87,7 @@ class TestCLITransport:
         test_message = "  FIRECHECK: (49.25,-123.10)  \n"
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
-        with patch("app.transport.cli.handle_message") as mock_handle:
+        with patch("app.transport.cli.safe_handle_message") as mock_handle:
             mock_handle.return_value = "Test response"
 
             await transport._handle_client(mock_reader, mock_writer)
@@ -110,7 +110,7 @@ class TestCLITransport:
         test_message = "FIRECHECK: (51.398720, -116.491640)"
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
-        with patch("app.transport.cli.handle_message") as mock_handle:
+        with patch("app.transport.cli.safe_handle_message") as mock_handle:
             # Simulate multiple fires found
             fire_response = "Fire: Test Fire (K12345)\n12km NW\nSize: 100 ha\n\nFire: Another Fire (K67890)\n15km SE\nSize: 50 ha"
             mock_handle.return_value = fire_response
@@ -136,7 +136,7 @@ class TestCLITransport:
         test_message = "FIRECHECK: no coordinates here"
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
-        with patch("app.transport.cli.handle_message") as mock_handle:
+        with patch("app.transport.cli.safe_handle_message") as mock_handle:
             mock_handle.return_value = "TrekSafer ERROR: No GPS location found."
 
             await transport._handle_client(mock_reader, mock_writer)
@@ -161,7 +161,7 @@ class TestCLITransport:
         test_message = "FIRECHECK: (49.25,-123.10) Près de Montréal"
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
-        with patch("app.transport.cli.handle_message") as mock_handle:
+        with patch("app.transport.cli.safe_handle_message") as mock_handle:
             mock_handle.return_value = "Résultat: Aucun feu"
 
             await transport._handle_client(mock_reader, mock_writer)
