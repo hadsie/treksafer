@@ -312,3 +312,30 @@ class TestInFireSeason:
             assert in_fire_season(date(2026, 12, 25)) is True
             assert in_fire_season(date(2026, 2, 10)) is True
             assert in_fire_season(date(2026, 7, 5)) is False
+
+
+class TestSafeHandleMessage:
+    """The transport boundary: a crash anywhere must still produce a reply."""
+
+    @patch("app.messages.handle_message", return_value="normal reply")
+    def test_passes_through_normally(self, mock_handle):
+        from app.messages import safe_handle_message
+        assert safe_handle_message("(50.1, -122.1)") == "normal reply"
+
+    @patch("app.messages.handle_message", side_effect=KeyError("Fire"))
+    def test_crash_produces_error_reply_and_loud_log(self, mock_handle, caplog):
+        from app.messages import safe_handle_message
+        import logging as _logging
+
+        with caplog.at_level(_logging.ERROR):
+            reply = safe_handle_message("(50.1, -122.1) crash bait")
+
+        assert 'Something went wrong' in reply
+        assert 'Do NOT rely on this service' in reply
+        record = next(r for r in caplog.records if 'handle_message crashed' in r.message)
+        assert record.levelname == 'ERROR'
+        assert record.exc_info is not None          # full traceback captured
+        assert 'crash bait' in record.message        # the repro case is in the log
+
+    def test_error_reply_fits_in_one_sms(self):
+        assert len(Messages().system_error()) <= 160

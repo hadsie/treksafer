@@ -45,7 +45,7 @@ class TestOnMessage:
     @pytest.mark.asyncio
     async def test_processes_and_replies(self, transport, signalwire_config):
         """An incoming message is processed and the response is sent back."""
-        with patch("app.transport.signalwire.handle_message") as mock_handle:
+        with patch("app.transport.signalwire.safe_handle_message") as mock_handle:
             mock_handle.return_value = "No fires reported within 100km"
 
             await transport._on_message(_incoming())
@@ -63,7 +63,7 @@ class TestOnMessage:
         """A RELAY send error is logged, not raised."""
         transport._client.send_message = AsyncMock(side_effect=RelayError(500, "boom"))
 
-        with patch("app.transport.signalwire.handle_message") as mock_handle:
+        with patch("app.transport.signalwire.safe_handle_message") as mock_handle:
             mock_handle.return_value = "Test response"
 
             # Should not raise even though the reply fails.
@@ -79,15 +79,15 @@ class TestOnMessage:
         transport._client = Mock()
         transport._client.send_message = AsyncMock(return_value=Mock(message_id="m1"))
 
-        with patch("app.transport.signalwire.handle_message", return_value="ok"):
+        with patch("app.transport.signalwire.safe_handle_message", return_value="ok"):
             await transport._on_message(_incoming())
 
         assert transport._client.send_message.call_args.kwargs["context"] == "custom-ctx"
 
     @pytest.mark.asyncio
     async def test_replies_with_fire_data(self, transport):
-        """A fire-check request is routed through handle_message and replied to."""
-        with patch("app.transport.signalwire.handle_message") as mock_handle:
+        """A fire-check request is routed through safe_handle_message and replied to."""
+        with patch("app.transport.signalwire.safe_handle_message") as mock_handle:
             mock_handle.return_value = "Fire: Test Fire (K12345)\n12km NW\nSize: 100 ha"
 
             await transport._on_message(_incoming(body="FIRECHECK: (51.398720, -116.491640)"))

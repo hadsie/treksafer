@@ -8,7 +8,7 @@ import websockets
 from signalwire.relay import RelayClient, RelayError
 from signalwire.relay.event import MessageReceiveEvent
 
-from app.messages import handle_message
+from app.messages import safe_handle_message
 from app.config import SignalWireConfig
 from .base import BaseTransport
 
@@ -79,7 +79,7 @@ class SignalWireTransport(BaseTransport):
         self.log.info("SignalWire SMS received incoming message from %s.", message.from_number)
         self.sms_log.info("From: %s, Body: %s", message.from_number, message.body)
 
-        response = handle_message(message.body)
+        response = safe_handle_message(message.body)
 
         try:
             result = await self._client.send_message(

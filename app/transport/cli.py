@@ -10,7 +10,7 @@ $ echo 'Fire test: (54.783803, -125.466560)' | nc localhost 8888
 import asyncio
 from typing import Optional
 
-from app.messages import handle_message
+from app.messages import safe_handle_message
 from .base import BaseTransport
 
 
@@ -42,7 +42,7 @@ class CLITransport(BaseTransport):
         message = data.decode("utf-8").strip()
         print(f"[CLITransport] Received: {message}")
 
-        response = handle_message(message)
+        response = safe_handle_message(message)
         writer.write((response + "\n").encode("utf-8"))
         await writer.drain()
 
