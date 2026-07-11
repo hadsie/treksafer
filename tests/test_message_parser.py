@@ -421,6 +421,14 @@ class TestInreachLinkResolution:
         assert result["coords"] == (44.11111, -73.22222)
 
     @responses.activate
+    def test_hyphenated_link_code_resolves(self):
+        """inReach link codes are base64url-style and can contain hyphens."""
+        responses.get('https://inreachlink.com/FAKE-1a2B3c-xY', body=self.LINK_PAGE)
+
+        result = parse_message('Fires inreachlink.com/FAKE-1a2B3c-xY')
+        assert result["coords"] == (44.11111, -73.22222)
+
+    @responses.activate
     def test_typed_coordinates_skip_the_fetch(self):
         """No HTTP when the message already has coordinates."""
         # No mock registered: any request would raise a ConnectionError.
