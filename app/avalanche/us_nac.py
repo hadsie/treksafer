@@ -13,7 +13,6 @@ from shapely.geometry import Point
 
 from .base import AvalancheProvider
 from ..config import AvalancheProviderConfig, get_config
-from ..helpers import coords_to_point_meters
 
 
 # Danger level mapping (numeric to string)

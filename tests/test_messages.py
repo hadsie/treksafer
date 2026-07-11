@@ -331,7 +331,7 @@ class TestSafeHandleMessage:
             reply = safe_handle_message("(50.1, -122.1) crash bait")
 
         assert 'Something went wrong' in reply
-        assert 'Do NOT rely on this service' in reply
+        assert 'logged and reported' in reply
         record = next(r for r in caplog.records if 'handle_message crashed' in r.message)
         assert record.levelname == 'ERROR'
         assert record.exc_info is not None          # full traceback captured

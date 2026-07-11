@@ -13,7 +13,7 @@ from requests import RequestException
 from shapely.geometry import Point
 
 from ..config import AvalancheProviderConfig, get_config
-from ..helpers import coords_to_point_meters
+from ..helpers import local_crs
 
 
 class AvalancheProvider(ABC):
@@ -140,12 +140,10 @@ class AvalancheProvider(ABC):
         if self.regions_gdf is None:
             return None
 
-        # Convert coordinates to EPSG:3857 (meters)
-        point_meters = coords_to_point_meters(coords)
-
-        # Convert polygons to EPSG:3857 and calculate distances
-        gdf_meters = self.regions_gdf.to_crs(epsg=3857)
-        gdf_meters['distance'] = gdf_meters.geometry.distance(point_meters)
+        # Project regions into a user-centered CRS where distances from the
+        # origin (the user) are true.
+        gdf_meters = self.regions_gdf.to_crs(local_crs(coords))
+        gdf_meters['distance'] = gdf_meters.geometry.distance(Point(0, 0))
 
         return gdf_meters
 

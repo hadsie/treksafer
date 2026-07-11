@@ -12,9 +12,9 @@ from requests import RequestException
 from app.helpers import (
     acres_to_hectares,
     compass_direction,
-    coords_to_point_meters,
     epoch_ms_to_datetime,
     get_aqi,
+    local_crs,
 )
 
 
@@ -52,49 +52,24 @@ class TestEpochMsToDatetime:
         assert epoch_ms_to_datetime(float('nan')) is None
 
 
-class TestCoordsToPointMeters:
-    """Test WGS84 to EPSG:3857 (Web Mercator) coordinate transformation."""
+class TestLocalCrs:
+    """The user-centered azimuthal equidistant projection."""
 
-    def test_returns_point_object(self):
-        """Function returns a shapely Point."""
-        coords = (49.2827, -123.1207)  # Vancouver
-        point = coords_to_point_meters(coords)
-        assert isinstance(point, Point)
+    def test_center_projects_to_origin(self):
+        import geopandas as gpd
+        gdf = gpd.GeoDataFrame(geometry=[Point(-122.5, 50.5)], crs='EPSG:4326')
+        projected = gdf.to_crs(local_crs((50.5, -122.5)))
+        assert abs(projected.geometry.iloc[0].x) < 1e-6
+        assert abs(projected.geometry.iloc[0].y) < 1e-6
 
-    def test_equator_origin(self):
-        """Null Island (0, 0) transforms to (0, 0) in Web Mercator."""
-        point = coords_to_point_meters((0, 0))
-        assert point.x == pytest.approx(0, abs=1)
-        assert point.y == pytest.approx(0, abs=1)
-
-    def test_vancouver_coordinates(self):
-        """Vancouver produces expected Web Mercator values."""
-        coords = (49.2827, -123.1207)
-        point = coords_to_point_meters(coords)
-        # Vancouver should be around x=-13.7M, y=6.3M in EPSG:3857
-        assert point.x == pytest.approx(-13706077, abs=1000)
-        assert point.y == pytest.approx(6322967, abs=1000)
-
-    def test_positive_longitude(self):
-        """Positive longitude (Eastern hemisphere) works."""
-        coords = (51.5074, 0.1278)  # London
-        point = coords_to_point_meters(coords)
-        assert point.x > 0  # East of prime meridian
-        assert point.y > 0  # North of equator
-
-    def test_negative_latitude(self):
-        """Negative latitude (Southern hemisphere) works."""
-        coords = (-33.8688, 151.2093)  # Sydney
-        point = coords_to_point_meters(coords)
-        assert point.x > 0  # East of prime meridian
-        assert point.y < 0  # South of equator
-
-    def test_pole_coordinates(self):
-        """Near-pole coordinates work (though Web Mercator distorts them)."""
-        coords = (85.0, 0.0)  # Near North Pole
-        point = coords_to_point_meters(coords)
-        assert isinstance(point, Point)
-        assert abs(point.y) > 10000000  # Very large y value near pole
+    def test_distances_from_center_are_true(self):
+        """One degree of latitude is ~111.2 km everywhere, including 60N
+        (where Web Mercator would report ~222 km)."""
+        import geopandas as gpd
+        gdf = gpd.GeoDataFrame(geometry=[Point(-122.5, 61.0)], crs='EPSG:4326')
+        projected = gdf.to_crs(local_crs((60.0, -122.5)))
+        distance_km = projected.geometry.iloc[0].distance(Point(0, 0)) / 1000
+        assert abs(distance_km - 111.2) < 0.5
 
 
 class TestCompassDirection:

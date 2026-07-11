@@ -23,7 +23,9 @@ class TestFireLocationBasics:
         ff = FindFires(coords, filters={'status': 'all', 'distance': 50})
         fires = ff.nearby()
 
-        assert len(fires) == 4
+        # Geodesic truth: five fixture fires lie within 50 true km (the
+        # farthest, Fraser_Medium, at 36.9 km; next out is 53.2 km).
+        assert len(fires) == 5
         assert ff.out_of_range() is False
 
 
@@ -37,8 +39,9 @@ class TestBorderCases:
         ff = FindFires(coords, filters={'status': 'all', 'distance': 70})
         fires = ff.nearby()
 
-        # Should find fires from both AB and BC
-        assert len(fires) == 2
+        # Geodesic truth: Mount_Robson_Border (BC, 37.2 km) plus
+        # Jasper_NE_Town (38.4 km) and Hinton_Cross_Border (42.9 km) from AB.
+        assert len(fires) == 3
         assert ff.out_of_range() is False
 
     def test_waterton_lakes_park(self):
