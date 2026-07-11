@@ -1,6 +1,5 @@
 import logging
 import math
-import osmnx as ox
 import pytz
 import re
 import requests
@@ -9,8 +8,7 @@ import requests_cache
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
-from pyproj import Transformer
-from shapely.geometry import Point
+from pyproj import CRS
 from urllib.parse import urlparse, parse_qs, unquote_plus
 
 from .config import get_config
@@ -45,22 +43,23 @@ def epoch_ms_to_datetime(ms):
         return None
     return datetime.fromtimestamp(float(ms) / 1000, tz=timezone.utc)
 
-def coords_to_point_meters(coords):
-    """Convert WGS84 coordinates to EPSG:3857 point for distance calculations.
+def local_crs(coords) -> CRS:
+    """An azimuthal equidistant CRS centered on coords (lat, lon).
 
-    Args:
-        coords: Tuple of (latitude, longitude) in WGS84 format
-
-    Returns:
-        shapely.geometry.Point in EPSG:3857 (meters)
+    Distances and bearings measured from the center point, which projects
+    to (0, 0), are true.
     """
-    transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
-    x, y = transformer.transform(coords[1], coords[0])
-    return Point(x, y)
+    return CRS.from_proj4(
+        f"+proj=aeqd +lat_0={coords[0]} +lon_0={coords[1]} +datum=WGS84 +units=m +no_defs")
+
 
 def compass_direction(pointA, pointB):
     """
-    Calculates the compass direction between two points.
+    Calculates the compass direction from pointA to pointB.
+
+    Points must be in a projection whose planar bearings are true at
+    pointA (e.g. an azimuthal equidistant projection centered on it; see
+    local_crs).
 
     :param Point pointA: The position of the requester.
     :param Point pointB: The closest point on the fire perimeter.
@@ -69,11 +68,7 @@ def compass_direction(pointA, pointB):
     """
     directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW",
                   "SW", "WSW", "W", "WNW" ,"NW" ,"NNW", "N"]
-    to_latlong = Transformer.from_crs("EPSG:3857", "EPSG:4326")
-    pointa = to_latlong.transform(pointA.x, pointA.y)
-    pointb = to_latlong.transform(pointB.x, pointB.y)
-
-    bearing = ox.bearing.calculate_bearing(pointa[0], pointa[1], pointb[0], pointb[1])
+    bearing = math.degrees(math.atan2(pointB.x - pointA.x, pointB.y - pointA.y)) % 360
     return directions[round(bearing/22.5)]
 
 @lru_cache(maxsize=1)

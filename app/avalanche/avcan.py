@@ -11,7 +11,6 @@ from shapely.geometry import Point
 
 from .base import AvalancheProvider
 from ..config import get_config, AvalancheProviderConfig
-from ..helpers import coords_to_point_meters
 
 
 class AvalancheCanadaProvider(AvalancheProvider):

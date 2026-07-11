@@ -11,7 +11,7 @@ from shapely.geometry import Point
 
 from .base import AvalancheProvider
 from ..config import get_config, AvalancheProviderConfig
-from ..helpers import coords_to_point_meters
+from ..helpers import local_crs
 
 
 class AvalancheQuebecProvider(AvalancheProvider):
@@ -33,11 +33,8 @@ class AvalancheQuebecProvider(AvalancheProvider):
                 logging.warning("Quebec province not found in shapefile")
                 return
 
-            # Store in WGS84 for contains() checks
+            # Stored in WGS84; distance math projects per request.
             self.quebec_wgs84 = quebec.to_crs(epsg=4326)
-
-            # Store in meters for distance calculations
-            self.quebec_meters = quebec.to_crs(epsg=3857)
 
         except FileNotFoundError as e:
             logging.warning(f"Canada provinces shapefile not found: {e}")
@@ -52,16 +49,16 @@ class AvalancheQuebecProvider(AvalancheProvider):
 
     def distance_from_region(self, coords: tuple) -> Optional[float]:
         """Calculate distance from Quebec province."""
-        if self.quebec_meters is None:
+        if self.quebec_wgs84 is None:
             return float('inf')
 
         # Check if in Quebec
         if self._is_in_quebec(coords):
             return None  # Exact match
 
-        # Calculate distance (both already in meters)
-        point_meters = coords_to_point_meters(coords)
-        distance_m = self.quebec_meters.iloc[0]['geometry'].distance(point_meters)
+        # True distance via a user-centered projection.
+        quebec_meters = self.quebec_wgs84.to_crs(local_crs(coords))
+        distance_m = quebec_meters.iloc[0]['geometry'].distance(Point(0, 0))
         distance_km = distance_m / 1000
 
         # Apply limit

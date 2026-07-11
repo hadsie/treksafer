@@ -89,7 +89,7 @@ class SignalWireTransport(BaseTransport):
                 body=response,
             )
         except RelayError as e:
-            self.log.warning("Failed to reply to %s: %s", message.from_number, e)
+            self.log.error("Failed to reply to %s: %s", message.from_number, e)
         else:
             self.log.info("Replied to %s (msg id %s).", message.from_number, result.message_id)
 

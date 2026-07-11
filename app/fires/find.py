@@ -26,12 +26,13 @@ from typing import Dict, Any, Optional
 
 import geopandas as gpd
 import pytz
+from shapely.geometry import Point
 from shapely.ops import nearest_points
 
 from . import db as firedb
 from ..config import get_config, DataFile, RealtimeFireConfig
 from .sources import fetch_fires
-from ..helpers import acres_to_hectares, compass_direction, coords_to_point_meters, epoch_ms_to_datetime
+from ..helpers import acres_to_hectares, compass_direction, epoch_ms_to_datetime, local_crs
 from ..filters import apply_filters, STATUS_LEVELS
 
 
@@ -261,7 +262,10 @@ class FindFires:
         self.settings = get_config()
         self.distance_limit = self.settings.max_radius * 1000
         self.coords = coords
-        self.location = coords_to_point_meters(coords)
+        # All geometry math runs in a projection centered on the user, where
+        # the user is the origin and distances/bearings are true.
+        self.crs = local_crs(coords)
+        self.location = Point(0, 0)
         self.sources = self._data_sources()
 
         # Build filters with defaults
@@ -304,6 +308,7 @@ class FindFires:
         user_distance = filters.get('distance', self.settings.fire_radius)
         search_limit = min(user_distance, self.settings.max_radius) * 1000
 
+        perimeters = perimeters.to_crs(self.crs)
         fires = []
         for _, row in perimeters.iterrows():
             fire_perimeter = row['geometry']
@@ -399,25 +404,42 @@ class FindFires:
 
         return fires
 
+    @staticmethod
+    @lru_cache(maxsize=4)
+    def _load_boundaries(filepath):
+        """Load, simplify, and cache a boundary file.
+
+        Boundaries only gate which sources are near (within max_radius), so
+        kilometer-scale simplification is lossless for that decision and
+        makes the per-request reprojection ~100x cheaper. Long edges are then
+        re-densified: reprojection maps vertices only, and a sparse straight
+        edge (e.g. the 49th-parallel border) reprojects as a chord that can
+        cut tens of km inside the true curved boundary.
+        """
+        boundaries = gpd.read_file(filepath)
+        geographic = boundaries.crs.is_geographic
+        boundaries.geometry = (boundaries.geometry
+                               .simplify(0.01 if geographic else 1000)
+                               .segmentize(0.5 if geographic else 50_000))
+        return boundaries
+
     @lru_cache
     def _data_sources(self):
         """
         Return list of ISO country codes or Canadian province codes whose
         polygon centroids lie within self.distance_limit of the query point.
         """
-        countries_filepath = "boundaries/countries.zip"
-        countries = gpd.read_file(countries_filepath)
-        canada_provinces_filepath = "boundaries/canada_provinces.zip"
-        canada_provinces = gpd.read_file(canada_provinces_filepath)
+        countries = self._load_boundaries("boundaries/countries.zip")
+        canada_provinces = self._load_boundaries("boundaries/canada_provinces.zip")
 
         sources = []
         # Find all matching countries.
-        for _, row in countries.to_crs(epsg=3857).iterrows():
+        for _, row in countries.to_crs(self.crs).iterrows():
             distance = row['geometry'].distance(self.location)
             if distance <= self.distance_limit:
                 sources.append(row.ISO)
         # Find all matching Canadian provinces.
-        for _, row in canada_provinces.to_crs(epsg=3857).iterrows():
+        for _, row in canada_provinces.to_crs(self.crs).iterrows():
             distance = row['geometry'].distance(self.location)
             if distance <= self.distance_limit:
                 sources.append(row.postal)

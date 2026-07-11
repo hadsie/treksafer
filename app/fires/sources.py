@@ -35,7 +35,8 @@ def _size_circle(point_3857, hectares, latitude):
 
     Fires with no reported size get a minimal circle, keeping results to a
     single geometry type. The radius is stretched by 1/cos(latitude) to
-    match how EPSG:3857 stretches distances.
+    counter EPSG:3857's stretch, so the circle's ground size is true once
+    the search path reprojects it.
     """
     try:
         hectares = float(hectares)

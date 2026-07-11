@@ -1,5 +1,4 @@
 geopandas>=1.0,<2
-osmnx>=2.0.4
 pandas>=2.2,<3
 pydantic>=2.9,<3
 pydantic_settings>=2.5,<3
