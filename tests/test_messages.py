@@ -210,6 +210,23 @@ class TestFireMessageWithoutSize:
         assert 'ha' not in message
 
 
+class TestOutsideCoverage:
+    """An out-of-coverage location must never read as 'no fires reported'."""
+
+    @patch("app.messages.get_aqi", return_value=None)
+    @patch("app.messages.FindFires")
+    def test_out_of_range_returns_outside_area_message(self, mock_ff_cls, mock_aqi):
+        ff = mock_ff_cls.return_value
+        ff.out_of_range.return_value = True
+
+        from app.messages import handle_fire_request
+        message = handle_fire_request((48.8566, 2.3522), {})
+
+        assert 'outside of supported' in message
+        assert '(48.85660, 2.35220)' in message
+        assert 'No fires reported' not in message
+
+
 class TestDataUnavailable:
     """An unavailable source must never read as 'no fires reported'."""
 

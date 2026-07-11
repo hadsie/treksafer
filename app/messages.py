@@ -13,11 +13,18 @@ from .filters import STATUS_LEVELS
 _SMS_LIMIT = 160
 
 class Messages:
+    @staticmethod
+    def _location(coords: tuple) -> str:
+        return f'({coords[0]:.5f}, {coords[1]:.5f})'
+
     def no_gps(self) -> str:
         return 'TrekSafer ERROR: No valid GPS coordinates found. Enable location on your device, or send coords as "(lat, long)" e.g. (50.5,-122.1), and check the values.'
 
-    def outside_of_area(self) -> str:
-        return 'TrekSafer ERROR: GPS coordinates outside of supported fire perimeter area. No data available.'
+    def outside_of_area(self, coords: tuple) -> str:
+        """Out-of-coverage error, echoing the searched coordinates so the
+        user can verify what location their message parsed to."""
+        return ('TrekSafer ERROR: GPS coordinates outside of supported fire perimeter '
+                f'area. No data available for your location {self._location(coords)}.')
 
     def system_error(self) -> str:
         return ('TrekSafer ERROR: Something went wrong and your request could not be '
@@ -40,7 +47,7 @@ class Messages:
         Returns:
             Formatted message string
         """
-        location = f'({coords[0]:.5f}, {coords[1]:.5f})'
+        location = self._location(coords)
         base_msg = f'No fires reported within {distance}km of your location {location}.'
 
         # If no filter or 'all'/'out', return simple message
@@ -204,7 +211,7 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     # Find fires
     findfires = FindFires(coords, fire_filters)
     if findfires.out_of_range():
-        return aqi_message + responses.outside_of_area()
+        return aqi_message + responses.outside_of_area(coords)
 
     fires = findfires.nearby()
     if not fires:

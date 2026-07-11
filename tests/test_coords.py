@@ -288,3 +288,22 @@ class TestUSSource:
 
         assert len(fires) == 6
         assert all(f['Fire'] != 'Lava Spot' for f in fires)
+
+
+class TestCoverage:
+    """A point is in coverage only when a configured source can answer for it."""
+
+    def test_land_point_outside_all_sources_is_out_of_range(self):
+        """A land point with no configured data source reports out of range."""
+        ff = FindFires((48.8566, 2.3522))  # Paris
+        assert ff.out_of_range() is True
+
+    def test_typoed_east_longitude_is_out_of_range(self):
+        """A North American longitude missing its minus sign must not read as covered."""
+        ff = FindFires((50.7, 89.6))
+        assert ff.out_of_range() is True
+
+    def test_covered_point_is_in_range(self):
+        """A point inside a configured source's boundary reports in range."""
+        ff = FindFires((50.7021714, -121.9725246))  # Lillooet, BC
+        assert ff.out_of_range() is False
