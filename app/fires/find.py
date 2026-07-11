@@ -391,9 +391,8 @@ class FindFires:
         """
         fires = []
         for source in self.sources:
-            data_file = next((df for df in self.settings.data if df.location == source), None)
-            if not data_file:
-                continue
+            # _data_sources() only returns configured locations.
+            data_file = next(df for df in self.settings.data if df.location == source)
             fire_perimeters, data_file = self._load_source(data_file)
             if fire_perimeters is None:
                 continue
@@ -426,8 +425,13 @@ class FindFires:
     @lru_cache
     def _data_sources(self):
         """
-        Return list of ISO country codes or Canadian province codes whose
-        polygon centroids lie within self.distance_limit of the query point.
+        Return list of configured data source locations (ISO country codes or
+        Canadian province codes) whose polygons lie within self.distance_limit
+        of the query point.
+
+        The boundary files cover the whole world, so codes without a
+        configured data source are dropped: a point is only "in coverage"
+        when there is a source that can answer for it.
         """
         countries = self._load_boundaries("boundaries/countries.zip")
         canada_provinces = self._load_boundaries("boundaries/canada_provinces.zip")
@@ -443,4 +447,6 @@ class FindFires:
             distance = row['geometry'].distance(self.location)
             if distance <= self.distance_limit:
                 sources.append(row.postal)
-        return sources
+
+        configured = {df.location for df in self.settings.data}
+        return [source for source in sources if source in configured]
