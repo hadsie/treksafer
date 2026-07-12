@@ -9,7 +9,7 @@ from .fires import db as firedb
 def health_report() -> dict:
     """App alive and per-source data freshness.
 
-    The sources field checks ever configured source and returns the timestamp
+    The sources field checks every configured source and returns the timestamp
     it was last successfully fetched.
     """
     settings = get_config()

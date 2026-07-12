@@ -180,7 +180,10 @@ def run(settings, now: datetime) -> int:
     if not (trips or recoveries or errors):
         print("All healthy.")
 
-    if monitoring.healthcheck_url:
+    # No ping when delivery failed: the missed ping makes healthchecks
+    # raise the alarm through its own channels, covering the case where
+    # ours are broken.
+    if delivered and monitoring.healthcheck_url:
         try:
             requests.get(monitoring.healthcheck_url, timeout=10)
         except requests.RequestException as e:

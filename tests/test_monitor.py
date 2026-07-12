@@ -173,14 +173,20 @@ class TestRun:
         titles = [title for title, _ in env['sent']]
         assert titles == ['TrekSafer ALERT', 'TrekSafer recovered']
 
-    def test_failed_delivery_retries_next_run(self, env, monkeypatch):
+    def test_failed_delivery_retries_next_run_and_skips_ping(self, env, monkeypatch):
         monkeypatch.setattr(monitor, 'probe_health',
                             lambda *a: ok_report(BC={'latest_fetch': STALE}))
+        monkeypatch.setattr(env['settings'].monitoring, 'healthcheck_url',
+                            'https://hc.test/ping')
+        pinged = []
+        monkeypatch.setattr(monitor.requests, 'get',
+                            lambda url, timeout: pinged.append(url))
         failed = []
         monkeypatch.setattr(monitor, 'notify',
                             lambda title, body: failed.append(title) and False)
 
         assert monitor.run(env['settings'], NOW) == 1
+        assert pinged == []
         monkeypatch.setattr(monitor, 'notify',
                             lambda title, body: env['sent'].append((title, body)) or True)
         monitor.run(env['settings'], NOW)
