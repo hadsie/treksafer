@@ -31,10 +31,31 @@ include_aqi: true
 # Fire database: snapshot history and the fallback for API outages.
 database: "${TREKSAFER_DATABASE:-data/fires.db}"
 
-# Logging
-log_file: "logs/${TREKSAFER_ENV}.log"
+# Logging. log_file defaults to <log_dir>/<env>.log.
+log_dir: "${TREKSAFER_LOG_DIR:-logs}"
 # logging.INFO
 log_level: 20
+
+# Operator alerting (scripts/monitor.py). A channel is enabled by
+# configuring it: ntfy by a topic, email by an SMTP host + alert address.
+monitoring:
+  ntfy_url: "${TREKSAFER_NTFY_URL:-https://ntfy.sh}"
+  ntfy_topic: "${TREKSAFER_NTFY_TOPIC}"
+  smtp_host: "${TREKSAFER_SMTP_HOST}"
+  smtp_port: "${TREKSAFER_SMTP_PORT:-587}"
+  smtp_user: "${TREKSAFER_SMTP_USER}"
+  smtp_password: "${TREKSAFER_SMTP_PASSWORD}"
+  smtp_from: "${TREKSAFER_SMTP_FROM}"
+  alert_email: "${TREKSAFER_ALERT_EMAIL}"
+  # Dead-man's switch pings (e.g. healthchecks.io check URLs).
+  healthcheck_url: "${TREKSAFER_HEALTHCHECK_URL}"
+  refresh_healthcheck_url: "${TREKSAFER_REFRESH_HEALTHCHECK_URL}"
+  # Alert when a source's newest fetch is older than this (hours).
+  fetch_stale_hours: 12
+  state_file: "data/monitor_state.json"
+  # Daily digest of requests with unusable coordinates (scripts/digest.py).
+  # sms_log_file defaults to <log_dir>/sms.log.
+  digest_state_file: "data/digest_state.json"
 
 transports:
   - type: "signalwire"

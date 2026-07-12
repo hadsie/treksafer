@@ -17,8 +17,8 @@ from .fires import db as firedb
 from .transport import get_transports, BaseTransport
 
 def _configure_logging(settings: Settings) -> None:
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
+    log_path = Path(settings.log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     formatter = logging.Formatter(
         '%(asctime)s %(name)s %(levelname)s : %(message)s',
@@ -28,7 +28,7 @@ def _configure_logging(settings: Settings) -> None:
     logger = logging.getLogger()
     logger.setLevel(settings.log_level)
 
-    fh = logging.FileHandler(f"logs/{settings.env}.log")
+    fh = logging.FileHandler(log_path)
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 

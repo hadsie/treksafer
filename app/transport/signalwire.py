@@ -9,7 +9,7 @@ from signalwire.relay import RelayClient, RelayError
 from signalwire.relay.event import MessageReceiveEvent
 
 from app.messages import safe_handle_message
-from app.config import SignalWireConfig
+from app.config import SignalWireConfig, get_config
 from .base import BaseTransport
 
 # Time to wait before reconnecting after a dropped connection (in seconds)
@@ -28,12 +28,14 @@ class SignalWireTransport(BaseTransport):
 
     @staticmethod
     def _setup_sms_logger() -> logging.Logger:
-        # separate SMS-only log
+        # Separate SMS-only log. scripts/digest.py scrapes it, so the path
+        # is shared config.
         sms_log = logging.getLogger("sms")
         if not sms_log.handlers:
             fmt = "%(asctime)s %(name)s %(levelname)s %(message)s"
-            Path("logs").mkdir(exist_ok=True)
-            h = logging.FileHandler("logs/sms.log")
+            path = Path(get_config().monitoring.sms_log_file)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            h = logging.FileHandler(path)
             h.setFormatter(logging.Formatter(fmt, "%Y-%m-%d %H:%M:%S"))
             sms_log.setLevel(logging.DEBUG)
             sms_log.addHandler(h)

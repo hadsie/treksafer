@@ -1,16 +1,24 @@
 """Parses inbound text, locates fires, and generates the responses."""
 
 import logging
-from datetime import date
+import re
+from datetime import date, datetime
 from typing import Dict, Optional
 
 from .config import get_config
-from .helpers import parse_message, get_aqi
+from .health import health_report
+from .helpers import parse_message, get_aqi, local_time
 from .fires import FindFires
 from .avalanche import AvalancheReport
 from .filters import STATUS_LEVELS
 
 _SMS_LIMIT = 160
+
+# The message "health" (any case, surrounding whitespace allowed, nothing
+# else) requests a health summary instead of a fire/avalanche report.
+# Note: This will fail on most satellite messengers by default, as they
+# can include a link and coordinates.
+_HEALTH_PATTERN = re.compile(r'\s*health\s*', re.IGNORECASE)
 
 class Messages:
     @staticmethod
@@ -69,6 +77,27 @@ class Messages:
         # Format message with included statuses
         status_list = ', '.join(included_statuses)
         return f'No fires reported within {distance}km of your location {location}. (Showing: {status_list})'
+
+    def health(self, report: dict) -> str:
+        """Human-readable health summary, compact enough for one SMS."""
+        if report['status'] != 'ok':
+            return f"TrekSafer health ERROR: {report['error']}"
+        lines = ['TrekSafer OK. Data fetched (UTC):']
+        for source, info in report['sources'].items():
+            fetched = info['latest_fetch']
+            stamp = self._timestamp(datetime.fromisoformat(fetched)) if fetched else 'never'
+            lines.append(f'{source} {stamp}')
+        return '\n'.join(lines)
+
+    @staticmethod
+    def _timestamp(dt: datetime) -> str:
+        return f"{dt:%b} {dt.day} {dt:%H:%M}"
+
+    @staticmethod
+    def data_age(fetched: datetime) -> str:
+        """Freshness marker shown when a response was built from stored
+        data. fetched must already be in the user's local timezone."""
+        return f"Data from {Messages._timestamp(fetched)}"
 
     def fires(self, fires: list[Dict]) -> list[str]:
         messages = []
@@ -214,19 +243,25 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
         return aqi_message + responses.outside_of_area(coords)
 
     fires = findfires.nearby()
+    # A source that produced no data at all must not read as "no fires".
+    if not fires and findfires.unavailable_sources:
+        return aqi_message + responses.data_unavailable()
+
+    # When a realtime source failed and stored data was used instead, add
+    # a freshness marker so old data is never presented as current. It goes
+    # after the per-fire formatting, where SMS downsizing can't drop it.
+    marker = ''
+    if findfires.fallback_fetched:
+        marker = "\n\n" + responses.data_age(
+            local_time(findfires.fallback_fetched, coords))
+
     if not fires:
-        # A source that produced no data at all must not read as "no fires".
-        if findfires.unavailable_sources:
-            return aqi_message + responses.data_unavailable()
         distance = min(findfires.filters['distance'], settings.max_radius)
         status_filter = fire_filters.get('status')
-        return aqi_message + responses.no_fires(distance, coords, status_filter)
+        return aqi_message + responses.no_fires(distance, coords, status_filter) + marker
 
-    # Format response
-    fire_messages = []
-    for fire in fires:
-        fire_messages.append(responses.fire(fire))
-    return aqi_message + "\n\n".join(fire_messages)
+    fire_messages = [responses.fire(fire) for fire in fires]
+    return aqi_message + "\n\n".join(fire_messages) + marker
 
 
 def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:
@@ -289,6 +324,9 @@ def handle_message(message: str) -> str:
     :rtype: str
     """
     responses = Messages()
+    if _HEALTH_PATTERN.fullmatch(message):
+        return responses.health(health_report())
+
     parsed_data = parse_message(message)
     if not parsed_data:
         logging.warning('No GPS coords found in message.')

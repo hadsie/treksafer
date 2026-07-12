@@ -4,12 +4,17 @@ CLI interface for used for local smoke-testing of TrekSafer.
 To test, when the app is running, send a message to the configured
 port (default 8888) like so:
 
-$ echo 'Fire test: (54.783803, -125.466560)' | nc localhost 8888
+$ ./scripts/cli_connect.py 'Fire test: (54.783803, -125.466560)'
+
+The literal message "health" returns a JSON data-freshness report for
+monitoring instead of a fire response.
 """
 
 import asyncio
+import json
 from typing import Optional
 
+from app.health import health_report
 from app.messages import safe_handle_message
 from .base import BaseTransport
 
@@ -42,7 +47,10 @@ class CLITransport(BaseTransport):
         message = data.decode("utf-8").strip()
         print(f"[CLITransport] Received: {message}")
 
-        response = safe_handle_message(message)
+        if message == "health":
+            response = json.dumps(health_report())
+        else:
+            response = safe_handle_message(message)
         writer.write((response + "\n").encode("utf-8"))
         await writer.drain()
 

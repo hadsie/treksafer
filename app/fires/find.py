@@ -1,19 +1,11 @@
 """
 Find and summarize nearby wildfires
 
-Usage:
-
-    fires = FindFires((49.25, -123.1))   # lat, lon in WGS-84
-    if fires.out_of_range():
-        print("No fire data sources near you.")
-    else:
-        print(fires.nearby())
-
 Design notes
 ------------
-* Fire sources (realtime ArcGIS layers) are declared in config.yaml.
-* Every successful fetch is recorded to the fire database, which is also
-  the fallback when a source's API is unavailable.
+ - Fire sources (realtime ArcGIS layers) are declared in config.yaml.
+ - Every successful fetch is recorded to the fire database, which is also
+   the fallback when a source's API is unavailable.
 """
 from __future__ import annotations
 
@@ -284,6 +276,8 @@ class FindFires:
         # Sources that produced no data at all (API down, nothing stored),
         # as opposed to sources with zero nearby fires.
         self.unavailable_sources: list[str] = []
+        # Fetch time per source on stored data fallback after a realtime failure.
+        self.fallback_fetches: dict[str, str] = {}
 
     def out_of_range(self) -> bool:
         """
@@ -339,12 +333,14 @@ class FindFires:
         except (sqlite3.Error, OSError, ValueError, KeyError, AttributeError) as e:
             logging.error(f"Failed to record {location} fires to the database: {e}")
 
-    def _load_stored(self, location: str) -> Optional[gpd.GeoDataFrame]:
+    def _load_stored(self, location: str, fallback: bool = False) -> Optional[gpd.GeoDataFrame]:
         """Serve a source from the database, at any age, logging staleness.
 
-        Returns None (and marks the source unavailable) when nothing is
-        stored: an empty database must produce "data unavailable", never a
-        confident "no fires".
+        fallback means the realtime fetch failed, so the response gets a
+        freshness marker. When realtime is disabled by config, stored data
+        is the normal mode and no marker is shown.
+
+        Returns None (and marks the source unavailable) when nothing is stored.
         """
         fires = None
         try:
@@ -361,6 +357,8 @@ class FindFires:
             self.unavailable_sources.append(location)
             return None
         logging.warning(f"Serving {location} fires from the database (fetched {fetched}).")
+        if fallback:
+            self.fallback_fetches[location] = fetched
         return fires
 
     def _load_source(self, data_file: DataFile) -> tuple[gpd.GeoDataFrame | None, DataFile]:
@@ -381,7 +379,16 @@ class FindFires:
             logging.warning(
                 f"Realtime {data_file.location} fire data unavailable; using stored data."
             )
+            return self._load_stored(data_file.location, fallback=True), _DB_DATA_FILE
         return self._load_stored(data_file.location), _DB_DATA_FILE
+
+    @property
+    def fallback_fetched(self) -> Optional[datetime]:
+        """Oldest fetch time among sources that fell back to stored data,
+        or None if none did."""
+        if not self.fallback_fetches:
+            return None
+        return min(datetime.fromisoformat(t) for t in self.fallback_fetches.values())
 
     def nearby(self) -> list[Dict[str, Any]]:
         """Find all fires within distance limit.

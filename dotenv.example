@@ -19,3 +19,24 @@ TREKSAFER_SW_NUMBER=[REPLACE WITH YOUR SIGNALWIRE PHONE NUMBER]
 
 # Fire database path (snapshot history + fallback for API outages).
 # TREKSAFER_DATABASE=data/fires.db
+
+# Directory for runtime logs (app log, sms.log).
+# TREKSAFER_LOG_DIR=logs
+
+# Operator alerting (scripts/monitor.py). A channel is enabled by
+# configuring it: ntfy by a topic, email by an SMTP host + alert address.
+# TREKSAFER_NTFY_URL=https://ntfy.sh
+# TREKSAFER_NTFY_TOPIC=[REPLACE WITH A RANDOM, UNGUESSABLE TOPIC NAME]
+# For a local relay (e.g. postfix sending through Amazon SES), host is
+# localhost on port 25 with no user/password; smtp_from must be a sender
+# the relay is allowed to use (e.g. an SES-verified address).
+# TREKSAFER_SMTP_HOST=localhost
+# TREKSAFER_SMTP_PORT=25
+# TREKSAFER_SMTP_USER=[SMTP USERNAME, EMPTY FOR A LOCAL RELAY]
+# TREKSAFER_SMTP_PASSWORD=[SMTP PASSWORD, EMPTY FOR A LOCAL RELAY]
+# TREKSAFER_SMTP_FROM=[FROM ADDRESS, e.g. alerts@yourdomain.com]
+# TREKSAFER_ALERT_EMAIL=[WHERE ALERTS ARE SENT]
+# Dead-man's switch pings (e.g. healthchecks.io check URLs): one for the
+# monitor, one for the daily database refresh.
+# TREKSAFER_HEALTHCHECK_URL=https://hc-ping.com/[MONITOR CHECK ID]
+# TREKSAFER_REFRESH_HEALTHCHECK_URL=https://hc-ping.com/[REFRESH CHECK ID]

@@ -15,6 +15,7 @@ from app.helpers import (
     epoch_ms_to_datetime,
     get_aqi,
     local_crs,
+    local_time,
 )
 
 
@@ -70,6 +71,23 @@ class TestLocalCrs:
         projected = gdf.to_crs(local_crs((60.0, -122.5)))
         distance_km = projected.geometry.iloc[0].distance(Point(0, 0)) / 1000
         assert abs(distance_km - 111.2) < 0.5
+
+
+class TestLocalTime:
+    def test_converts_to_timezone_at_coords(self):
+        utc = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+
+        local = local_time(utc, (49.28, -123.12))  # Vancouver, PDT in July
+
+        assert (local.hour, local.minute) == (5, 0)
+        assert local == utc
+
+    def test_winter_offset(self):
+        utc = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
+
+        local = local_time(utc, (49.28, -123.12))  # Vancouver, PST in January
+
+        assert local.hour == 4
 
 
 class TestCompassDirection:

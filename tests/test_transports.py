@@ -1,6 +1,8 @@
-import pytest
-from unittest.mock import Mock, AsyncMock, patch
 import asyncio
+import json
+from unittest.mock import Mock, AsyncMock, patch
+
+import pytest
 
 from app.transport.cli import CLITransport
 from app.config import CLIConfig
@@ -144,6 +146,30 @@ class TestCLITransport:
             # Verify error message was written
             expected_response = "TrekSafer ERROR: No GPS location found.\n"
             mock_writer.write.assert_called_once_with(expected_response.encode("utf-8"))
+
+    @pytest.mark.asyncio
+    async def test_handle_client_health_command(self, cli_config):
+        """The health command returns the JSON health report and bypasses
+        message parsing entirely."""
+        transport = CLITransport(cli_config)
+
+        mock_reader = AsyncMock(spec=asyncio.StreamReader)
+        mock_writer = Mock(spec=asyncio.StreamWriter)
+        mock_writer.write = Mock()
+        mock_writer.drain = AsyncMock()
+        mock_writer.close = Mock()
+        mock_writer.wait_closed = AsyncMock()
+
+        mock_reader.read = AsyncMock(return_value=b"health\n")
+
+        with patch("app.transport.cli.safe_handle_message") as mock_handle:
+            await transport._handle_client(mock_reader, mock_writer)
+            mock_handle.assert_not_called()
+
+        report = json.loads(mock_writer.write.call_args[0][0].decode("utf-8"))
+        assert report["status"] == "ok"
+        assert set(report["sources"]) == {"BC", "AB", "CA", "US"}
+        assert report["sources"]["BC"]["latest_fetch"] is not None
 
     @pytest.mark.asyncio
     async def test_handle_client_encodes_utf8(self, cli_config):

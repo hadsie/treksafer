@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from pyproj import CRS
+from timezonefinder import TimezoneFinder
 from urllib.parse import urlparse, parse_qs, unquote_plus
 
 from .config import get_config
@@ -51,6 +52,22 @@ def local_crs(coords) -> CRS:
     """
     return CRS.from_proj4(
         f"+proj=aeqd +lat_0={coords[0]} +lon_0={coords[1]} +datum=WGS84 +units=m +no_defs")
+
+
+@lru_cache(maxsize=1)
+def _timezone_finder() -> TimezoneFinder:
+    """Building a TimezoneFinder is slow; build it once and reuse it."""
+    return TimezoneFinder()
+
+
+def local_time(dt: datetime, coords) -> datetime:
+    """Convert an aware datetime to the local timezone at coords (lat, lon).
+
+    Returns the datetime unchanged when no timezone covers the point
+    (open ocean).
+    """
+    tz_name = _timezone_finder().timezone_at(lat=coords[0], lng=coords[1])
+    return dt.astimezone(pytz.timezone(tz_name)) if tz_name else dt
 
 
 def compass_direction(pointA, pointB):
