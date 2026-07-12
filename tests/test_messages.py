@@ -210,6 +210,52 @@ class TestFireMessageWithoutSize:
         assert 'ha' not in message
 
 
+class TestSizeChangeRendering:
+    """growth.enrich annotations render as suffixes on the Size line."""
+
+    def test_growth_appended_to_size_line(self):
+        fire = mock_fire(Size=14333, SizeChange={'delta': 300, 'hours': 26.2})
+        message = Messages().fire(fire)
+        assert 'Size: 14333 ha (+300 since 26h ago)' in message
+
+    def test_shrinkage_renders_signed(self):
+        fire = mock_fire(SizeChange={'delta': -150, 'hours': 30.0})
+        message = Messages().fire(fire)
+        assert '(-150 since 30h ago)' in message
+
+    def test_long_spans_render_in_days(self):
+        fire = mock_fire(SizeChange={'delta': 2000, 'hours': 100.0})
+        message = Messages().fire(fire)
+        assert '(+2000 since 4d ago)' in message
+
+    def test_short_format_drops_the_delta(self):
+        fire = mock_fire(SizeChange={'delta': 300, 'hours': 26.0})
+        message = Messages().fire(fire, size='short')
+        assert 'since' not in message
+        assert 'ha' in message
+
+    def test_no_annotation_renders_plain_size(self):
+        message = Messages().fire(mock_fire(Size=14333))
+        assert 'Size: 14333 ha' in message
+        assert 'since' not in message
+
+
+class TestNewLabelRendering:
+    def test_new_label_after_fire_name(self):
+        fire = mock_fire(New=True)
+        message = Messages().fire(fire)
+        assert '(K72481) (NEW)' in message
+
+    def test_new_label_survives_short_format(self):
+        fire = mock_fire(New=True)
+        message = Messages().fire(fire, size='short')
+        assert 'K72481 (NEW)' in message
+
+    def test_no_label_without_flag(self):
+        message = Messages().fire(mock_fire())
+        assert '(NEW)' not in message
+
+
 class TestOutsideCoverage:
     """An out-of-coverage location must never read as 'no fires reported'."""
 

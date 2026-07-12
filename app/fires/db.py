@@ -167,6 +167,49 @@ def record_fires(conn: sqlite3.Connection, source: str, fires: gpd.GeoDataFrame,
     return written
 
 
+def fire_first_seen(conn: sqlite3.Connection, source: str,
+                    fire_key: str) -> Optional[str]:
+    """Return the first fetch timestamp that included this fire, or None."""
+    row = conn.execute(
+        "SELECT first_seen FROM fires WHERE source = ? AND fire_key = ?",
+        (source, fire_key),
+    ).fetchone()
+    return row[0] if row else None
+
+
+def anchor_snapshot(conn: sqlite3.Connection, source: str, fire_key: str,
+                    cutoff: str) -> Optional[tuple]:
+    """Historical (size_ha, timestamp) for a size comparison: the newest
+    snapshot at or before cutoff, else the fire's oldest snapshot.
+
+    Snapshot time is the source's own update timestamp when published,
+    otherwise the fetch time. Returns None when the fire has no snapshots.
+    """
+    base = (
+        "SELECT s.size_ha, COALESCE(s.source_updated, s.fetched_at) "
+        "FROM snapshots s JOIN fires f ON f.id = s.fire_id "
+        "WHERE f.source = ? AND f.fire_key = ?"
+    )
+    row = conn.execute(
+        base + " AND COALESCE(s.source_updated, s.fetched_at) <= ? "
+        "ORDER BY s.id DESC LIMIT 1",
+        (source, fire_key, cutoff),
+    ).fetchone()
+    if row is None:
+        row = conn.execute(
+            base + " ORDER BY s.id ASC LIMIT 1", (source, fire_key)
+        ).fetchone()
+    return row
+
+
+def oldest_fetch(conn: sqlite3.Connection, source: str) -> Optional[str]:
+    """Return the oldest fetch timestamp for a source, or None."""
+    row = conn.execute(
+        "SELECT MIN(fetched_at) FROM fetches WHERE source = ?", (source,)
+    ).fetchone()
+    return row[0]
+
+
 def latest_fetches(conn: sqlite3.Connection) -> dict:
     """The newest fetch timestamp for every source that has one."""
     rows = conn.execute(
@@ -196,7 +239,8 @@ def load_source(conn: sqlite3.Connection, source: str) -> Optional[gpd.GeoDataFr
     rows = conn.execute(
         """
         SELECT f.fire, f.name, f.location, f.type, f.discovered,
-               s.size_ha, s.status, s.status_level, s.source_updated, s.geometry
+               s.size_ha, s.status, s.status_level,
+               COALESCE(s.source_updated, s.fetched_at), s.geometry, f.fire_key
         FROM fires f
         JOIN snapshots s ON s.id = (
             SELECT id FROM snapshots WHERE fire_id = f.id ORDER BY id DESC LIMIT 1
@@ -216,6 +260,7 @@ def load_source(conn: sqlite3.Connection, source: str) -> Optional[gpd.GeoDataFr
             'Status': [r[6] for r in rows],
             'StatusLevel': [r[7] for r in rows],
             'Updated': [r[8] for r in rows],
+            'fire_key': [r[10] for r in rows],
         },
         geometry=gpd.GeoSeries([wkb.loads(r[9]) for r in rows], crs='EPSG:4326'),
     )
