@@ -210,7 +210,7 @@ def _expand_short_link(url):
 
 
 _DEVICE_LINK_RE = re.compile(
-    r'(?:https?://)?(?:www\.)?(inreachlink\.com|sms2zoleo\.com)/(\w+)', re.IGNORECASE)
+    r'(?:https?://)?(?:www\.)?(inreachlink\.com|sms2zoleo\.com)/([\w-]+)', re.IGNORECASE)
 
 
 def _coords_from_device_link(message):

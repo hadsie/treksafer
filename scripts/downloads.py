@@ -6,6 +6,7 @@ source and merge the request path uses) and records it, so the database is
 a warm recovery mode when an API is unavailable at request time.
 """
 
+import logging
 import sys
 import time
 from datetime import datetime, timezone
@@ -19,6 +20,13 @@ from app.config import get_config
 from app.fires import db as firedb
 from app.fires import normalize_for_db
 from app.fires.sources import fetch_all_fires
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s : %(message)s',
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger(__name__)
 
 # The shared public quotas on the upstream layers say "retry after 60 sec"
 # when exceeded; retry rounds after this delay ride out a throttle.
@@ -40,10 +48,10 @@ def _refresh(conn, data_files) -> list:
     for data_file in data_files:
         try:
             written = refresh_source(conn, data_file)
-            print(f"{data_file.location}: {written} snapshot(s) written.")
+            log.info(f"{data_file.location}: {written} snapshot(s) written.")
         except (requests.RequestException, ValueError, KeyError) as e:
             failures.append(data_file)
-            print(f"{data_file.location} failed: {e}")
+            log.warning(f"{data_file.location} failed: {e}")
     return failures
 
 
@@ -55,18 +63,18 @@ def main():
         for attempt in range(MAX_RETRIES):
             if not failures:
                 break
-            print(f"\nRetrying {len(failures)} failed source(s) in {RETRY_DELAY_S}s "
-                  f"(attempt {attempt + 1} of {MAX_RETRIES})...")
+            log.info(f"Retrying {len(failures)} failed source(s) in {RETRY_DELAY_S}s "
+                     f"(attempt {attempt + 1} of {MAX_RETRIES})...")
             time.sleep(RETRY_DELAY_S)
             failures = _refresh(conn, failures)
     finally:
         conn.close()
 
     if failures:
-        print(f"\n{len(failures)} source(s) failed: "
-              f"{', '.join(d.location for d in failures)}")
+        log.error(f"{len(failures)} source(s) failed: "
+                  f"{', '.join(d.location for d in failures)}")
         return 1
-    print("\nAll sources refreshed.")
+    log.info("All sources refreshed.")
     return 0
 
 
