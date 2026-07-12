@@ -1,7 +1,7 @@
 #!venv/bin/python
 """Check TrekSafer health and alert the operator on failures.
 
-Run from cron every 15-30 minutes. Checks:
+Checks:
 
 1. The app answers its health command (CLI transport, localhost).
 2. Every source has a recent successful fetch.

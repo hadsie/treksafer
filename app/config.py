@@ -175,6 +175,10 @@ class MonitoringConfig(BaseModel):
     fetch_stale_hours: int = 12
     # Last-known condition state, for alerting on changes only.
     state_file: str = "data/monitor_state.json"
+    # Daily digest of requests with unusable coordinates (scripts/digest.py).
+    # Defaults to sms.log in the app's log_dir.
+    sms_log_file: str = ""
+    digest_state_file: str = "data/digest_state.json"
 
     @model_validator(mode="after")
     def check_email_pair(self):
@@ -212,6 +216,9 @@ class Settings(BaseSettings):
 
     monitoring: MonitoringConfig = MonitoringConfig()
 
+    # Directory for runtime logs; log_file and monitoring.sms_log_file
+    # derive from it unless set explicitly.
+    log_dir: str = "logs"
     log_file: str | None = None
     log_level: int = logging.INFO
 
@@ -224,7 +231,9 @@ class Settings(BaseSettings):
 
     def model_post_init(self, __context):
         if self.log_file is None:
-            self.log_file = f"logs/{self.env}.log"
+            self.log_file = f"{self.log_dir}/{self.env}.log"
+        if not self.monitoring.sms_log_file:
+            self.monitoring.sms_log_file = f"{self.log_dir}/sms.log"
 
 
 # ---- Loader helpers ---- #

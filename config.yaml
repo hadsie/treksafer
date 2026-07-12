@@ -31,8 +31,8 @@ include_aqi: true
 # Fire database: snapshot history and the fallback for API outages.
 database: "${TREKSAFER_DATABASE:-data/fires.db}"
 
-# Logging
-log_file: "logs/${TREKSAFER_ENV}.log"
+# Logging. log_file defaults to <log_dir>/<env>.log.
+log_dir: "${TREKSAFER_LOG_DIR:-logs}"
 # logging.INFO
 log_level: 20
 
@@ -53,6 +53,9 @@ monitoring:
   # Alert when a source's newest fetch is older than this (hours).
   fetch_stale_hours: 12
   state_file: "data/monitor_state.json"
+  # Daily digest of requests with unusable coordinates (scripts/digest.py).
+  # sms_log_file defaults to <log_dir>/sms.log.
+  digest_state_file: "data/digest_state.json"
 
 transports:
   - type: "signalwire"

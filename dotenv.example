@@ -20,6 +20,9 @@ TREKSAFER_SW_NUMBER=[REPLACE WITH YOUR SIGNALWIRE PHONE NUMBER]
 # Fire database path (snapshot history + fallback for API outages).
 # TREKSAFER_DATABASE=data/fires.db
 
+# Directory for runtime logs (app log, sms.log).
+# TREKSAFER_LOG_DIR=logs
+
 # Operator alerting (scripts/monitor.py). A channel is enabled by
 # configuring it: ntfy by a topic, email by an SMTP host + alert address.
 # TREKSAFER_NTFY_URL=https://ntfy.sh

@@ -19,5 +19,6 @@ venv/
 /data/*.db
 /data/*.db-*
 /data/monitor_state.json
+/data/digest_state.json
 # Environment / secrets
 .env*

@@ -15,6 +15,20 @@ Connect via `python scripts/cli_connect.py` for local testing.
 
 Refresh the fire database: `python scripts/downloads.py` (runs daily via cron in production)
 
+## Operator monitoring
+
+The message `health` on any transport returns a data-freshness summary; the exact
+lowercase form over the CLI port returns JSON. `scripts/monitor.py` (cron,
+every 15-30 min) probes it and alerts via ntfy + email (`app/notify.py`,
+configured under `monitoring:` in config.yaml) on app-down, stale fetches,
+frozen upstream layers (ArcGIS metadata lastEditDate), and new ERROR log
+lines; alerts fire on state changes only. `scripts/digest.py` (cron, daily)
+emails a summary of requests whose coordinates could not be parsed, scraped
+from sms.log. Both scripts ping healthchecks.io as a dead-man's switch
+(monitor directly, downloads.py after a successful refresh). Responses served
+from the database because a realtime fetch failed carry a "Data from <time>"
+marker.
+
 ## Architecture
 
 ### Message flow
