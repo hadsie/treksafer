@@ -251,12 +251,88 @@ class TestDataUnavailable:
         ff.out_of_range.return_value = False
         ff.nearby.return_value = []
         ff.unavailable_sources = []
+        ff.fallback_fetched = None
         ff.filters = {'distance': 50}
 
         from app.messages import handle_fire_request
         message = handle_fire_request((50.0, -122.0), {})
 
         assert 'No fires reported' in message
+
+
+class TestFallbackMarker:
+    """Responses built from stored data after a realtime failure carry a
+    freshness marker; stored data as the configured mode does not."""
+
+    # Fixture data was fetched 2026-07-01 12:00 UTC; the test coordinates
+    # are in America/Vancouver (PDT, UTC-7).
+    MARKER = "Data from Jul 1 05:00"
+    COORDS = (49.06, -120.79)
+
+    @pytest.fixture
+    def bc_realtime_failing(self, monkeypatch):
+        """Enable BC realtime and make its fetch fail, forcing DB fallback."""
+        from app.config import get_config
+        bc = next(d for d in get_config().data if d.location == 'BC')
+        monkeypatch.setattr(bc.realtime, 'enabled', True)
+        with patch('app.fires.find.fetch_fires', return_value=None), \
+             patch('app.messages.get_aqi', return_value=None):
+            yield
+
+    def test_marker_appended_after_realtime_failure(self, bc_realtime_failing):
+        from app.messages import handle_fire_request
+        message = handle_fire_request(self.COORDS, {'status': 'all'})
+
+        assert message.endswith(self.MARKER)
+
+    def test_marker_on_no_fires_response(self, bc_realtime_failing):
+        from app.messages import handle_fire_request
+        # (49.5, -120.9) is 40+ km from the nearest fixture fire.
+        message = handle_fire_request((49.5, -120.9), {'status': 'all', 'distance': 1})
+
+        assert 'No fires reported' in message
+        assert message.endswith(self.MARKER)
+
+    def test_no_marker_when_realtime_disabled_by_config(self):
+        from app.messages import handle_fire_request
+        message = handle_fire_request(self.COORDS, {'status': 'all'})
+
+        assert 'Data from' not in message
+
+    def test_data_age_format(self):
+        from datetime import datetime
+        assert Messages.data_age(datetime(2026, 7, 10, 14, 30)) == "Data from Jul 10 14:30"
+
+
+class TestHealthMessage:
+    """The message "health" (any case, surrounding whitespace, nothing else)
+    returns a health summary on any transport."""
+
+    @pytest.mark.parametrize('message', ['health', 'HEALTH', ' Health ', '\nhealth\n'])
+    def test_health_request_returns_summary(self, message):
+        response = handle_message(message)
+
+        assert response.startswith('TrekSafer OK')
+        for source in ('BC', 'AB', 'CA', 'US'):
+            assert source in response
+
+    @pytest.mark.parametrize('message', [
+        'health check', 'healthy', 'is health ok', 'health (49.2, -123.1)'])
+    def test_other_text_is_not_a_health_request(self, message):
+        response = handle_message(message)
+
+        assert 'TrekSafer OK' not in response
+
+    def test_summary_fits_one_sms(self):
+        assert Messages()._message_length(handle_message('health')) <= 160
+
+    def test_unreadable_database_reports_error(self, tmp_path, monkeypatch):
+        from app.config import get_config
+        monkeypatch.setattr(get_config(), 'database', str(tmp_path))
+
+        response = handle_message('health')
+
+        assert response.startswith('TrekSafer health ERROR')
 
 
 class TestAutoDetectRouting:

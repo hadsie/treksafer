@@ -9,7 +9,6 @@ from typing import Optional, Dict, Any
 
 import pytz
 from requests import RequestException
-from timezonefinder import TimezoneFinder
 
 from .base import AvalancheProvider
 from ..config import get_config

@@ -13,6 +13,19 @@ T2 = datetime(2026, 7, 2, 6, 0, tzinfo=timezone.utc)
 T3 = datetime(2026, 7, 3, 6, 0, tzinfo=timezone.utc)
 
 
+class TestLatestFetches:
+    def test_reports_newest_fetch_per_source(self, conn):
+        firedb.record_fires(conn, 'BC', fires_gdf([{'fire_key': 'K1', 'Fire': 'K1'}]), T1)
+        firedb.record_fires(conn, 'BC', fires_gdf([{'fire_key': 'K1', 'Fire': 'K1'}]), T2)
+        firedb.record_fires(conn, 'AB', fires_gdf([{'fire_key': 'H1', 'Fire': 'H1'}]), T1)
+
+        assert firedb.latest_fetches(conn) == {'BC': T2.isoformat(),
+                                               'AB': T1.isoformat()}
+
+    def test_unfetched_source_absent(self, conn):
+        assert firedb.latest_fetches(conn) == {}
+
+
 def fires_gdf(rows):
     """Build a normalized frame from simplified row dicts."""
     defaults = {

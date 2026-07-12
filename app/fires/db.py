@@ -167,6 +167,14 @@ def record_fires(conn: sqlite3.Connection, source: str, fires: gpd.GeoDataFrame,
     return written
 
 
+def latest_fetches(conn: sqlite3.Connection) -> dict:
+    """The newest fetch timestamp for every source that has one."""
+    rows = conn.execute(
+        "SELECT source, MAX(fetched_at) FROM fetches GROUP BY source"
+    ).fetchall()
+    return dict(rows)
+
+
 def latest_fetch(conn: sqlite3.Connection, source: str) -> Optional[str]:
     """Return the newest fetch timestamp for a source, or None."""
     row = conn.execute(
