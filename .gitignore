@@ -18,5 +18,6 @@ venv/
 /specs/
 /data/*.db
 /data/*.db-*
+/data/monitor_state.json
 # Environment / secrets
 .env*

@@ -124,6 +124,9 @@ class RealtimeFireConfig(BaseModel):
     # Attribute filter applied to perimeters-layer queries, e.g. to skip
     # fetching polygons whose fires points_where excludes.
     perimeters_where: str = "1=1"
+    # The monitor alerts when the source's ArcGIS layers haven't been
+    # republished (layer metadata lastEditDate) within this many hours.
+    layer_stale_hours: int = 24
 
     @model_validator(mode="after")
     def check_join_key(self):
@@ -145,6 +148,40 @@ class DataFile(BaseModel):
     mapping: Dict[str, Any] = {}
     status_map: Dict[str, List[str]] = {}
     realtime: Optional[RealtimeFireConfig] = None
+
+
+class MonitoringConfig(BaseModel):
+    """Operator alerting used by scripts/monitor.py and app/notify.py.
+
+    Each delivery channel is enabled by configuring it: ntfy by a topic,
+    email by an SMTP host + alert address. Unconfigured channels are
+    skipped with a log line.
+    """
+    ntfy_url: str = "https://ntfy.sh"
+    ntfy_topic: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    # From address; must be a sender the SMTP service accepts (e.g. an
+    # SES-verified address). Defaults to smtp_user, then alert_email.
+    smtp_from: str = ""
+    alert_email: str = ""
+    # Dead-man's switch pings (e.g. healthchecks.io check URLs): one for
+    # the monitor, one for the daily database refresh.
+    healthcheck_url: str = ""
+    refresh_healthcheck_url: str = ""
+    # Alert when a source's newest fetch is older than this.
+    fetch_stale_hours: int = 12
+    # Last-known condition state, for alerting on changes only.
+    state_file: str = "data/monitor_state.json"
+
+    @model_validator(mode="after")
+    def check_email_pair(self):
+        if bool(self.smtp_host) != bool(self.alert_email):
+            raise ValueError(
+                "email alerts need both smtp_host and alert_email; only one is set")
+        return self
 
 
 class Settings(BaseSettings):
@@ -172,6 +209,8 @@ class Settings(BaseSettings):
     data: List[DataFile] = []
 
     transports: List[TransportConfig] = []
+
+    monitoring: MonitoringConfig = MonitoringConfig()
 
     log_file: str | None = None
     log_level: int = logging.INFO

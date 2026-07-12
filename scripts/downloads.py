@@ -75,7 +75,18 @@ def main():
                   f"{', '.join(d.location for d in failures)}")
         return 1
     log.info("All sources refreshed.")
+    _ping_healthcheck(settings.monitoring.refresh_healthcheck_url)
     return 0
+
+
+def _ping_healthcheck(url: str) -> None:
+    """Dead-man's switch: an external service alerts when pings stop."""
+    if not url:
+        return
+    try:
+        requests.get(url, timeout=10)
+    except requests.RequestException as e:
+        print(f"healthcheck ping failed: {e}")
 
 
 if __name__ == "__main__":
