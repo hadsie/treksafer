@@ -139,12 +139,12 @@ class TestCLITransport:
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
         with patch("app.transport.cli.safe_handle_message") as mock_handle:
-            mock_handle.return_value = "TrekSafer ERROR: No GPS location found."
+            mock_handle.return_value = "No valid GPS coordinates found."
 
             await transport._handle_client(mock_reader, mock_writer)
 
             # Verify error message was written
-            expected_response = "TrekSafer ERROR: No GPS location found.\n"
+            expected_response = "No valid GPS coordinates found.\n"
             mock_writer.write.assert_called_once_with(expected_response.encode("utf-8"))
 
     @pytest.mark.asyncio

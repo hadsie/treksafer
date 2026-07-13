@@ -455,7 +455,7 @@ class AvalancheReport:
         return ','.join(result)
 
     def outside_of_area_msg(self):
-        return 'TrekSafer ERROR: GPS coordinates outside of supported avalanche forecast area. No data available.'
+        return 'GPS coordinates outside of supported avalanche forecast area. No data available.'
 
     def broken_forecast_msg(self, reason: str) -> str:
         """Return error message when forecast data is malformed/missing.
