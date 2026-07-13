@@ -10,6 +10,7 @@ from shapely.geometry import Point
 from app.fires import db as firedb
 from app.config import get_config, RealtimeFireConfig
 from app.fires import FindFires
+from app.fires.find import fire_keys
 
 BC_COORDS = (50.7021714, -121.9725246)
 
@@ -230,6 +231,29 @@ class TestAllStatusDropsSizeFilter:
 
         assert len(fires) == 1
         assert 'Size' not in fires[0]
+
+
+class TestFireKeys:
+    """Key derivation trusts the frame schema and fails loudly without it."""
+
+    def test_empty_frame_with_schema_yields_no_keys(self):
+        frame = gpd.GeoDataFrame(columns=['FIRE_YEAR', 'FIRE_NUMBER', 'geometry'],
+                                 geometry='geometry', crs='EPSG:4326')
+        assert fire_keys(frame, ['FIRE_YEAR', 'FIRE_NUMBER']) == []
+
+    def test_missing_key_columns_fail_loudly(self):
+        """A frame without its key columns is a broken producer, not an
+        empty result."""
+        frame = gpd.GeoDataFrame(columns=['geometry'], geometry='geometry',
+                                 crs='EPSG:4326')
+        with pytest.raises(ValueError, match='FIRE_NUMBER'):
+            fire_keys(frame, ['FIRE_YEAR', 'FIRE_NUMBER'])
+
+    def test_keys_join_fields_in_order(self):
+        frame = gpd.GeoDataFrame(
+            {'FIRE_YEAR': [2026], 'FIRE_NUMBER': ['K1']},
+            geometry=[Point(-120.0, 50.0)], crs='EPSG:4326')
+        assert fire_keys(frame, ['FIRE_YEAR', 'FIRE_NUMBER']) == ['2026-K1']
 
 
 class TestFallbackFreshness:

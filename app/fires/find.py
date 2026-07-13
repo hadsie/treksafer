@@ -222,6 +222,9 @@ def _parse_source_timestamp(value, tz):
 
 def fire_keys(frame: gpd.GeoDataFrame, key_fields) -> list[str]:
     """Season-stable per-fire join keys derived from a source's key fields."""
+    missing = [field for field in key_fields if field not in frame.columns]
+    if missing:
+        raise ValueError(f"Fire frame is missing key field(s): {', '.join(missing)}")
     rows = frame[list(key_fields)].itertuples(index=False, name=None)
     return ['-'.join(str(value) for value in row) for row in rows]
 

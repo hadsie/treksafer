@@ -1,10 +1,13 @@
 """Tests for the fire database refresh script (scripts/downloads.py)."""
 
+import logging
+
 import geopandas as gpd
 import requests
 from shapely.geometry import Point
 
 from app.fires import db as firedb
+from app.fires.sources import _points_fields
 from app.config import get_config
 from scripts import downloads
 
@@ -65,8 +68,11 @@ class TestRefreshSource:
 
 
 class TestMain:
-    def _empty(self):
-        return gpd.GeoDataFrame(columns=['FIRE_NUMBER', 'geometry'],
+    @staticmethod
+    def _empty(config):
+        """A zero-fire fetch result carrying the source schema, as
+        arcgis._to_gdf guarantees for real zero-feature responses."""
+        return gpd.GeoDataFrame(columns=[*_points_fields(config), 'geometry'],
                                 geometry='geometry', crs='EPSG:4326')
 
     def _settings(self, tmp_path):
@@ -74,7 +80,7 @@ class TestMain:
         settings.database = str(tmp_path / 'fires.db')
         return settings
 
-    def test_transient_failure_recovered_by_retry(self, tmp_path, monkeypatch, capsys):
+    def test_transient_failure_recovered_by_retry(self, tmp_path, monkeypatch, caplog):
         """A rate-limited source succeeds on the retry round; exit code 0."""
         calls = []
 
@@ -82,26 +88,27 @@ class TestMain:
             calls.append(config)
             if len(calls) == 1:
                 raise requests.ConnectionError('429 too many requests')
-            return self._empty()
+            return self._empty(config)
 
         sleeps = []
         monkeypatch.setattr(downloads, 'get_config', lambda: self._settings(tmp_path))
         monkeypatch.setattr(downloads, 'fetch_all_fires', fake_fetch)
         monkeypatch.setattr(downloads.time, 'sleep', sleeps.append)
 
-        exit_code = downloads.main()
+        with caplog.at_level(logging.INFO):
+            exit_code = downloads.main()
 
         # Recovered on the first retry round; no further attempts.
         assert exit_code == 0
         assert sleeps == [downloads.RETRY_DELAY_S]
-        assert 'Retrying 1 failed source(s)' in capsys.readouterr().out
+        assert 'Retrying 1 failed source(s)' in caplog.text
 
-    def test_persistent_failure_reported_after_retry(self, tmp_path, monkeypatch, capsys):
+    def test_persistent_failure_reported_after_retry(self, tmp_path, monkeypatch, caplog):
         """A source that fails both rounds is reported; the others complete."""
         def fake_fetch(config):
             if config.points_where.startswith('Agency'):  # the CA source
                 raise requests.ConnectionError('boom')
-            return self._empty()
+            return self._empty(config)
 
         sleeps = []
         monkeypatch.setattr(downloads, 'get_config', lambda: self._settings(tmp_path))
@@ -112,5 +119,4 @@ class TestMain:
 
         assert exit_code == 1
         assert len(sleeps) == downloads.MAX_RETRIES
-        out = capsys.readouterr().out
-        assert '1 source(s) failed: CA' in out
+        assert '1 source(s) failed: CA' in caplog.text
