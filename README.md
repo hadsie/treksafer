@@ -73,7 +73,7 @@ By default, fires within 50km of your GPS location are returned. If you’re in 
 - **Default** - 50km radius
 
 **Specific fire:**
-- **`fire <id-or-name>`** - Look up one fire by its number or name (e.g. `fire K70597`, `fire Kullagh Creek`) instead of by location. All sources are searched, so you can check on a fire anywhere, not just near you. Include coordinates as well (`fire K70597 (49.2, -123.1)`) to also see the distance and direction to it. If no fire matches, the request falls back to a normal nearby-fires search using any coordinates in the message.
+- **`fire <id-or-name>`** - Look up one fire by its exact number or name (e.g. `fire K70597`, `fire Kullagh Creek`) instead of by location, so you can check on a fire anywhere, not just near you. The identifier must match exactly (case doesn't matter). Include coordinates as well (`fire K70597 (49.2, -123.1)`) to also see the distance and direction to it. If no fire matches, the request falls back to a normal nearby-fires search using any coordinates in the message.
 
 ### Avalanche Filters
 

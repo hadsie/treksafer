@@ -160,6 +160,8 @@ def _fire_query(message: str) -> str | None:
     if not match:
         return None
     term = message[match.end():]
+    # Strip every valid-but-unrelated message component (map/device links,
+    # coordinates, distance and status filters); what remains is the identifier.
     term = re.sub(r'https?://\S+', ' ', term)
     term = re.sub(r'(?:www\.)?(?:inreachlink\.com|sms2zoleo\.com)/\S+', ' ', term,
                   flags=re.IGNORECASE)

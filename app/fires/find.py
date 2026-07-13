@@ -488,10 +488,10 @@ class FindFires:
 
 
 def _stored_by_id(location: str, term: str, database: str) -> Optional[gpd.GeoDataFrame]:
-    """Return stored fires for a source whose Fire identifier contains term.
+    """Return stored fires for a source whose Fire identifier equals term.
 
-    Returns None when the source has no stored data at all, mirroring the
-    realtime path's unavailable signal.
+    The match is exact and case-insensitive. Returns None when the source
+    has no stored data at all.
     """
     try:
         conn = firedb.connect(database)
@@ -504,65 +504,60 @@ def _stored_by_id(location: str, term: str, database: str) -> Optional[gpd.GeoDa
         return None
     if fires is None:
         return None
-    return fires[fires['Fire'].astype(str).str.contains(term, case=False, regex=False)]
+    return fires[fires['Fire'].astype(str).str.lower() == term.lower()]
 
 
-def _fires_by_id(data_file: DataFile, term: str,
-                 database: str) -> tuple[Optional[gpd.GeoDataFrame], DataFile]:
-    """Fetch a source's fires matching term, live where possible.
-
-    Falls back to stored data when realtime is unavailable or disabled,
-    the same policy the radius search uses. Matched fetches are not
-    recorded: an identifier query is a filtered slice, not the source's
-    full state, so recording it would corrupt the snapshot history.
-    """
-    realtime = data_file.realtime
-    if realtime and realtime.enabled:
-        fires = fetch_fires_by_id(realtime, term)
-        if fires is not None:
-            return fires, _realtime_data_file(data_file.location, realtime)
-        logging.warning(
-            f"Realtime {data_file.location} fire data unavailable; "
-            f"using stored data for fire lookup."
-        )
-    return _stored_by_id(data_file.location, term, database), _DB_DATA_FILE
+def _first_match(matches: gpd.GeoDataFrame, data_file: DataFile,
+                 coords: Optional[tuple]) -> Dict[str, Any]:
+    """Normalize the first matched fire, adding distance/direction if coords."""
+    if coords is not None:
+        matches = matches.to_crs(local_crs(coords))
+    row = matches.iloc[0]
+    data = _fire_attributes(data_file, row)
+    if coords is not None:
+        origin = Point(0, 0)
+        geometry = row['geometry']
+        data['Distance'] = geometry.distance(origin)
+        data['Direction'] = compass_direction(origin, nearest_points(origin, geometry)[1])
+    return data
 
 
 def find_fire(term: str, coords: Optional[tuple] = None) -> list[Dict[str, Any]]:
-    """Look up fires by their displayed identifier across every source.
+    """Look up a single fire by its displayed identifier, ignoring location.
 
-    The identifier is matched case-insensitively as a substring, since the
-    user sent no location to narrow the search (they may be asking about a
-    fire near someone else). When coords are supplied, each match also gets
-    its distance and compass direction from that point.
+    The identifier is matched exactly (case-insensitive) against each
+    source's Fire field. The database is checked first; only if no stored
+    fire matches are the realtime sources queried, stopping at the first
+    match. Fires sharing a name across sources beyond the first are not
+    returned. When coords are supplied, the match also gets its distance
+    and compass direction from that point.
 
     Args:
         term: The fire identifier or name to search for
         coords: Optional (latitude, longitude) to measure distance from
 
     Returns:
-        Normalized fire dicts, ordered by status then distance; empty when
-        nothing matched.
+        A single-element list with the matched fire, or empty when nothing
+        matched.
     """
     settings = get_config()
-    crs = local_crs(coords) if coords else None
-    origin = Point(0, 0)
 
-    fires: list[Dict[str, Any]] = []
+    # 1. The database aggregates every source's recent fires; prefer it.
     for data_file in settings.data:
-        matches, effective = _fires_by_id(data_file, term, settings.database)
-        if matches is None or matches.empty:
-            continue
-        if crs is not None:
-            matches = matches.to_crs(crs)
-        for _, row in matches.iterrows():
-            data = _fire_attributes(effective, row)
-            if crs is not None:
-                geometry = row['geometry']
-                data['Distance'] = geometry.distance(origin)
-                data['Direction'] = compass_direction(
-                    origin, nearest_points(origin, geometry)[1])
-            fires.append(data)
+        stored = _stored_by_id(data_file.location, term, settings.database)
+        if stored is not None and not stored.empty:
+            return [_first_match(stored, _DB_DATA_FILE, coords)]
 
-    fires.sort(key=lambda f: (f.get('StatusLevel', float('inf')), f.get('Distance', 0)))
-    return fires
+    # 2. Not stored yet: query the realtime layers, first match wins. An
+    #    identifier query is a filtered slice, not the source's full state,
+    #    so it is deliberately not recorded to the database.
+    for data_file in settings.data:
+        realtime = data_file.realtime
+        if not (realtime and realtime.enabled):
+            continue
+        matches = fetch_fires_by_id(realtime, term)
+        if matches is not None and not matches.empty:
+            return [_first_match(matches, _realtime_data_file(data_file.location, realtime),
+                                 coords)]
+
+    return []

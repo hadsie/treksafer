@@ -337,11 +337,31 @@ class TestFindFireById:
     def test_lookup_is_case_insensitive(self):
         assert [f["Fire"] for f in find_fire("snake river")] == ["Snake River"]
 
-    def test_lookup_matches_substring(self):
-        assert "Snake River" in [f["Fire"] for f in find_fire("Snake")]
+    def test_substring_does_not_match(self):
+        """The match is exact, so a partial name returns nothing."""
+        assert find_fire("Snake") == []
 
     def test_lookup_searches_ca_source(self):
         assert [f["Fire"] for f in find_fire("QC-2026-001")] == ["QC-2026-001"]
 
     def test_unknown_identifier_returns_empty(self):
         assert find_fire("ZZZ-NO-SUCH-FIRE") == []
+
+    def test_database_is_checked_before_realtime(self):
+        """A fire already in the database is returned without a realtime query."""
+        settings = realtime_settings(enabled=True, database=None)
+        with patch('app.fires.find.get_config', return_value=settings), \
+             patch('app.fires.find.fetch_fires_by_id') as mock_realtime:
+            fires = find_fire("C10784")
+        assert [f["Fire"] for f in fires] == ["C10784"]
+        mock_realtime.assert_not_called()
+
+    def test_realtime_queried_when_not_in_database(self):
+        """A fire absent from the database is looked up via the realtime layers."""
+        settings = realtime_settings(enabled=True, database=None)
+        with patch('app.fires.find.get_config', return_value=settings), \
+             patch('app.fires.find.fetch_fires_by_id',
+                   return_value=realtime_gdf(50.7, -121.9)) as mock_realtime:
+            fires = find_fire("K1")
+        assert [f["Fire"] for f in fires] == ["K1"]
+        mock_realtime.assert_called_once()

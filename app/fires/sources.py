@@ -264,17 +264,18 @@ def _merge_spatial(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
 def fetch_fires_by_id(config: RealtimeFireConfig, term: str) -> Optional[gpd.GeoDataFrame]:
     """Fetch fires whose displayed identifier matches term, ignoring location.
 
-    Matches term as a case-insensitive substring of the points layer's
+    Matches term exactly (case-insensitive) against the points layer's
     displayed-fire field (mapping['Fire']) across the whole source, then
     gives each match its perimeter geometry the same way the radius query
-    does. Unlike the radius path, no location recovery is attempted: only
-    the fires the identifier selected are returned, never extra rows.
+    does. The match is exact, not a substring: a substring could pull dozens
+    of unrelated fires. Unlike the radius path, no location recovery is
+    attempted: only the fires the identifier selected are returned.
 
     Returned in EPSG:3857, or None when the source is unavailable.
     """
     fire_field = config.mapping['Fire']
     safe = term.replace("'", "''")
-    where = f"({config.points_where}) AND UPPER({fire_field}) LIKE UPPER('%{safe}%')"
+    where = f"({config.points_where}) AND UPPER({fire_field}) = UPPER('{safe}')"
     try:
         points = _stash_report_point(
             query_layer(config.points_url, {}, _points_fields(config),

@@ -475,13 +475,13 @@ class TestFetchFiresById:
         assert gdf.geometry.iloc[0].geom_type == 'Polygon'
         assert str(gdf.crs) == 'EPSG:3857'
 
-    def test_points_query_uses_case_insensitive_like(self, mocked_responses):
+    def test_points_query_uses_exact_case_insensitive_match(self, mocked_responses):
         mocked_responses.get(POINTS_URL, json=collection([]))
 
         fetch_fires_by_id(CONFIG, "K1's")
 
         where = unquote_plus(mocked_responses.calls[0].request.url)
-        assert "UPPER(FIRE_NUMBER) LIKE UPPER('%K1''s%')" in where
+        assert "UPPER(FIRE_NUMBER) = UPPER('K1''s')" in where
 
     def test_no_match_returns_empty_without_perimeter_query(self, mocked_responses):
         mocked_responses.get(POINTS_URL, json=collection([]))
