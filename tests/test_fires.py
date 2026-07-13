@@ -232,6 +232,34 @@ class TestAllStatusDropsSizeFilter:
         assert 'Size' not in fires[0]
 
 
+class TestFallbackFreshness:
+    """Stored fallback data younger than the staleness window reads the
+    same as a live answer and warrants no freshness marker."""
+
+    def _findfires(self):
+        with patch('app.fires.find.get_config', return_value=realtime_settings()):
+            return FindFires(BC_COORDS)
+
+    def test_fresh_fallback_reports_nothing(self):
+        ff = self._findfires()
+        fetched = datetime.now(timezone.utc) - timedelta(hours=5)
+        ff.fallback_fetches = {'BC': fetched.isoformat()}
+
+        assert ff.fallback_fetched is None
+
+    def test_stale_fallback_reports_fetch_time(self):
+        ff = self._findfires()
+        fetched = datetime.now(timezone.utc) - timedelta(hours=7)
+        ff.fallback_fetches = {'BC': fetched.isoformat()}
+
+        assert ff.fallback_fetched == fetched
+
+    def test_no_fallbacks_reports_nothing(self):
+        ff = self._findfires()
+
+        assert ff.fallback_fetched is None
+
+
 class TestFallbackMatchesRealtime:
     """Identical source data must produce identical responses from the
     realtime path and the database fallback path."""

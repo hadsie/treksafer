@@ -199,6 +199,8 @@ class Settings(BaseSettings):
     fire_size: int = 1
     # Fire database: snapshot history and the fallback for API outages.
     database: str = "data/fires.db"
+    # Stored fallback data older than this (hours) carries a freshness marker.
+    stale_data_hours: int
     # Fires discovered within this many days bypass the minimum size filter.
     new_fire_age_days: int = 7
     # Auto-detected requests default to fire data within this window (MM-DD, inclusive).

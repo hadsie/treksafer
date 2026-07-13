@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import math
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Dict, Any, Optional
 
@@ -398,11 +398,14 @@ class FindFires:
 
     @property
     def fallback_fetched(self) -> Optional[datetime]:
-        """Oldest fetch time among sources that fell back to stored data,
-        or None if none did."""
-        if not self.fallback_fetches:
-            return None
-        return min(datetime.fromisoformat(t) for t in self.fallback_fetches.values())
+        """Oldest fetch time among sources whose stored fallback data is
+        older than the configured staleness window, or None.
+        """
+        window = timedelta(hours=self.settings.stale_data_hours)
+        now = datetime.now(timezone.utc)
+        stale = [fetched_at for fetched in self.fallback_fetches.values()
+                 if now - (fetched_at := datetime.fromisoformat(fetched)) > window]
+        return min(stale) if stale else None
 
     def nearby(self) -> list[Dict[str, Any]]:
         """Find all fires within distance limit.
