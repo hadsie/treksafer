@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from .config import get_config
 from .health import health_report
 from .helpers import parse_message, get_aqi, local_time
-from .fires import FindFires
+from .fires import FindFires, FireLookup
 from .avalanche import AvalancheReport
 from .filters import STATUS_LEVELS
 
@@ -40,6 +40,12 @@ class Messages:
 
     def data_unavailable(self) -> str:
         return 'Fire data is temporarily unavailable for your area. Try again later.'
+
+    def fire_not_found(self, term: str) -> str:
+        """A fire id/name lookup matched nothing and there were no coordinates
+        to fall back to. Informational, so it carries no TrekSafer branding."""
+        return (f'No fire matching "{term}" was found. Check the fire number or '
+                'name, or send GPS coordinates for nearby fires.')
 
     def no_fires(self, distance: float, coords: tuple, status_filter: str = None) -> str:
         """Generate no fires message with optional status filter context.
@@ -159,8 +165,11 @@ class Messages:
             elif size == "medium":
                 fire['FullName'] = f"{fire['Name']} {fire['Fire']}"
 
-        distance = self._format_distance(fire['Distance'])
-        fire['DistDir'] = f"{distance}km {fire['Direction']}"
+        # Distance/direction are present only when the request carried
+        # coordinates (a bare id/name lookup has neither).
+        if 'Distance' in fire:
+            distance = self._format_distance(fire['Distance'])
+            fire['DistDir'] = f"{distance}km {fire['Direction']}"
         # New fires may not have a size estimate yet; the line is omitted.
         if 'Size' in fire:
             fire['Size'] = self._format_size(fire['Size'])
@@ -242,17 +251,24 @@ class Messages:
         # Strip the trailing “.0” if the number is an integer
         return int(km_rounded) if km_rounded == int(km_rounded) else km_rounded
 
-def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
+def handle_fire_request(coords: tuple[float, float] | None, fire_filters: Dict,
+                        fire_id: str | None = None) -> str:
     """Handle fire information requests.
 
     Args:
-        coords: Tuple of (latitude, longitude)
+        coords: Tuple of (latitude, longitude), or None for an id/name lookup
+            sent without coordinates
         fire_filters: Dictionary of fire-specific filters
+        fire_id: A fire number or name to look up; when given, the response is
+            that single fire rather than a radius search
 
     Returns:
         str: Formatted fire report with AQI
     """
     responses = Messages()
+
+    if fire_id is not None:
+        return _handle_fire_lookup(coords, fire_filters, fire_id, responses)
 
     # Get AQI if configured
     aqi_message = ""
@@ -286,6 +302,23 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
 
     fire_messages = [responses.fire(fire) for fire in fires]
     return aqi_message + "\n\n".join(fire_messages) + marker
+
+
+def _handle_fire_lookup(coords: tuple[float, float] | None, fire_filters: Dict,
+                        term: str, responses: 'Messages') -> str:
+    """Resolve a "fire <id-or-name>" lookup to its single fire, or fall back."""
+    lookup = FireLookup(term, coords)
+    fire = lookup.result()
+    if fire is not None:
+        message = responses.fire(fire)
+        if lookup.marker_fetched:
+            message += "\n\n" + responses.data_age(
+                local_time(lookup.marker_fetched, lookup.marker_coords))
+        return message
+    # A miss with coordinates falls back to the nearby-fires search.
+    if coords is not None:
+        return handle_fire_request(coords, fire_filters)
+    return responses.fire_not_found(term)
 
 
 def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:
@@ -359,6 +392,7 @@ def handle_message(message: str) -> str:
 
     coords = parsed_data["coords"]
     fire_filters = parsed_data["fire_filters"]
+    fire_id = parsed_data.get("fire_id")
     data_type = parsed_data.get("data_type", "auto")
     avalanche_filters = parsed_data.get("avalanche_filters", {})
 
@@ -379,6 +413,6 @@ def handle_message(message: str) -> str:
     if data_type == "avalanche":
         return handle_avalanche_request(coords, avalanche_filters)
     elif data_type == "fire":
-        return handle_fire_request(coords, fire_filters)
+        return handle_fire_request(coords, fire_filters, fire_id)
     else:
         return f"Unknown data type: {data_type}"

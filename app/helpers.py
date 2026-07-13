@@ -32,6 +32,14 @@ _DEG_HEMI_PATTERNS = [
     ),
 ]
 
+# A plain decimal coordinate pair. Coordinates must include a decimal point:
+# every satellite messenger and map share emits decimals, so requiring them
+# avoids matching incidental integers (e.g. "party of 2, ...") as coordinates.
+# The lookbehind/lookahead stop a pair from matching a fragment of a longer
+# number (e.g. "122.09" must not yield "09") and keep leading signs intact.
+_DECIMAL_PAIR_RE = re.compile(
+    r'(?<![\d.])([-+]?\d{1,2}\.\d+)\s*,\s*([-+]?\d{1,3}\.\d+)(?!\.?\d)')
+
 def acres_to_hectares(acres):
     return round(float(acres)/2.4710538147, 2)
 
@@ -142,6 +150,42 @@ def get_aqi(coords):
         logging.warning(f"Failed to parse AQI data: {e}")
         return None
 
+# The leading fire/fires keyword. Only the leading keyword is a keyword: the
+# lookup term after it is never re-scanned (CA identifiers such as
+# 2026_ON_DRY_FIRE_013 contain the word and must survive intact).
+_FIRE_KEYWORD_RE = re.compile(r'\bfires?\b', re.IGNORECASE)
+# Bits that are valid message content but not part of a fire identifier.
+_DISTANCE_FILTER_RE = re.compile(r'\b\d+\s*(?:km|mi)\b', re.IGNORECASE)
+_FILTER_WORD_RE = re.compile(
+    r'\b(?:active|all|current|tomorrow|avalanches?)\b', re.IGNORECASE)
+
+
+def fire_lookup_term(message: str) -> str | None:
+    """Extract the fire identifier a "fire <id-or-name>" message asks for.
+
+    The term is the text after the leading fire/fires keyword with everything
+    valid-but-unrelated stripped (URLs, share links, coordinates, degree
+    marks, distance filters, and the filter keywords). Bare integers and
+    hyphens are preserved so identifiers like HWF-096-2026 survive; a residue
+    with no letters or digits is no term at all. The keyword is required: a
+    bare token is never treated as a fire ID.
+    """
+    keyword = _FIRE_KEYWORD_RE.search(message)
+    if not keyword:
+        return None
+    term = message[keyword.end():]
+    term = re.sub(r'https?://\S+', ' ', term)
+    term = _DEVICE_LINK_RE.sub(' ', term)
+    for pattern in _DEG_HEMI_PATTERNS:
+        term = pattern.sub(' ', term)
+    term = _DECIMAL_PAIR_RE.sub(' ', term)
+    term = re.sub(r'[°º]', ' ', term)
+    term = _DISTANCE_FILTER_RE.sub(' ', term)
+    term = _FILTER_WORD_RE.sub(' ', term)
+    term = re.sub(r'\s+', ' ', term).strip(' ()[]{}.,;:"')
+    return term if re.search(r'[A-Za-z0-9]', term) else None
+
+
 def parse_message(message):
     """Parse an SMS message for lat/long coordinates and optional filters.
 
@@ -151,15 +195,11 @@ def parse_message(message):
         - Distance filters: "25km", "10mi"
         - Data type keywords: "avalanche", "fire"
         - Forecast time keywords: "current", "tomorrow", "all"
+        - Fire lookup by id or name: "fire <id-or-name>"
 
-    Returns:
-        dict: {
-            "coords": (lat, lon),
-            "filters": dict,
-            "data_type": str,
-            "forecast_time": str
-        }
-        or None if no coords found
+    Returns the parsed dict when the message carries coordinates OR a fire
+    lookup term, and None only when it has neither. Coordinates stay optional
+    for lookups.
     """
 
     # Extract filters from message (case insensitive, using word boundaries)
@@ -199,14 +239,16 @@ def parse_message(message):
     elif re.search(r'\ball\b', message_lower):
         avalanche_filters['forecast'] = 'all'
 
+    fire_id = fire_lookup_term(message)
     coords = coords_from_message(message)
 
-    if not coords:
+    if not coords and not fire_id:
         return None
 
     return {
         "coords": coords,
         "fire_filters": filters,
+        "fire_id": fire_id,
         "data_type": data_type,
         "avalanche_filters": avalanche_filters
     }
@@ -313,16 +355,8 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
             if _valid_coords(lat, lon):
                 candidates.append((m.start(), lat, lon))
 
-    # Plain decimal pairs. Coordinates must include a decimal point: every
-    # satellite messenger and map share emits decimals, so requiring them
-    # avoids matching incidental integers (e.g. "party of 2, ...") as
-    # coordinates. The lookbehind/lookahead stop a pair from matching a
-    # fragment of a longer number (e.g. "122.09" must not yield "09") and
-    # keep leading signs intact.
-    lat_coord = r'[-+]?\d{1,2}\.\d+'
-    long_coord = r'[-+]?\d{1,3}\.\d+'
-    pair_re = r'(?<![\d.])(%s)\s*,\s*(%s)(?!\.?\d)' % (lat_coord, long_coord)
-    for m in re.finditer(pair_re, message):
+    # Plain decimal pairs (see _DECIMAL_PAIR_RE for why decimals are required).
+    for m in _DECIMAL_PAIR_RE.finditer(message):
         lat, lon = float(m.group(1)), float(m.group(2))
         if _valid_coords(lat, lon):
             candidates.append((m.start(), lat, lon))

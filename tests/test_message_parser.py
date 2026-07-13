@@ -340,6 +340,58 @@ class TestFilterExtraction:
         assert result["data_type"] == "fire"
 
 
+class TestFireLookupTerm:
+    """A "fire <id-or-name>" message yields a fire_id lookup term, with or
+    without coordinates."""
+
+    def test_id_only_message(self):
+        result = parse_message('fire K70597')
+        assert result['fire_id'] == 'K70597'
+        assert result['coords'] is None
+
+    def test_id_with_appended_device_coords(self):
+        result = parse_message('fire K70597 (52.5092, -115.6182)')
+        assert result['fire_id'] == 'K70597'
+        assert result['coords'] == (52.5092, -115.6182)
+
+    def test_name_with_spaces(self):
+        result = parse_message('fires Kullagh Creek')
+        assert result['fire_id'] == 'Kullagh Creek'
+
+    @responses.activate
+    def test_id_with_share_link(self):
+        responses.get('https://inreachlink.com/ABC1234',
+                      body='{"messages":[{"Latitude":44.1,"Longitude":-73.2}]}')
+
+        result = parse_message('fire K70597 inreachlink.com/ABC1234')
+        assert result['fire_id'] == 'K70597'
+        assert result['coords'] == (44.1, -73.2)
+
+    def test_hyphenated_id_survives(self):
+        result = parse_message('fire HWF-096-2026')
+        assert result['fire_id'] == 'HWF-096-2026'
+
+    def test_id_containing_the_word_fire_survives(self):
+        """CA identifiers embed the word; only the leading keyword is stripped."""
+        result = parse_message('fire 2026_XX_DRY_FIRE_999')
+        assert result['fire_id'] == '2026_XX_DRY_FIRE_999'
+
+    def test_pure_punctuation_yields_no_term(self):
+        assert parse_message('fire !!! ...') is None
+
+    def test_plain_fire_with_coords_yields_no_term(self):
+        result = parse_message('fire (52.5092, -115.6182)')
+        assert result['fire_id'] is None
+        assert result['coords'] == (52.5092, -115.6182)
+
+    def test_neither_coords_nor_term_returns_none(self):
+        assert parse_message('just checking in') is None
+
+    def test_distance_and_status_stripped_from_term(self):
+        result = parse_message('fire active 25km K70597')
+        assert result['fire_id'] == 'K70597'
+
+
 class TestReturnValueStructure:
     """Test structure of returned dictionary."""
 

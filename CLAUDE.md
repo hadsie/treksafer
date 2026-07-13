@@ -38,6 +38,8 @@ marker.
 3. Auto-detects data type: avalanche if provider covers the location, otherwise fire
 4. Routes to `handle_fire_request()` or `handle_avalanche_request()` in `messages.py`
 
+A `fire <id-or-name>` message carries a `fire_id` lookup term instead of (or alongside) coordinates: `handle_fire_request` delegates to `fires.FireLookup`, which resolves a single fire across all sources (database first, one targeted live re-query only when the stored match is stale) rather than a radius search.
+
 ### Key modules
 
 - `app/config.py` -- Pydantic settings loaded from `config.yaml` + `.env.<ENV>` + env vars

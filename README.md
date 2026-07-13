@@ -88,6 +88,13 @@ By default, fires within 50km of your GPS location are returned. If you’re in 
 
 Coordinates you type take priority over the device location your messenger appends, so you can ask about somewhere you aren't.
 
+### Look up a specific fire
+
+Send **`fire <number-or-name>`** to get that one fire back, e.g. `fire K70597`
+or `fire Kullagh Creek`. All data sources are searched (not just the ones near
+you), so you can ask about a fire anywhere. Add your coordinates and the reply
+also includes the distance and direction from you to the fire.
+
 ### Examples
 ```
 Basic: fires
@@ -95,6 +102,8 @@ With status filter: fires active
 With distance: fires 25km
 Combined filters: fires active 10mi
 With coordinates: (49.2827, -123.1207) active 25km
+Look up a fire: fire K70597
+Look up by name: fire Kullagh Creek
 Avalanche: avalanche
 Avalanche tomorrow: avalanche tomorrow
 ```

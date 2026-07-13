@@ -2,8 +2,9 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
+import requests
 
-from app.messages import Messages, handle_message, in_fire_season
+from app.messages import Messages, handle_fire_request, handle_message, in_fire_season
 
 
 def mock_fire(**overrides):
@@ -348,6 +349,47 @@ class TestFallbackMarker:
     def test_data_age_format(self):
         from datetime import datetime
         assert Messages.data_age(datetime(2026, 7, 10, 14, 30)) == "Data from Jul 10 14:30"
+
+
+class TestFireLookupResponse:
+    """A "fire <id-or-name>" request returns that one fire (from the fixture
+    database, realtime disabled) or the not-found reply."""
+
+    @patch("app.messages.get_aqi", return_value=None)
+    def test_distance_and_direction_only_with_coords(self, mock_aqi):
+        with_coords = handle_fire_request((50.5, -121.0), {'status': 'all'}, 'C10784')
+        without_coords = handle_fire_request(None, {'status': 'all'}, 'C10784')
+
+        assert 'C10784' in with_coords and 'km ' in with_coords
+        assert 'C10784' in without_coords and 'km ' not in without_coords
+
+    def test_not_found_reply_exact_wording(self):
+        message = handle_fire_request(None, {}, 'NOPE999')
+
+        assert message == ('No fire matching "NOPE999" was found. Check the fire '
+                           'number or name, or send GPS coordinates for nearby fires.')
+
+    @patch("app.messages.get_aqi", return_value=None)
+    def test_miss_with_coords_falls_back_to_radius_search(self, mock_aqi):
+        # (49.5, -120.9) is far from any fixture fire, so the radius fallback
+        # produces the "No fires reported" reply rather than the not-found one.
+        message = handle_fire_request((49.5, -120.9), {'status': 'all', 'distance': 1}, 'NOPE')
+
+        assert 'No fires reported' in message
+        assert 'No fire matching' not in message
+
+    def test_marker_localized_to_requester_coords(self, monkeypatch):
+        """A stale hit whose live refresh fails is served from storage with a
+        marker whose timestamp is in the requester's local timezone."""
+        from app.config import get_config
+        bc = next(d for d in get_config().data if d.location == 'BC')
+        monkeypatch.setattr(bc.realtime, 'enabled', True)
+        with patch('app.fires.lookup.fetch_fire', side_effect=requests.ConnectionError('x')), \
+             patch('app.messages.get_aqi', return_value=None):
+            # Fixture fetched 2026-07-01 12:00 UTC; coords are America/Vancouver (PDT).
+            message = handle_fire_request((49.06, -120.79), {'status': 'all'}, 'C10784')
+
+        assert message.endswith('Data from Jul 1 05:00')
 
 
 class TestHealthMessage:
