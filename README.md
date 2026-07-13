@@ -72,6 +72,9 @@ By default, fires within 50km of your GPS location are returned. If you’re in 
 - **`25km`** or **`10mi`** - Custom search radius (max 150km)
 - **Default** - 50km radius
 
+**Specific fire:**
+- **`fire <id-or-name>`** - Look up one fire by its number or name (e.g. `fire K70597`, `fire Kullagh Creek`) instead of by location. All sources are searched, so you can check on a fire anywhere, not just near you. Include coordinates as well (`fire K70597 (49.2, -123.1)`) to also see the distance and direction to it. If no fire matches, the request falls back to a normal nearby-fires search using any coordinates in the message.
+
 ### Avalanche Filters
 
 - **`current`** - Today’s forecast only
@@ -95,6 +98,8 @@ With status filter: fires active
 With distance: fires 25km
 Combined filters: fires active 10mi
 With coordinates: (49.2827, -123.1207) active 25km
+Specific fire by number: fire K70597
+Specific fire by name: fire Kullagh Creek
 Avalanche: avalanche
 Avalanche tomorrow: avalanche tomorrow
 ```

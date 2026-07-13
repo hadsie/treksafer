@@ -478,3 +478,43 @@ class TestSafeHandleMessage:
 
     def test_error_reply_fits_in_one_sms(self):
         assert len(Messages().system_error()) <= 160
+
+
+class TestFireNoLocationFormat:
+    """A fire looked up by ID without coordinates formats without a
+    distance/direction line."""
+
+    def test_omits_distance_line_when_absent(self):
+        fire = {"Fire": "K1", "Name": "Test Creek", "Location": "Somewhere",
+                "Size": 10.0, "Status": "Out of Control"}
+        message = Messages().fire(fire)
+
+        assert "Fire: Test Creek (K1)" in message
+        assert "km" not in message
+        assert "Status: Out of Control" in message
+
+
+class TestSpecificFireLookup:
+    """handle_message routes a "fire <id>" request to a specific-fire lookup,
+    served from the fixture database (realtime disabled in tests)."""
+
+    def test_found_returns_only_that_fire(self):
+        message = handle_message("fire QC-2026-001")
+
+        assert "QC-2026-001" in message
+        assert "No fire matching" not in message
+        # No coordinates were sent, so no distance line.
+        assert "km" not in message
+
+    def test_not_found_without_coords_reports_missing(self):
+        message = handle_message("fire ZZZ-NO-SUCH-FIRE")
+
+        assert 'No fire matching "ZZZ-NO-SUCH-FIRE"' in message
+
+    @patch("app.messages.get_aqi", return_value=None)
+    def test_not_found_with_coords_falls_back_to_nearby(self, mock_aqi):
+        message = handle_message("fire ZZZ-NO-SUCH-FIRE (50.7021714, -121.9725246)")
+
+        # The lookup missed, so the request degrades to the coordinate search
+        # rather than reporting the fire as not found.
+        assert "No fire matching" not in message

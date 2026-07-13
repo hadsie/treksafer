@@ -9,7 +9,7 @@ from shapely.geometry import Point
 
 from app.fires import db as firedb
 from app.config import get_config, RealtimeFireConfig
-from app.fires import FindFires
+from app.fires import FindFires, find_fire
 from app.fires.find import fire_keys
 
 BC_COORDS = (50.7021714, -121.9725246)
@@ -313,3 +313,35 @@ class TestFallbackMatchesRealtime:
                 assert fallback_fire[key] == pytest.approx(realtime_fire[key], rel=1e-6)
             else:
                 assert fallback_fire[key] == realtime_fire[key], key
+
+
+class TestFindFireById:
+    """find_fire() looks up a specific fire by identifier across all sources,
+    served here from the fixture database (realtime disabled in tests)."""
+
+    def test_lookup_by_bc_number_without_coords(self):
+        fires = find_fire("C10784")
+        assert len(fires) == 1
+        assert fires[0]["Fire"] == "C10784"
+        # No coordinates were supplied, so there is no distance or direction.
+        assert "Distance" not in fires[0]
+        assert "Direction" not in fires[0]
+
+    def test_lookup_by_us_name_with_coords_adds_distance(self):
+        fires = find_fire("Snake River", (43.5, -110.7))
+        assert len(fires) == 1
+        assert fires[0]["Fire"] == "Snake River"
+        assert fires[0]["Distance"] > 0
+        assert fires[0]["Direction"]
+
+    def test_lookup_is_case_insensitive(self):
+        assert [f["Fire"] for f in find_fire("snake river")] == ["Snake River"]
+
+    def test_lookup_matches_substring(self):
+        assert "Snake River" in [f["Fire"] for f in find_fire("Snake")]
+
+    def test_lookup_searches_ca_source(self):
+        assert [f["Fire"] for f in find_fire("QC-2026-001")] == ["QC-2026-001"]
+
+    def test_unknown_identifier_returns_empty(self):
+        assert find_fire("ZZZ-NO-SUCH-FIRE") == []

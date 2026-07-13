@@ -34,9 +34,11 @@ marker.
 ### Message flow
 
 1. Transport receives SMS (SignalWire) or TCP message (CLI)
-2. `helpers.parse_message()` extracts coords + filters
+2. `helpers.parse_message()` extracts coords + filters, plus an optional `fire <id-or-name>` lookup term
 3. Auto-detects data type: avalanche if provider covers the location, otherwise fire
 4. Routes to `handle_fire_request()` or `handle_avalanche_request()` in `messages.py`
+
+A `fire <id-or-name>` message is matched (case-insensitive substring) against every source's displayed `Fire` field by `fires.find_fire()`, ignoring location; a hit returns only that fire (with distance/direction when the message also carried coords), a miss falls back to the coordinate search.
 
 ### Key modules
 

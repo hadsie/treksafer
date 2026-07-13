@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from .config import get_config
 from .health import health_report
 from .helpers import parse_message, get_aqi, local_time
-from .fires import FindFires
+from .fires import FindFires, find_fire
 from .avalanche import AvalancheReport
 from .filters import STATUS_LEVELS
 
@@ -27,6 +27,12 @@ class Messages:
 
     def no_gps(self) -> str:
         return 'TrekSafer ERROR: No valid GPS coordinates found. Enable location on your device, or send coords as "(lat, long)" e.g. (50.5,-122.1), and check the values.'
+
+    def fire_not_found(self, term: str) -> str:
+        """No fire matched the requested identifier, and no coordinates were
+        sent to fall back to."""
+        return (f'TrekSafer: No fire matching "{term}" was found. Check the fire '
+                'number or name, or send GPS coordinates for nearby fires.')
 
     def outside_of_area(self, coords: tuple) -> str:
         """Out-of-coverage error, echoing the searched coordinates so the
@@ -159,8 +165,10 @@ class Messages:
             elif size == "medium":
                 fire['FullName'] = f"{fire['Name']} {fire['Fire']}"
 
-        distance = self._format_distance(fire['Distance'])
-        fire['DistDir'] = f"{distance}km {fire['Direction']}"
+        # A fire looked up by ID without a location has no distance/direction.
+        if 'Distance' in fire and 'Direction' in fire:
+            distance = self._format_distance(fire['Distance'])
+            fire['DistDir'] = f"{distance}km {fire['Direction']}"
         # New fires may not have a size estimate yet; the line is omitted.
         if 'Size' in fire:
             fire['Size'] = self._format_size(fire['Size'])
@@ -288,6 +296,20 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     return aqi_message + "\n\n".join(fire_messages) + marker
 
 
+def handle_fire_lookup(term: str, coords: Optional[tuple[float, float]]) -> Optional[str]:
+    """Look up a specific fire by identifier or name across all sources.
+
+    Returns the formatted report for the matching fire(s), or None when
+    nothing matched so the caller can fall back to a coordinate search.
+    Distance and direction are shown only when coords accompanied the request.
+    """
+    fires = find_fire(term, coords)
+    if not fires:
+        return None
+    responses = Messages()
+    return "\n\n".join(responses.fire(fire) for fire in fires)
+
+
 def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:
     """Handle avalanche forecast requests.
 
@@ -358,9 +380,21 @@ def handle_message(message: str) -> str:
         return responses.no_gps()
 
     coords = parsed_data["coords"]
+    fire_id = parsed_data.get("fire_id")
     fire_filters = parsed_data["fire_filters"]
     data_type = parsed_data.get("data_type", "auto")
     avalanche_filters = parsed_data.get("avalanche_filters", {})
+
+    # A "fire <id-or-name>" request looks up that specific fire first. On a
+    # hit we return only that fire; on a miss we fall back to the coordinates
+    # the message carried (the "fire" keyword also selects fire data), or
+    # report the fire as not found when no coordinates were sent.
+    if fire_id:
+        lookup = handle_fire_lookup(fire_id, coords)
+        if lookup is not None:
+            return lookup
+        if coords is None:
+            return responses.fire_not_found(fire_id)
 
     # Auto-detect data type. During fire season, default straight to fire;
     # otherwise use avalanche when available, with out-of-season reports

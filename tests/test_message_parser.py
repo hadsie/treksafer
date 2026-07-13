@@ -539,3 +539,72 @@ class TestZoleoLinks:
         responses.get('https://sms2zoleo.com/FAKE1', status=503)
 
         assert parse_message('Fires? http://sms2zoleo.com/FAKE1') is None
+
+
+class TestFireLookupParsing:
+    """Test extraction of a "fire <id-or-name>" specific-fire lookup."""
+
+    def test_fire_number_without_coords(self):
+        """A bare fire number after the keyword is the lookup term."""
+        result = parse_message("fire K70597")
+        assert result["fire_id"] == "K70597"
+        assert result["coords"] is None
+
+    def test_fires_plural_keyword(self):
+        """The plural 'fires' keyword also triggers a lookup."""
+        result = parse_message("fires HWF-096-2026")
+        assert result["fire_id"] == "HWF-096-2026"
+
+    def test_keyword_case_insensitive(self):
+        """The keyword matches regardless of case."""
+        result = parse_message("FIRE V10758")
+        assert result["fire_id"] == "V10758"
+
+    def test_multiword_name(self):
+        """A multi-word fire name is captured intact."""
+        result = parse_message("fire Kullagh Creek")
+        assert result["fire_id"] == "Kullagh Creek"
+
+    def test_hyphenated_identifier_preserved(self):
+        """Integers and hyphens survive (e.g. QC-2026-001)."""
+        result = parse_message("fire QC-2026-001")
+        assert result["fire_id"] == "QC-2026-001"
+
+    def test_id_with_appended_device_coords(self):
+        """A device's trailing coordinates are stripped from the term but
+        still parsed as coords, so distance can be shown."""
+        result = parse_message("fire V10758 (50.5, -122.1)")
+        assert result["fire_id"] == "V10758"
+        assert result["coords"] == (50.5, -122.1)
+
+    def test_id_with_device_link_and_coords(self):
+        """A device share link between the id and coords is stripped."""
+        result = parse_message("fire K70597 inreachlink.com/ABC123 (50.5, -122.1)")
+        assert result["fire_id"] == "K70597"
+        assert result["coords"] == (50.5, -122.1)
+
+    def test_plain_fire_keyword_with_coords_is_not_a_lookup(self):
+        """'fire' with only coordinates is the normal nearby request."""
+        result = parse_message("fire (49.25, -123.01)")
+        assert result["fire_id"] is None
+        assert result["coords"] == (49.25, -123.01)
+
+    def test_filter_words_are_not_a_lookup_term(self):
+        """Filter keywords after 'fire' do not become a lookup term."""
+        result = parse_message("fire active 25km (49.25, -123.01)")
+        assert result["fire_id"] is None
+        assert result["fire_filters"]["status"] == "active"
+        assert result["fire_filters"]["distance"] == 25
+
+    def test_no_keyword_no_lookup(self):
+        """Coordinates without the fire keyword produce no lookup term."""
+        result = parse_message("(49.25, -123.01)")
+        assert result["fire_id"] is None
+
+    def test_lookup_without_coords_still_returns_dict(self):
+        """A lookup with no coordinates is a valid request, not None."""
+        assert parse_message("fire K70597") is not None
+
+    def test_bare_keyword_returns_none(self):
+        """The keyword alone, with nothing usable, is not a request."""
+        assert parse_message("fire") is None

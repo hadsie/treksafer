@@ -261,6 +261,53 @@ def _merge_spatial(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
     return gpd.GeoDataFrame(pd.concat([merged, recovered]), crs=merged.crs)
 
 
+def fetch_fires_by_id(config: RealtimeFireConfig, term: str) -> Optional[gpd.GeoDataFrame]:
+    """Fetch fires whose displayed identifier matches term, ignoring location.
+
+    Matches term as a case-insensitive substring of the points layer's
+    displayed-fire field (mapping['Fire']) across the whole source, then
+    gives each match its perimeter geometry the same way the radius query
+    does. Unlike the radius path, no location recovery is attempted: only
+    the fires the identifier selected are returned, never extra rows.
+
+    Returned in EPSG:3857, or None when the source is unavailable.
+    """
+    fire_field = config.mapping['Fire']
+    safe = term.replace("'", "''")
+    where = f"({config.points_where}) AND UPPER({fire_field}) LIKE UPPER('%{safe}%')"
+    try:
+        points = _stash_report_point(
+            query_layer(config.points_url, {}, _points_fields(config),
+                        config.cache_timeout, where))
+    except (RequestException, ValueError) as e:
+        logging.warning(f"Fire-ID query for {config.mapping['Fire']} failed: {e}")
+        return None
+
+    if points.empty:
+        return points.to_crs(epsg=3857)
+
+    try:
+        if config.join == 'field':
+            keys = points[config.join_field].dropna().unique()
+            quoted = "','".join(str(k).replace("'", "''") for k in keys)
+            pwhere = (f"({config.perimeters_where}) AND "
+                      f"{config.perimeter_fire_field} IN ('{quoted}')")
+            perimeters = query_layer(config.perimeters_url, {},
+                                     [config.perimeter_fire_field],
+                                     config.cache_timeout, pwhere)
+            return _merge_by_field(points, perimeters, config, recover=False)
+        # Spatial sources: pull the perimeters near the matched points and
+        # join by location, buffering any point with no perimeter.
+        perimeters = query_layer(config.perimeters_url,
+                                 envelope_filter(_expanded_bounds(points, _SPATIAL_JOIN_M)),
+                                 [], config.cache_timeout, config.perimeters_where)
+        merged, _ = spatial_merge(points, perimeters, config.mapping.get('Size'))
+        return merged
+    except (RequestException, ValueError) as e:
+        logging.warning(f"Fire-ID perimeter query for {config.mapping['Fire']} failed: {e}")
+        return None
+
+
 def fetch_fires(config: RealtimeFireConfig, coords: tuple,
                 radius_km: float) -> Optional[gpd.GeoDataFrame]:
     """Fetch fires within radius_km of coords from the realtime layers.

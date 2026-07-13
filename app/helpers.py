@@ -142,11 +142,45 @@ def get_aqi(coords):
         logging.warning(f"Failed to parse AQI data: {e}")
         return None
 
+_FIRE_KEYWORD_RE = re.compile(r'\bfires?\b[\s:.,-]*', re.IGNORECASE)
+
+
+def _fire_query(message: str) -> str | None:
+    """Extract a fire identifier or name from a "fire <id-or-name>" message.
+
+    Returns the text following the fire keyword with coordinates, device
+    links, and recognized filter words stripped out, or None when nothing
+    usable remains (e.g. a plain "fire" request carrying only coordinates).
+
+    Fire identifiers never contain a decimal point or degree mark, so only
+    those coordinate forms are removed; bare integers and hyphens are kept
+    so identifiers like HWF-096-2026 and QC-2026-001 survive intact.
+    """
+    match = _FIRE_KEYWORD_RE.search(message)
+    if not match:
+        return None
+    term = message[match.end():]
+    term = re.sub(r'https?://\S+', ' ', term)
+    term = re.sub(r'(?:www\.)?(?:inreachlink\.com|sms2zoleo\.com)/\S+', ' ', term,
+                  flags=re.IGNORECASE)
+    term = re.sub(r'[-+]?\d{1,3}\.\d+\s*[°º]?\s*[NSEW]?\b', ' ', term,  # decimal coords
+                  flags=re.IGNORECASE)
+    term = re.sub(r'[°º]', ' ', term)
+    term = re.sub(r'\b\d+\s*(?:km|mi)\b', ' ', term, flags=re.IGNORECASE)  # distance filter
+    term = re.sub(r'\b(?:active|all|current|tomorrow|avalanches?)\b',
+                  ' ', term, flags=re.IGNORECASE)            # filter keywords
+    term = re.sub(r'\s+', ' ', term).strip(' \t\n\r,;:.?!()[]')
+    # A term with no letters or digits (stray punctuation like "Fires?") is
+    # not an identifier.
+    return term if re.search(r'[A-Za-z0-9]', term) else None
+
+
 def parse_message(message):
     """Parse an SMS message for lat/long coordinates and optional filters.
 
     Supports:
         - Various coordinate formats, see coords_from_message().
+        - A specific fire lookup: "fire <id-or-name>" (see _fire_query()).
         - Filter keywords: "active", "all"
         - Distance filters: "25km", "10mi"
         - Data type keywords: "avalanche", "fire"
@@ -154,12 +188,13 @@ def parse_message(message):
 
     Returns:
         dict: {
-            "coords": (lat, lon),
-            "filters": dict,
+            "coords": (lat, lon) or None,
+            "fire_id": str or None,
+            "fire_filters": dict,
             "data_type": str,
-            "forecast_time": str
+            "avalanche_filters": dict
         }
-        or None if no coords found
+        or None if neither coordinates nor a fire lookup were found
     """
 
     # Extract filters from message (case insensitive, using word boundaries)
@@ -200,12 +235,14 @@ def parse_message(message):
         avalanche_filters['forecast'] = 'all'
 
     coords = coords_from_message(message)
+    fire_id = _fire_query(message)
 
-    if not coords:
+    if not coords and not fire_id:
         return None
 
     return {
         "coords": coords,
+        "fire_id": fire_id,
         "fire_filters": filters,
         "data_type": data_type,
         "avalanche_filters": avalanche_filters

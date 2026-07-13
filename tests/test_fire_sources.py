@@ -6,8 +6,9 @@ import math
 import pytest
 import requests
 import responses
+from urllib.parse import unquote_plus
 
-from app.fires.sources import fetch_fires
+from app.fires.sources import fetch_fires, fetch_fires_by_id
 from app.config import RealtimeFireConfig
 
 POINTS_URL = 'https://example.test/points/FeatureServer/0/query'
@@ -457,3 +458,50 @@ class TestLiveEndpoint:
         assert gdf is not None
         assert str(gdf.crs) == 'EPSG:3857'
         assert 'IncidentName' in gdf.columns
+
+
+@pytest.mark.usefixtures('plain_session')
+class TestFetchFiresById:
+    """fetch_fires_by_id() looks up fires by their displayed identifier,
+    ignoring location."""
+
+    def test_field_join_matches_and_merges_perimeter(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([point_feature('K1')]))
+        mocked_responses.get(PERIMS_URL, json=collection([perimeter_feature('K1')]))
+
+        gdf = fetch_fires_by_id(CONFIG, 'K1')
+
+        assert list(gdf['FIRE_NUMBER']) == ['K1']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+        assert str(gdf.crs) == 'EPSG:3857'
+
+    def test_points_query_uses_case_insensitive_like(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([]))
+
+        fetch_fires_by_id(CONFIG, "K1's")
+
+        where = unquote_plus(mocked_responses.calls[0].request.url)
+        assert "UPPER(FIRE_NUMBER) LIKE UPPER('%K1''s%')" in where
+
+    def test_no_match_returns_empty_without_perimeter_query(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([]))
+
+        gdf = fetch_fires_by_id(CONFIG, 'NOPE')
+
+        assert gdf.empty
+        assert str(gdf.crs) == 'EPSG:3857'
+        assert len(mocked_responses.calls) == 1  # no perimeter fetch
+
+    def test_spatial_join_matches_and_merges_perimeter(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([ca_point_feature('F1')]))
+        mocked_responses.get(PERIMS_URL, json=collection([ca_perimeter_feature()]))
+
+        gdf = fetch_fires_by_id(SPATIAL_CONFIG, 'F1')
+
+        assert list(gdf['Fire_Name']) == ['F1']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+
+    def test_source_unavailable_returns_none(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json={'error': {'code': 500}})
+
+        assert fetch_fires_by_id(CONFIG, 'K1') is None

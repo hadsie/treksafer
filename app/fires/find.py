@@ -24,7 +24,7 @@ from shapely.ops import nearest_points
 from . import db as firedb
 from ..config import get_config, DataFile, RealtimeFireConfig
 from . import growth
-from .sources import fetch_fires
+from .sources import fetch_fires, fetch_fires_by_id
 from ..helpers import acres_to_hectares, compass_direction, epoch_ms_to_datetime, local_crs
 from ..filters import apply_filters, STATUS_LEVELS
 
@@ -159,6 +159,17 @@ def _process_fields(field_mapping, data_file, get_value_fn):
 
     return result
 
+def _fire_attributes(data_file, row) -> dict:
+    """Normalize a fire row's mapped attributes (no location-derived fields)."""
+    data = _process_fields(
+        field_mapping=data_file.mapping.get("fields", {}),
+        data_file=data_file,
+        get_value_fn=lambda key: getattr(row, key, None),
+    )
+    # Strip None values
+    return {k: v for k, v in data.items() if v is not None}
+
+
 def _normalize_row(data_file, row, location, closest_point, distance) -> dict:
     """
     Normalizes a row of fire data according to the supplied data_file.mapping.
@@ -167,15 +178,7 @@ def _normalize_row(data_file, row, location, closest_point, distance) -> dict:
         "Distance": distance,
         "Direction": compass_direction(location, closest_point),
     }
-    data.update(_process_fields(
-        field_mapping=data_file.mapping.get("fields", {}),
-        data_file=data_file,
-        get_value_fn=lambda key: getattr(row, key, None),
-    ))
-
-    # Strip None values
-    data = {k: v for k, v in data.items() if v is not None}
-
+    data.update(_fire_attributes(data_file, row))
     return data
 
 
@@ -482,3 +485,84 @@ class FindFires:
 
         configured = {df.location for df in self.settings.data}
         return [source for source in sources if source in configured]
+
+
+def _stored_by_id(location: str, term: str, database: str) -> Optional[gpd.GeoDataFrame]:
+    """Return stored fires for a source whose Fire identifier contains term.
+
+    Returns None when the source has no stored data at all, mirroring the
+    realtime path's unavailable signal.
+    """
+    try:
+        conn = firedb.connect(database)
+        try:
+            fires = firedb.load_source(conn, location)
+        finally:
+            conn.close()
+    except sqlite3.Error as e:
+        logging.error(f"Fire database read failed for {location}: {e}")
+        return None
+    if fires is None:
+        return None
+    return fires[fires['Fire'].astype(str).str.contains(term, case=False, regex=False)]
+
+
+def _fires_by_id(data_file: DataFile, term: str,
+                 database: str) -> tuple[Optional[gpd.GeoDataFrame], DataFile]:
+    """Fetch a source's fires matching term, live where possible.
+
+    Falls back to stored data when realtime is unavailable or disabled,
+    the same policy the radius search uses. Matched fetches are not
+    recorded: an identifier query is a filtered slice, not the source's
+    full state, so recording it would corrupt the snapshot history.
+    """
+    realtime = data_file.realtime
+    if realtime and realtime.enabled:
+        fires = fetch_fires_by_id(realtime, term)
+        if fires is not None:
+            return fires, _realtime_data_file(data_file.location, realtime)
+        logging.warning(
+            f"Realtime {data_file.location} fire data unavailable; "
+            f"using stored data for fire lookup."
+        )
+    return _stored_by_id(data_file.location, term, database), _DB_DATA_FILE
+
+
+def find_fire(term: str, coords: Optional[tuple] = None) -> list[Dict[str, Any]]:
+    """Look up fires by their displayed identifier across every source.
+
+    The identifier is matched case-insensitively as a substring, since the
+    user sent no location to narrow the search (they may be asking about a
+    fire near someone else). When coords are supplied, each match also gets
+    its distance and compass direction from that point.
+
+    Args:
+        term: The fire identifier or name to search for
+        coords: Optional (latitude, longitude) to measure distance from
+
+    Returns:
+        Normalized fire dicts, ordered by status then distance; empty when
+        nothing matched.
+    """
+    settings = get_config()
+    crs = local_crs(coords) if coords else None
+    origin = Point(0, 0)
+
+    fires: list[Dict[str, Any]] = []
+    for data_file in settings.data:
+        matches, effective = _fires_by_id(data_file, term, settings.database)
+        if matches is None or matches.empty:
+            continue
+        if crs is not None:
+            matches = matches.to_crs(crs)
+        for _, row in matches.iterrows():
+            data = _fire_attributes(effective, row)
+            if crs is not None:
+                geometry = row['geometry']
+                data['Distance'] = geometry.distance(origin)
+                data['Direction'] = compass_direction(
+                    origin, nearest_points(origin, geometry)[1])
+            fires.append(data)
+
+    fires.sort(key=lambda f: (f.get('StatusLevel', float('inf')), f.get('Distance', 0)))
+    return fires
