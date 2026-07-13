@@ -31,6 +31,10 @@ include_aqi: true
 # Fire database: snapshot history and the fallback for API outages.
 database: "${TREKSAFER_DATABASE:-data/fires.db}"
 
+# Responses built from stored data (realtime API down) carry a "Data from"
+# freshness marker only when the stored fetch is older than this (hours).
+stale_data_hours: 6
+
 # Logging. log_file defaults to <log_dir>/<env>.log.
 log_dir: "${TREKSAFER_LOG_DIR:-logs}"
 # logging.INFO

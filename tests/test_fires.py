@@ -77,7 +77,8 @@ class TestLoadSource:
             data_file = ff.settings.data[0]
             fires_gdf, effective = ff._load_source(data_file)
 
-        assert fires_gdf is gdf
+        assert fires_gdf.drop(columns='fire_key').equals(gdf)
+        assert list(fires_gdf['fire_key']) == ['K1']
         assert effective.mapping == {'fields': REALTIME.mapping, 'discovered_transform': 'epoch_ms'}
         assert effective.status_map == REALTIME.status_map
         mock_fetch.assert_called_once_with(data_file.realtime, BC_COORDS, 20)
@@ -104,7 +105,7 @@ class TestLoadSource:
             ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 20})
             fires_gdf, _ = ff._load_source(ff.settings.data[0])
 
-        assert fires_gdf is gdf
+        assert fires_gdf.drop(columns='fire_key').equals(gdf)
         assert 'Failed to record' in caplog.text
 
     def test_realtime_failure_falls_back_to_database(self, caplog):
@@ -231,6 +232,34 @@ class TestAllStatusDropsSizeFilter:
         assert 'Size' not in fires[0]
 
 
+class TestFallbackFreshness:
+    """Stored fallback data younger than the staleness window reads the
+    same as a live answer and warrants no freshness marker."""
+
+    def _findfires(self):
+        with patch('app.fires.find.get_config', return_value=realtime_settings()):
+            return FindFires(BC_COORDS)
+
+    def test_fresh_fallback_reports_nothing(self):
+        ff = self._findfires()
+        fetched = datetime.now(timezone.utc) - timedelta(hours=5)
+        ff.fallback_fetches = {'BC': fetched.isoformat()}
+
+        assert ff.fallback_fetched is None
+
+    def test_stale_fallback_reports_fetch_time(self):
+        ff = self._findfires()
+        fetched = datetime.now(timezone.utc) - timedelta(hours=7)
+        ff.fallback_fetches = {'BC': fetched.isoformat()}
+
+        assert ff.fallback_fetched == fetched
+
+    def test_no_fallbacks_reports_nothing(self):
+        ff = self._findfires()
+
+        assert ff.fallback_fetched is None
+
+
 class TestFallbackMatchesRealtime:
     """Identical source data must produce identical responses from the
     realtime path and the database fallback path."""
@@ -252,7 +281,9 @@ class TestFallbackMatchesRealtime:
 
         assert len(realtime_fires) == len(fallback_fires) == 1
         realtime_fire, fallback_fire = realtime_fires[0], fallback_fires[0]
-        assert set(realtime_fire) == set(fallback_fire)
+        # DataTime is internal to growth enrichment and only exists on the
+        # fallback path (realtime data is current by definition).
+        assert set(realtime_fire) == set(fallback_fire) - {'DataTime'}
         for key in realtime_fire:
             if key in ('Distance',):
                 assert fallback_fire[key] == pytest.approx(realtime_fire[key], rel=1e-6)

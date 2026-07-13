@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import math
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Dict, Any, Optional
 
@@ -23,6 +23,7 @@ from shapely.ops import nearest_points
 
 from . import db as firedb
 from ..config import get_config, DataFile, RealtimeFireConfig
+from . import growth
 from .sources import fetch_fires
 from ..helpers import acres_to_hectares, compass_direction, epoch_ms_to_datetime, local_crs
 from ..filters import apply_filters, STATUS_LEVELS
@@ -219,6 +220,12 @@ def _parse_source_timestamp(value, tz):
     return tz.localize(naive).astimezone(timezone.utc)
 
 
+def fire_keys(frame: gpd.GeoDataFrame, key_fields) -> list[str]:
+    """Season-stable per-fire join keys derived from a source's key fields."""
+    rows = frame[list(key_fields)].itertuples(index=False, name=None)
+    return ['-'.join(str(value) for value in row) for row in rows]
+
+
 def normalize_for_db(fires: gpd.GeoDataFrame, location: str,
                      realtime: RealtimeFireConfig) -> gpd.GeoDataFrame:
     """Normalize a merged realtime frame into fire database rows.
@@ -237,13 +244,13 @@ def normalize_for_db(fires: gpd.GeoDataFrame, location: str,
             data_file=data_file,
             get_value_fn=lambda key: getattr(row, key, None),
         )
-        data['fire_key'] = '-'.join(str(getattr(row, field)) for field in realtime.key_fields)
         data['Updated'] = (_parse_source_timestamp(getattr(row, realtime.updated_field, None), tz)
                            if realtime.updated_field else None)
         data['latitude'] = getattr(row, 'latitude', None)
         data['longitude'] = getattr(row, 'longitude', None)
         records.append(data)
     gdf = gpd.GeoDataFrame(records, geometry=list(fires.geometry), crs=fires.crs)
+    gdf['fire_key'] = fire_keys(fires, realtime.key_fields)
     return gdf.to_crs(epsg=4326)
 
 
@@ -311,6 +318,12 @@ class FindFires:
                 continue
             pointB = nearest_points(self.location, fire_perimeter)[1]
             data = _normalize_row(data_file, row, self.location, pointB, distance)
+            # History join identity and (on the database path) the data's
+            # own timestamp, consumed by growth.enrich().
+            if row.get('fire_key') is not None:
+                data['FireKey'] = row['fire_key']
+            if isinstance(row.get('Updated'), str):
+                data['DataTime'] = row['Updated']
             fires.append(data)
 
         # Return filtered fires.
@@ -375,6 +388,7 @@ class FindFires:
             fires = fetch_fires(realtime, self.coords, radius_km)
             if fires is not None:
                 self._record(data_file.location, fires, realtime)
+                fires = fires.assign(fire_key=fire_keys(fires, realtime.key_fields))
                 return fires, _realtime_data_file(data_file.location, realtime)
             logging.warning(
                 f"Realtime {data_file.location} fire data unavailable; using stored data."
@@ -384,11 +398,14 @@ class FindFires:
 
     @property
     def fallback_fetched(self) -> Optional[datetime]:
-        """Oldest fetch time among sources that fell back to stored data,
-        or None if none did."""
-        if not self.fallback_fetches:
-            return None
-        return min(datetime.fromisoformat(t) for t in self.fallback_fetches.values())
+        """Oldest fetch time among sources whose stored fallback data is
+        older than the configured staleness window, or None.
+        """
+        window = timedelta(hours=self.settings.stale_data_hours)
+        now = datetime.now(timezone.utc)
+        stale = [fetched_at for fetched in self.fallback_fetches.values()
+                 if now - (fetched_at := datetime.fromisoformat(fetched)) > window]
+        return min(stale) if stale else None
 
     def nearby(self) -> list[Dict[str, Any]]:
         """Find all fires within distance limit.
@@ -403,7 +420,12 @@ class FindFires:
             fire_perimeters, data_file = self._load_source(data_file)
             if fire_perimeters is None:
                 continue
-            fires += self.search(fire_perimeters, self.filters, data_file)
+            found = self.search(fire_perimeters, self.filters, data_file)
+            for fire in found:
+                fire['Source'] = source
+            fires += found
+
+        growth.enrich(fires, self.settings.database)
 
         # Sort by status priority (active, managed, controlled, out), then distance.
         fires.sort(key=lambda f: (f.get('StatusLevel', float('inf')), f['Distance']))

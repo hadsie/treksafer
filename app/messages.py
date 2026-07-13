@@ -139,8 +139,18 @@ class Messages:
         }
         fields = level_fields[size]
 
+        # History annotations (growth.enrich) render as line suffixes and
+        # must survive stringification and the downsizing recursion.
+        change = fire.get('SizeChange')
+        is_new = bool(fire.get('New'))
+
         # Strip all strings
-        fire = {k:str(v).strip() for k,v in fire.items()}
+        fire = {k: str(v).strip() for k, v in fire.items()
+                if k not in ('SizeChange', 'New')}
+        if change:
+            fire['SizeChange'] = change
+        if is_new:
+            fire['New'] = True
 
         fire['FullName'] = fire['Fire']
         if 'Name' in fire and fire['Name'] != fire['Fire']:
@@ -160,7 +170,14 @@ class Messages:
             value = fire.get(key)
             if not value:
                 continue
-            message.append(template.format(value))
+            line = template.format(value)
+            if is_new and key in ('FullName', 'Fire'):
+                line += " (NEW)"
+            # The delta rides the Size line; short is the last-resort
+            # squeeze and shows the bare size.
+            if change and key == 'Size' and size != 'short':
+                line += f" ({self._size_change(change)})"
+            message.append(line)
 
         message = "\n".join(message)
         msg_length = self._message_length(message)
@@ -169,6 +186,13 @@ class Messages:
             message = self._fire(fire, new_size)
 
         return message
+
+    @staticmethod
+    def _size_change(change: Dict) -> str:
+        """Render a growth.enrich size change, e.g. '+500 since 26h ago'."""
+        hours = change['hours']
+        span = f"{round(hours)}h" if hours <= 48 else f"{round(hours / 24)}d"
+        return f"{change['delta']:+d} since {span} ago"
 
     @staticmethod
     def _message_length(message: str) -> float:

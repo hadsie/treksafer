@@ -8,7 +8,8 @@ class TestFireSeasonValidation:
     """Settings validates fire season dates as MM-DD strings."""
 
     def test_valid_dates_accepted(self):
-        settings = Settings(fire_season_start="05-15", fire_season_end="08-15")
+        settings = Settings(fire_season_start="05-15", fire_season_end="08-15",
+                            stale_data_hours=6)
         assert settings.fire_season_start == "05-15"
         assert settings.fire_season_end == "08-15"
 
