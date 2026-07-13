@@ -316,45 +316,88 @@ class TestFallbackMatchesRealtime:
 
 
 class TestFindFireById:
-    """find_fire() looks up a specific fire by identifier across all sources,
-    served here from the fixture database (realtime disabled in tests)."""
+    """find_fire() looks up a specific fire by identifier. In these tests
+    realtime is disabled, so it is served from the fixture database, which
+    predates the run and so is stale (but stale-marking needs realtime, so
+    the marker stays None here)."""
 
     def test_lookup_by_bc_number_without_coords(self):
-        fires = find_fire("C10784")
+        fires, marker = find_fire("C10784")
         assert len(fires) == 1
         assert fires[0]["Fire"] == "C10784"
         # No coordinates were supplied, so there is no distance or direction.
         assert "Distance" not in fires[0]
         assert "Direction" not in fires[0]
+        assert marker is None
 
     def test_lookup_by_us_name_with_coords_adds_distance(self):
-        fires = find_fire("Snake River", (43.5, -110.7))
+        fires, _ = find_fire("Snake River", (43.5, -110.7))
         assert len(fires) == 1
         assert fires[0]["Fire"] == "Snake River"
         assert fires[0]["Distance"] > 0
         assert fires[0]["Direction"]
 
     def test_lookup_is_case_insensitive(self):
-        assert [f["Fire"] for f in find_fire("snake river")] == ["Snake River"]
+        fires, _ = find_fire("snake river")
+        assert [f["Fire"] for f in fires] == ["Snake River"]
 
     def test_substring_does_not_match(self):
         """The match is exact, so a partial name returns nothing."""
-        assert find_fire("Snake") == []
+        fires, _ = find_fire("Snake")
+        assert fires == []
 
     def test_lookup_searches_ca_source(self):
-        assert [f["Fire"] for f in find_fire("QC-2026-001")] == ["QC-2026-001"]
+        fires, _ = find_fire("QC-2026-001")
+        assert [f["Fire"] for f in fires] == ["QC-2026-001"]
 
     def test_unknown_identifier_returns_empty(self):
-        assert find_fire("ZZZ-NO-SUCH-FIRE") == []
+        fires, marker = find_fire("ZZZ-NO-SUCH-FIRE")
+        assert fires == []
+        assert marker is None
 
-    def test_database_is_checked_before_realtime(self):
-        """A fire already in the database is returned without a realtime query."""
-        settings = realtime_settings(enabled=True, database=None)
+    def test_fresh_database_match_not_refreshed(self, tmp_path):
+        """A stored match within the source's cache TTL is served as-is,
+        without a realtime query."""
+        db = str(tmp_path / 'fires.db')
+        settings = realtime_settings(database=db)
+        filters = {'status': 'all', 'distance': 50, 'size': 0}
+        # Populate the database with a fetch recorded now (fresh).
+        with patch('app.fires.find.get_config', return_value=settings), \
+             patch('app.fires.find.fetch_fires', return_value=realtime_gdf(*BC_COORDS)):
+            FindFires(BC_COORDS, filters=filters).nearby()
+
         with patch('app.fires.find.get_config', return_value=settings), \
              patch('app.fires.find.fetch_fires_by_id') as mock_realtime:
-            fires = find_fire("C10784")
-        assert [f["Fire"] for f in fires] == ["C10784"]
+            fires, marker = find_fire("K1")
+
+        assert [f["Fire"] for f in fires] == ["K1"]
+        assert marker is None
         mock_realtime.assert_not_called()
+
+    def test_stale_database_match_refreshed_from_realtime(self):
+        """A stored match older than the cache TTL is refreshed live."""
+        settings = realtime_settings(enabled=True, database=None)
+        live = realtime_gdf(*BC_COORDS)
+        live['FIRE_NUMBER'] = ['C10784']
+        with patch('app.fires.find.get_config', return_value=settings), \
+             patch('app.fires.find.fetch_fires_by_id', return_value=live) as mock_realtime:
+            fires, marker = find_fire("C10784")
+
+        assert [f["Fire"] for f in fires] == ["C10784"]
+        assert marker is None  # fresh live data carries no staleness marker
+        mock_realtime.assert_called_once()
+
+    def test_stale_database_match_falls_back_to_stored_with_marker(self):
+        """When the live refresh fails, the stale stored record is served
+        and flagged with a freshness marker."""
+        settings = realtime_settings(enabled=True, database=None)
+        with patch('app.fires.find.get_config', return_value=settings), \
+             patch('app.fires.find.fetch_fires_by_id', return_value=None) as mock_realtime:
+            fires, marker = find_fire("C10784")
+
+        assert [f["Fire"] for f in fires] == ["C10784"]
+        assert marker is not None  # the fixture data predates the stale window
+        mock_realtime.assert_called_once()
 
     def test_realtime_queried_when_not_in_database(self):
         """A fire absent from the database is looked up via the realtime layers."""
@@ -362,6 +405,7 @@ class TestFindFireById:
         with patch('app.fires.find.get_config', return_value=settings), \
              patch('app.fires.find.fetch_fires_by_id',
                    return_value=realtime_gdf(50.7, -121.9)) as mock_realtime:
-            fires = find_fire("K1")
+            fires, marker = find_fire("K1")
         assert [f["Fire"] for f in fires] == ["K1"]
+        assert marker is None
         mock_realtime.assert_called_once()

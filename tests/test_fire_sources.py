@@ -469,7 +469,7 @@ class TestFetchFiresById:
         mocked_responses.get(POINTS_URL, json=collection([point_feature('K1')]))
         mocked_responses.get(PERIMS_URL, json=collection([perimeter_feature('K1')]))
 
-        gdf = fetch_fires_by_id(CONFIG, 'K1')
+        gdf = fetch_fires_by_id(CONFIG, 'K1', 'BC')
 
         assert list(gdf['FIRE_NUMBER']) == ['K1']
         assert gdf.geometry.iloc[0].geom_type == 'Polygon'
@@ -478,7 +478,7 @@ class TestFetchFiresById:
     def test_points_query_uses_exact_case_insensitive_match(self, mocked_responses):
         mocked_responses.get(POINTS_URL, json=collection([]))
 
-        fetch_fires_by_id(CONFIG, "K1's")
+        fetch_fires_by_id(CONFIG, "K1's", 'BC')
 
         where = unquote_plus(mocked_responses.calls[0].request.url)
         assert "UPPER(FIRE_NUMBER) = UPPER('K1''s')" in where
@@ -486,7 +486,7 @@ class TestFetchFiresById:
     def test_no_match_returns_empty_without_perimeter_query(self, mocked_responses):
         mocked_responses.get(POINTS_URL, json=collection([]))
 
-        gdf = fetch_fires_by_id(CONFIG, 'NOPE')
+        gdf = fetch_fires_by_id(CONFIG, 'NOPE', 'BC')
 
         assert gdf.empty
         assert str(gdf.crs) == 'EPSG:3857'
@@ -496,7 +496,7 @@ class TestFetchFiresById:
         mocked_responses.get(POINTS_URL, json=collection([ca_point_feature('F1')]))
         mocked_responses.get(PERIMS_URL, json=collection([ca_perimeter_feature()]))
 
-        gdf = fetch_fires_by_id(SPATIAL_CONFIG, 'F1')
+        gdf = fetch_fires_by_id(SPATIAL_CONFIG, 'F1', 'CA')
 
         assert list(gdf['Fire_Name']) == ['F1']
         assert gdf.geometry.iloc[0].geom_type == 'Polygon'
@@ -504,4 +504,4 @@ class TestFetchFiresById:
     def test_source_unavailable_returns_none(self, mocked_responses):
         mocked_responses.get(POINTS_URL, json={'error': {'code': 500}})
 
-        assert fetch_fires_by_id(CONFIG, 'K1') is None
+        assert fetch_fires_by_id(CONFIG, 'K1', 'BC') is None

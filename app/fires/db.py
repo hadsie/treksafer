@@ -226,29 +226,22 @@ def latest_fetch(conn: sqlite3.Connection, source: str) -> Optional[str]:
     return row[0]
 
 
-def load_source(conn: sqlite3.Connection, source: str) -> Optional[gpd.GeoDataFrame]:
-    """Load the current fires for a source: the latest snapshot of every fire
-    still present in the source's newest fetch.
+# Latest snapshot of every fire still present in a source's newest fetch.
+# The trailing WHERE is completed by each caller (whole source or one fire).
+_CURRENT_FIRES_SQL = """
+    SELECT f.fire, f.name, f.location, f.type, f.discovered,
+           s.size_ha, s.status, s.status_level,
+           COALESCE(s.source_updated, s.fetched_at), s.geometry, f.fire_key
+    FROM fires f
+    JOIN snapshots s ON s.id = (
+        SELECT id FROM snapshots WHERE fire_id = f.id ORDER BY id DESC LIMIT 1
+    )
+    WHERE f.source = ? AND f.last_seen = ?
+"""
 
-    Returns a GeoDataFrame in EPSG:3857 matching the realtime normalized
-    shape, or None when the source has no data at all.
-    """
-    newest = latest_fetch(conn, source)
-    if newest is None:
-        return None
-    rows = conn.execute(
-        """
-        SELECT f.fire, f.name, f.location, f.type, f.discovered,
-               s.size_ha, s.status, s.status_level,
-               COALESCE(s.source_updated, s.fetched_at), s.geometry, f.fire_key
-        FROM fires f
-        JOIN snapshots s ON s.id = (
-            SELECT id FROM snapshots WHERE fire_id = f.id ORDER BY id DESC LIMIT 1
-        )
-        WHERE f.source = ? AND f.last_seen = ?
-        """,
-        (source, newest),
-    ).fetchall()
+
+def _fires_frame(rows: list) -> gpd.GeoDataFrame:
+    """Build the normalized EPSG:3857 fire frame from current-fire rows."""
     frame = gpd.GeoDataFrame(
         {
             'Fire': [r[0] for r in rows],
@@ -265,3 +258,35 @@ def load_source(conn: sqlite3.Connection, source: str) -> Optional[gpd.GeoDataFr
         geometry=gpd.GeoSeries([wkb.loads(r[9]) for r in rows], crs='EPSG:4326'),
     )
     return frame.to_crs(epsg=3857)
+
+
+def load_source(conn: sqlite3.Connection, source: str) -> Optional[gpd.GeoDataFrame]:
+    """Load the current fires for a source: the latest snapshot of every fire
+    still present in the source's newest fetch.
+
+    Returns a GeoDataFrame in EPSG:3857 matching the realtime normalized
+    shape, or None when the source has no data at all.
+    """
+    newest = latest_fetch(conn, source)
+    if newest is None:
+        return None
+    rows = conn.execute(_CURRENT_FIRES_SQL, (source, newest)).fetchall()
+    return _fires_frame(rows)
+
+
+def find_by_fire(conn: sqlite3.Connection, source: str,
+                 term: str) -> Optional[gpd.GeoDataFrame]:
+    """Current fires for a source whose displayed identifier equals term
+    (exact, case-insensitive), queried in SQL rather than filtered in memory.
+
+    Returns an empty frame when nothing matches, or None when the source has
+    no data at all.
+    """
+    newest = latest_fetch(conn, source)
+    if newest is None:
+        return None
+    rows = conn.execute(
+        _CURRENT_FIRES_SQL + " AND f.fire = ? COLLATE NOCASE",
+        (source, newest, term),
+    ).fetchall()
+    return _fires_frame(rows)

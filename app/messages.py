@@ -31,8 +31,8 @@ class Messages:
     def fire_not_found(self, term: str) -> str:
         """No fire matched the requested identifier, and no coordinates were
         sent to fall back to."""
-        return (f'TrekSafer: No fire matching "{term}" was found. Check the fire '
-                'number or name, or send GPS coordinates for nearby fires.')
+        return (f'No fire matching "{term}" was found. Check the fire number or '
+                'name, or send GPS coordinates for nearby fires.')
 
     def outside_of_area(self, coords: tuple) -> str:
         """Out-of-coverage error, echoing the searched coordinates so the
@@ -299,15 +299,21 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
 def handle_fire_lookup(term: str, coords: Optional[tuple[float, float]]) -> Optional[str]:
     """Look up a specific fire by identifier or name across all sources.
 
-    Returns the formatted report for the matching fire(s), or None when
-    nothing matched so the caller can fall back to a coordinate search.
-    Distance and direction are shown only when coords accompanied the request.
+    Returns the formatted report for the matching fire, or None when nothing
+    matched so the caller can fall back to a coordinate search. Distance and
+    direction are shown only when coords accompanied the request. Stored data
+    old enough to be stale carries the same freshness marker the radius
+    search uses.
     """
-    fires = find_fire(term, coords)
+    fires, stale_fetched = find_fire(term, coords)
     if not fires:
         return None
     responses = Messages()
-    return "\n\n".join(responses.fire(fire) for fire in fires)
+    body = "\n\n".join(responses.fire(fire) for fire in fires)
+    if stale_fetched:
+        shown = local_time(stale_fetched, coords) if coords else stale_fetched
+        body += "\n\n" + responses.data_age(shown)
+    return body
 
 
 def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:

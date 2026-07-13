@@ -261,7 +261,8 @@ def _merge_spatial(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
     return gpd.GeoDataFrame(pd.concat([merged, recovered]), crs=merged.crs)
 
 
-def fetch_fires_by_id(config: RealtimeFireConfig, term: str) -> Optional[gpd.GeoDataFrame]:
+def fetch_fires_by_id(config: RealtimeFireConfig, term: str,
+                      location: str) -> Optional[gpd.GeoDataFrame]:
     """Fetch fires whose displayed identifier matches term, ignoring location.
 
     Matches term exactly (case-insensitive) against the points layer's
@@ -270,6 +271,8 @@ def fetch_fires_by_id(config: RealtimeFireConfig, term: str) -> Optional[gpd.Geo
     does. The match is exact, not a substring: a substring could pull dozens
     of unrelated fires. Unlike the radius path, no location recovery is
     attempted: only the fires the identifier selected are returned.
+
+    location is the source code, used only for log context.
 
     Returned in EPSG:3857, or None when the source is unavailable.
     """
@@ -281,7 +284,7 @@ def fetch_fires_by_id(config: RealtimeFireConfig, term: str) -> Optional[gpd.Geo
             query_layer(config.points_url, {}, _points_fields(config),
                         config.cache_timeout, where))
     except (RequestException, ValueError) as e:
-        logging.warning(f"Fire-ID query for {config.mapping['Fire']} failed: {e}")
+        logging.warning(f"Fire-ID query for '{term}' in {location} failed: {e}")
         return None
 
     if points.empty:
@@ -305,7 +308,7 @@ def fetch_fires_by_id(config: RealtimeFireConfig, term: str) -> Optional[gpd.Geo
         merged, _ = spatial_merge(points, perimeters, config.mapping.get('Size'))
         return merged
     except (RequestException, ValueError) as e:
-        logging.warning(f"Fire-ID perimeter query for {config.mapping['Fire']} failed: {e}")
+        logging.warning(f"Fire-ID perimeter query for '{term}' in {location} failed: {e}")
         return None
 
 

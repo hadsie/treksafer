@@ -38,7 +38,7 @@ marker.
 3. Auto-detects data type: avalanche if provider covers the location, otherwise fire
 4. Routes to `handle_fire_request()` or `handle_avalanche_request()` in `messages.py`
 
-A `fire <id-or-name>` message is matched exactly (case-insensitive) against a source's displayed `Fire` field by `fires.find_fire()`, ignoring location: the database is checked first, then the realtime layers, stopping at the first match (one fire). A hit returns only that fire (with distance/direction when the message also carried coords); a miss falls back to the coordinate search.
+A `fire <id-or-name>` message is matched exactly (case-insensitive) against a source's displayed `Fire` field by `fires.find_fire()`, ignoring location: the database is queried first, and a stored match older than the source's cache TTL triggers one targeted live refresh of that source (stored kept as fallback). Only when nothing is stored are the realtime layers queried, stopping at the first match (one fire). A hit returns only that fire (with distance/direction when the message also carried coords, and the "Data from" marker when served stored data is stale); a miss falls back to the coordinate search.
 
 ### Key modules
 

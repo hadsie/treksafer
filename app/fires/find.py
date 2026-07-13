@@ -487,26 +487,6 @@ class FindFires:
         return [source for source in sources if source in configured]
 
 
-def _stored_by_id(location: str, term: str, database: str) -> Optional[gpd.GeoDataFrame]:
-    """Return stored fires for a source whose Fire identifier equals term.
-
-    The match is exact and case-insensitive. Returns None when the source
-    has no stored data at all.
-    """
-    try:
-        conn = firedb.connect(database)
-        try:
-            fires = firedb.load_source(conn, location)
-        finally:
-            conn.close()
-    except sqlite3.Error as e:
-        logging.error(f"Fire database read failed for {location}: {e}")
-        return None
-    if fires is None:
-        return None
-    return fires[fires['Fire'].astype(str).str.lower() == term.lower()]
-
-
 def _first_match(matches: gpd.GeoDataFrame, data_file: DataFile,
                  coords: Optional[tuple]) -> Dict[str, Any]:
     """Normalize the first matched fire, adding distance/direction if coords."""
@@ -522,42 +502,91 @@ def _first_match(matches: gpd.GeoDataFrame, data_file: DataFile,
     return data
 
 
-def find_fire(term: str, coords: Optional[tuple] = None) -> list[Dict[str, Any]]:
+def _is_stale(fetched: Optional[str], ttl_seconds: int) -> bool:
+    """True when a source's newest fetch is older than its cache TTL."""
+    if not fetched:
+        return True
+    return datetime.now(timezone.utc) - datetime.fromisoformat(fetched) > timedelta(seconds=ttl_seconds)
+
+
+def _stale_marker(fetched: Optional[str]) -> Optional[datetime]:
+    """Fetch time to surface as a freshness marker, or None when the stored
+    data is fresh enough to present without one (the same staleness window
+    the radius search's marker uses)."""
+    if not fetched:
+        return None
+    settings = get_config()
+    fetched_dt = datetime.fromisoformat(fetched)
+    if datetime.now(timezone.utc) - fetched_dt > timedelta(hours=settings.stale_data_hours):
+        return fetched_dt
+    return None
+
+
+def find_fire(term: str,
+              coords: Optional[tuple] = None) -> tuple[list[Dict[str, Any]], Optional[datetime]]:
     """Look up a single fire by its displayed identifier, ignoring location.
 
     The identifier is matched exactly (case-insensitive) against each
-    source's Fire field. The database is checked first; only if no stored
-    fire matches are the realtime sources queried, stopping at the first
-    match. Fires sharing a name across sources beyond the first are not
-    returned. When coords are supplied, the match also gets its distance
-    and compass direction from that point.
+    source's Fire field. The database is checked first; a stored match whose
+    source is older than that source's cache TTL triggers one targeted live
+    refresh of that source, with the stored record kept as the fallback if
+    the live query fails. Only if no stored fire matches at all are the
+    realtime layers queried, stopping at the first match. Fires sharing a
+    name across sources beyond the first are not returned. When coords are
+    supplied, the match also gets its distance and compass direction.
 
     Args:
         term: The fire identifier or name to search for
         coords: Optional (latitude, longitude) to measure distance from
 
     Returns:
-        A single-element list with the matched fire, or empty when nothing
-        matched.
+        (fires, stale_fetched): a single-element list with the matched fire
+        (empty when nothing matched), and the fetch time of served stored
+        data old enough to warrant a "Data from" marker (None otherwise).
     """
     settings = get_config()
+    try:
+        conn = firedb.connect(settings.database)
+    except (sqlite3.Error, OSError) as e:
+        logging.error(f"Fire database unavailable for lookup: {e}")
+        conn = None
 
-    # 1. The database aggregates every source's recent fires; prefer it.
-    for data_file in settings.data:
-        stored = _stored_by_id(data_file.location, term, settings.database)
-        if stored is not None and not stored.empty:
-            return [_first_match(stored, _DB_DATA_FILE, coords)]
+    try:
+        # 1. The database aggregates every source's recent fires; prefer it,
+        #    refreshing a single source live only when its data is stale.
+        if conn is not None:
+            for data_file in settings.data:
+                try:
+                    stored = firedb.find_by_fire(conn, data_file.location, term)
+                except sqlite3.Error as e:
+                    logging.error(f"Fire database read failed for {data_file.location}: {e}")
+                    continue
+                if stored is None or stored.empty:
+                    continue
+                realtime = data_file.realtime
+                fetched = firedb.latest_fetch(conn, data_file.location)
+                if realtime and realtime.enabled and _is_stale(fetched, realtime.cache_timeout):
+                    live = fetch_fires_by_id(realtime, term, data_file.location)
+                    if live is not None and not live.empty:
+                        return [_first_match(
+                            live, _realtime_data_file(data_file.location, realtime), coords)], None
+                    # The live refresh failed; serve stored data, flagged as aged.
+                    return [_first_match(stored, _DB_DATA_FILE, coords)], _stale_marker(fetched)
+                return [_first_match(stored, _DB_DATA_FILE, coords)], None
 
-    # 2. Not stored yet: query the realtime layers, first match wins. An
-    #    identifier query is a filtered slice, not the source's full state,
-    #    so it is deliberately not recorded to the database.
-    for data_file in settings.data:
-        realtime = data_file.realtime
-        if not (realtime and realtime.enabled):
-            continue
-        matches = fetch_fires_by_id(realtime, term)
-        if matches is not None and not matches.empty:
-            return [_first_match(matches, _realtime_data_file(data_file.location, realtime),
-                                 coords)]
+        # 2. Not stored yet: query the realtime layers, first match wins. An
+        #    identifier query is a filtered slice, not the source's full state,
+        #    so it is deliberately not recorded to the database.
+        for data_file in settings.data:
+            realtime = data_file.realtime
+            if not (realtime and realtime.enabled):
+                continue
+            matches = fetch_fires_by_id(realtime, term, data_file.location)
+            if matches is not None and not matches.empty:
+                return [_first_match(
+                    matches, _realtime_data_file(data_file.location, realtime), coords)], None
 
-    return []
+        return [], None
+    finally:
+        if conn is not None:
+            conn.close()
