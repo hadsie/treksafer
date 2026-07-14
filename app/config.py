@@ -86,6 +86,18 @@ class AvalancheConfig(BaseModel):
 
 # ---- Core settings model ---- #
 
+class EnrichmentConfig(BaseModel):
+    """Per-fire enrichment API for data the source's layers lack.
+
+    Used only by single-fire lookups (one call per looked-up fire, cached).
+    The url is a template whose placeholders name the source's key_fields
+    (e.g. {FIRE_YEAR}, {FIRE_NUMBER}); updated_field is the JSON field
+    carrying the fire's last-update time (epoch milliseconds).
+    """
+    url: str
+    updated_field: str
+
+
 class RealtimeFireConfig(BaseModel):
     """Realtime ArcGIS FeatureServer source for a fire data location."""
     enabled: bool = True
@@ -127,6 +139,9 @@ class RealtimeFireConfig(BaseModel):
     # The monitor alerts when the source's ArcGIS layers haven't been
     # republished (layer metadata lastEditDate) within this many hours.
     layer_stale_hours: int = 24
+    # Per-fire enrichment API for data the layers lack (e.g. BC's last-update
+    # time, which only its incident system publishes).
+    enrichment: Optional[EnrichmentConfig] = None
 
     @model_validator(mode="after")
     def check_join_key(self):

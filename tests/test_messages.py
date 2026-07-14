@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -384,18 +384,48 @@ class TestFireLookupResponse:
 
         assert 'No fire matching' in message
 
-    def test_marker_localized_to_requester_coords(self, monkeypatch):
-        """A stale hit whose live refresh fails is served from storage with a
-        marker whose timestamp is in the requester's local timezone."""
+    def test_reply_carries_perimeter_and_as_of_lines(self):
+        message = handle_message('fireid C10784')
+
+        assert 'Perim: ' in message
+        assert 'As of ' in message
+
+    def test_as_of_relative_to_stored_fetch(self, monkeypatch):
+        """A stale hit whose live refresh fails is served from storage with
+        an As-of age measured from the stored fetch time."""
         from app.config import get_config
+        from tests.conftest import FIXTURE_FETCHED_AT
         bc = next(d for d in get_config().data if d.location == 'BC')
         monkeypatch.setattr(bc.realtime, 'enabled', True)
+        monkeypatch.setattr(bc.realtime, 'enrichment', None)
         with patch('app.fires.lookup.fetch_fire', side_effect=requests.ConnectionError('x')), \
              patch('app.messages.get_aqi', return_value=None):
-            # Fixture fetched 2026-07-01 12:00 UTC; coords are America/Vancouver (PDT).
             message = handle_message('fireid C10784 (49.06, -120.79)')
 
-        assert message.endswith('Data from Jul 1 05:00')
+        days = round((datetime.now(timezone.utc) - FIXTURE_FETCHED_AT).total_seconds() / 86400)
+        assert message.endswith(f'As of {days}d ago')
+
+
+class TestLookupEnrichmentRendering:
+    """The fireid reply's perimeter and edge lines."""
+
+    PERIMETER = {'bounds': (50.97, 50.99, -89.44, -89.28)}
+
+    def test_perimeter_line_renders_bounds(self):
+        line = Messages().fire_perimeter(self.PERIMETER)
+        assert line == 'Perim: 50.97-50.99N 89.44-89.28W'
+
+    def test_edge_line_with_requester_distance(self):
+        edge = {'advance_m': 8000.0, 'direction': 'E', 'was_m': 19000.0,
+                'since': datetime.now(timezone.utc) - timedelta(hours=26)}
+        line = Messages().fire_edge(edge)
+        assert line == 'Edge: moved ~8km E in the last 26h, was 19km from you'
+
+    def test_edge_line_without_requester_distance(self):
+        edge = {'advance_m': 8000.0, 'direction': 'E', 'was_m': None,
+                'since': datetime.now(timezone.utc) - timedelta(hours=80)}
+        line = Messages().fire_edge(edge)
+        assert line == 'Edge: moved ~8km E in the last 3d'
 
 
 class TestHealthMessage:

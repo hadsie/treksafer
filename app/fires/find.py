@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import math
+import numbers
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -223,10 +224,10 @@ def _parse_source_timestamp(value, tz):
     zoneless local strings instead, parsed in the source's configured IANA
     zone (a zoneless string without a configured zone fails loudly).
     """
-    if value is None or (isinstance(value, float) and math.isnan(value)):
+    if value is None:
         return None
-    if isinstance(value, (int, float)):
-        return epoch_ms_to_datetime(value)
+    if isinstance(value, numbers.Number):
+        return epoch_ms_to_datetime(float(value))
     if tz is None:
         raise ValueError(f"Zoneless timestamp {value!r} needs a configured source timezone")
     naive = datetime.strptime(str(value).strip(), '%Y/%m/%d %H:%M:%S')

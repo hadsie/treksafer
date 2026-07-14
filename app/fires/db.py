@@ -1,11 +1,14 @@
 """Fire database: normalized fire records with snapshot history.
 
-Pure storage. Rows arrive already normalized (see fires.normalize_for_db);
-this module knows nothing about source mappings. Each fire has one identity
-row and a history of snapshots; a snapshot is written when the source
-reports a change (its own update timestamp advancing where the source
-publishes one, a field/geometry difference otherwise). All timestamps are
-passed in by callers so tests control time.
+Only contains storage handling logic. Rows arrive already normalized (see fires.normalize_for_db).
+Each fire has one identity row and a history of snapshots. Snapshots are written when the source
+reports a change (its own update timestamp advancing where the source publishes one, a field/geometry
+difference otherwise).
+
+Snapshot geometry is the geometry the search path ran against, not necessarily an agency-mapped
+perimeter. Fires with no mapped perimeter store their bare report point (field-joined sources).
+Anything that would report geometry to a user must distinguish these from real perimeters (see
+lookup._is_synthetic_circle).
 """
 from __future__ import annotations
 
@@ -232,7 +235,8 @@ def latest_fetch(conn: sqlite3.Connection, source: str) -> Optional[str]:
 _CURRENT_FIRES_SQL = """
     SELECT f.fire, f.name, f.location, f.type, f.discovered,
            s.size_ha, s.status, s.status_level,
-           COALESCE(s.source_updated, s.fetched_at), s.geometry, f.fire_key
+           COALESCE(s.source_updated, s.fetched_at), s.geometry, f.fire_key,
+           s.source_updated
     FROM fires f
     JOIN snapshots s ON s.id = (
         SELECT id FROM snapshots WHERE fire_id = f.id ORDER BY id DESC LIMIT 1
@@ -255,6 +259,9 @@ def _fires_frame(rows) -> gpd.GeoDataFrame:
             'StatusLevel': [r[7] for r in rows],
             'Updated': [r[8] for r in rows],
             'fire_key': [r[10] for r in rows],
+            # The source's own per-fire update time, un-coalesced: None for
+            # sources that publish none (BC, CA).
+            'SourceUpdated': [r[11] for r in rows],
         },
         geometry=gpd.GeoSeries([wkb.loads(r[9]) for r in rows], crs='EPSG:4326'),
     )
@@ -295,3 +302,39 @@ def load_fire(conn: sqlite3.Connection, source: str,
         (source, newest, fire),
     ).fetchall()
     return _fires_frame(rows)
+
+
+def backfill_source_updated(conn: sqlite3.Connection, source: str, fire: str,
+                            source_updated: str) -> None:
+    """Set the newest snapshot's source_updated for one fire."""
+    conn.execute(
+        """
+        UPDATE snapshots SET source_updated = ?
+        WHERE id = (
+            SELECT s.id FROM snapshots s JOIN fires f ON f.id = s.fire_id
+            WHERE f.source = ? AND f.fire = ? COLLATE NOCASE
+            ORDER BY s.id DESC LIMIT 1
+        )
+        """,
+        (source_updated, source, fire),
+    )
+    conn.commit()
+
+
+def fire_snapshots(conn: sqlite3.Connection, source: str, fire: str,
+                   limit: int = 6) -> list[tuple[str, bytes]]:
+    """Newest-first (timestamp, geometry WKB) snapshots for one fire, matched
+    exactly and case-insensitively by its displayed identifier.
+
+    Timestamp is the source's own update time when published, otherwise the
+    fetch time. Geometry is EPSG:4326 WKB as stored.
+    """
+    return conn.execute(
+        """
+        SELECT COALESCE(s.source_updated, s.fetched_at), s.geometry
+        FROM snapshots s JOIN fires f ON f.id = s.fire_id
+        WHERE f.source = ? AND f.fire = ? COLLATE NOCASE
+        ORDER BY s.id DESC LIMIT ?
+        """,
+        (source, fire, limit),
+    ).fetchall()

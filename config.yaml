@@ -128,6 +128,10 @@ data:
         managed: ['Being Held']
         controlled: ['Under Control']
         out: ['Out']
+      # Additional information for BC wildfires (update time). Used by single-fire (fireid) lookups.
+      enrichment:
+        url: https://wildfiresituation.nrs.gov.bc.ca/wfnews-api/publicPublishedIncident/{FIRE_NUMBER}?fireYear={FIRE_YEAR}
+        updated_field: updateDate
   - location: CA
     # National CWFIS layers (via Esri Canada). BC and AB are excluded; they
     # have dedicated sources. The hotspot perimeters carry no fire ID, so
