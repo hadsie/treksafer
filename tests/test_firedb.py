@@ -146,3 +146,47 @@ class TestLoadSource:
         firedb.record_fires(conn, 'BC', fires_gdf([{'fire_key': 'K1', 'Fire': 'K1'}]), T1)
 
         assert firedb.load_source(conn, 'AB') is None
+
+
+class TestLoadFire:
+    """load_fire matches one fire by its displayed identifier, exactly and
+    case-insensitively, among only the source's newest fetch."""
+
+    def _record(self, conn, *fires):
+        firedb.record_fires(
+            conn, 'BC',
+            fires_gdf([{'fire_key': f, 'Fire': f} for f in fires]), T1)
+
+    def test_exact_match_hits(self, conn):
+        self._record(conn, 'K70597', 'K70598')
+
+        found = firedb.load_fire(conn, 'BC', 'K70597')
+        assert list(found['Fire']) == ['K70597']
+
+    def test_substring_does_not_match(self, conn):
+        self._record(conn, 'K70597')
+
+        assert firedb.load_fire(conn, 'BC', 'K7059').empty
+
+    def test_case_insensitive(self, conn):
+        self._record(conn, 'HWF-096-2026')
+
+        found = firedb.load_fire(conn, 'BC', 'hwf-096-2026')
+        assert list(found['Fire']) == ['HWF-096-2026']
+
+    def test_percent_is_literal_not_a_wildcard(self, conn):
+        self._record(conn, 'K1')
+
+        # A LIKE-style '%' would match K1; here it is matched literally.
+        assert firedb.load_fire(conn, 'BC', 'K%').empty
+
+    def test_only_matches_current_fetch(self, conn):
+        """A fire dropped from the newest fetch is not a current match."""
+        self._record(conn, 'K1', 'K2')
+        firedb.record_fires(conn, 'BC', fires_gdf([{'fire_key': 'K1', 'Fire': 'K1'}]), T2)
+
+        assert firedb.load_fire(conn, 'BC', 'K2').empty
+        assert list(firedb.load_fire(conn, 'BC', 'K1')['Fire']) == ['K1']
+
+    def test_no_data_returns_none(self, conn):
+        assert firedb.load_fire(conn, 'BC', 'K1') is None

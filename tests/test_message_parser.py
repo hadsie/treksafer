@@ -340,6 +340,73 @@ class TestFilterExtraction:
         assert result["data_type"] == "fire"
 
 
+class TestFireIdParsing:
+    """A "fireid <token>" message yields a fire_id lookup, with or without
+    coordinates. The id is the next run of non-whitespace characters after
+    the keyword; nothing else in the message is touched."""
+
+    def test_id_only_message(self):
+        result = parse_message('fireid K70597')
+        assert result['fire_id'] == 'K70597'
+        assert result['coords'] is None
+
+    def test_keyword_is_case_insensitive(self):
+        result = parse_message('FireID K70597')
+        assert result['fire_id'] == 'K70597'
+
+    def test_id_with_appended_device_coords(self):
+        result = parse_message('fireid K70597 (52.5092, -115.6182)')
+        assert result['fire_id'] == 'K70597'
+        assert result['coords'] == (52.5092, -115.6182)
+
+    @responses.activate
+    def test_id_with_share_link(self):
+        responses.get('https://inreachlink.com/ABC1234',
+                      body='{"messages":[{"Latitude":44.1,"Longitude":-73.2}]}')
+
+        result = parse_message('fireid K70597 inreachlink.com/ABC1234')
+        assert result['fire_id'] == 'K70597'
+        assert result['coords'] == (44.1, -73.2)
+
+    def test_hyphenated_id_survives(self):
+        result = parse_message('fireid HWF-096-2026')
+        assert result['fire_id'] == 'HWF-096-2026'
+
+    def test_id_containing_the_word_fire_survives(self):
+        """CA identifiers embed the word "fire"; the token is never re-scanned."""
+        result = parse_message('fireid 2026_XX_DRY_FIRE_999')
+        assert result['fire_id'] == '2026_XX_DRY_FIRE_999'
+
+    def test_id_is_a_single_token(self):
+        """The id ends at whitespace; multi-word names are not supported."""
+        result = parse_message('fireid Kullagh Creek')
+        assert result['fire_id'] == 'Kullagh'
+
+    def test_trailing_punctuation_trimmed(self):
+        result = parse_message('fireid K70597.')
+        assert result['fire_id'] == 'K70597'
+
+    def test_punctuation_only_token_is_no_lookup(self):
+        assert parse_message('fireid !!!') is None
+
+    def test_bare_keyword_is_no_lookup(self):
+        assert parse_message('fireid') is None
+
+    def test_plain_fire_message_is_not_a_lookup(self):
+        result = parse_message('fire (52.5092, -115.6182)')
+        assert result['fire_id'] is None
+        assert result['coords'] == (52.5092, -115.6182)
+
+    def test_neither_coords_nor_id_returns_none(self):
+        assert parse_message('just checking in') is None
+
+    def test_filters_parsed_alongside_id(self):
+        result = parse_message('fireid K70597 active 25km')
+        assert result['fire_id'] == 'K70597'
+        assert result['fire_filters']['status'] == 'active'
+        assert result['fire_filters']['distance'] == 25
+
+
 class TestReturnValueStructure:
     """Test structure of returned dictionary."""
 

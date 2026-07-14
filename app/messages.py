@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from .config import get_config
 from .health import health_report
 from .helpers import parse_message, get_aqi, local_time
-from .fires import FindFires
+from .fires import FindFires, FireLookup
 from .avalanche import AvalancheReport
 from .filters import STATUS_LEVELS
 
@@ -40,6 +40,12 @@ class Messages:
 
     def data_unavailable(self) -> str:
         return 'Fire data is temporarily unavailable for your area. Try again later.'
+
+    def fire_not_found(self, term: str) -> str:
+        """A fireid lookup matched nothing. Informational, so it carries no
+        TrekSafer branding."""
+        return (f'No fire matching "{term}" was found. Check the fire number, '
+                'or send "fires" with your location for nearby fires.')
 
     def no_fires(self, distance: float, coords: tuple, status_filter: str = None) -> str:
         """Generate no fires message with optional status filter context.
@@ -159,8 +165,11 @@ class Messages:
             elif size == "medium":
                 fire['FullName'] = f"{fire['Name']} {fire['Fire']}"
 
-        distance = self._format_distance(fire['Distance'])
-        fire['DistDir'] = f"{distance}km {fire['Direction']}"
+        # Distance/direction are present only when the request carried
+        # coordinates (a bare id/name lookup has neither).
+        if 'Distance' in fire:
+            distance = self._format_distance(fire['Distance'])
+            fire['DistDir'] = f"{distance}km {fire['Direction']}"
         # New fires may not have a size estimate yet; the line is omitted.
         if 'Size' in fire:
             fire['Size'] = self._format_size(fire['Size'])
@@ -288,6 +297,24 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     return aqi_message + "\n\n".join(fire_messages) + marker
 
 
+def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,
+                        responses: 'Messages') -> str:
+    """Resolve a "fireid <id>" lookup to its single fire, or not-found.
+
+    An explicit lookup never falls back to a radius search: the user asked
+    about one specific fire and gets a direct answer either way.
+    """
+    lookup = FireLookup(term, coords)
+    fire = lookup.result()
+    if fire is None:
+        return responses.fire_not_found(term)
+    message = responses.fire(fire)
+    if lookup.marker_fetched:
+        message += "\n\n" + responses.data_age(
+            local_time(lookup.marker_fetched, lookup.marker_coords))
+    return message
+
+
 def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:
     """Handle avalanche forecast requests.
 
@@ -359,8 +386,14 @@ def handle_message(message: str) -> str:
 
     coords = parsed_data["coords"]
     fire_filters = parsed_data["fire_filters"]
+    fire_id = parsed_data.get("fire_id")
     data_type = parsed_data.get("data_type", "auto")
     avalanche_filters = parsed_data.get("avalanche_filters", {})
+
+    # An explicit "fireid" lookup outranks data-type routing: the user asked
+    # about one specific fire.
+    if fire_id:
+        return _handle_fire_lookup(coords, fire_id, responses)
 
     # Auto-detect data type. During fire season, default straight to fire;
     # otherwise use avalanche when available, with out-of-season reports

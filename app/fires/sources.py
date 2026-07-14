@@ -294,6 +294,46 @@ def fetch_fires(config: RealtimeFireConfig, coords: tuple,
         return None
 
 
+def fetch_fire(config: RealtimeFireConfig, term: str) -> gpd.GeoDataFrame:
+    """Fetch the single fire whose displayed identifier equals term.
+
+    Matches case-insensitively against the source's displayed Fire field on
+    the points layer, then attaches perimeter geometry the same way the radius
+    path does: field-joined sources by fire number, spatial sources by
+    location with the size-circle fallback. Unlike the radius path this never
+    recovers missing points -- an identifier query returns only what it
+    matched.
+
+    Returns a one-row (or empty) GeoDataFrame in EPSG:3857. Raises on any
+    query failure so the caller can decide how to fall back.
+
+    :param RealtimeFireConfig config: Realtime source configuration
+    :param str term: The displayed fire identifier to match
+    """
+    fire_field = config.mapping['Fire']
+    escaped = term.replace("'", "''")
+    where = f"({config.points_where}) AND UPPER({fire_field}) = UPPER('{escaped}')"
+    points = _stash_report_point(
+        query_layer(config.points_url, {}, _points_fields(config),
+                    config.cache_timeout, where))
+    if points.empty:
+        return points.to_crs(epsg=3857)
+
+    if config.join == 'field':
+        values = "','".join(str(v).replace("'", "''") for v in points[config.join_field])
+        perimeters = query_layer(
+            config.perimeters_url, {}, [config.perimeter_fire_field],
+            config.cache_timeout,
+            f"({config.perimeters_where}) AND {config.perimeter_fire_field} IN ('{values}')")
+        return _merge_by_field(points, perimeters, config, recover=False)
+
+    perimeters = query_layer(config.perimeters_url,
+                             envelope_filter(_expanded_bounds(points, _FRAGMENT_ASSOC_M)),
+                             [], config.cache_timeout, config.perimeters_where)
+    merged, _ = spatial_merge(points, perimeters, config.mapping.get('Size'))
+    return merged
+
+
 def fetch_all_fires(config: RealtimeFireConfig) -> gpd.GeoDataFrame:
     """Fetch a source's complete fire set (no spatial filter), merged.
 

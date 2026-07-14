@@ -48,6 +48,8 @@ class CLITransport(BaseTransport):
         print(f"[CLITransport] Received: {message}")
 
         if message == "health":
+            # Returns the JSON response for monitoring scripts. Other transports return
+            # human-readable output responses.
             response = json.dumps(health_report())
         else:
             response = safe_handle_message(message)

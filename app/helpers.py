@@ -142,24 +142,35 @@ def get_aqi(coords):
         logging.warning(f"Failed to parse AQI data: {e}")
         return None
 
+# An explicit fire lookup: "fireid <token>". The token is the next run of
+# non-whitespace characters, so identifiers with hyphens, underscores, or the
+# word "fire" inside them (HWF-096-2026, 2026_ON_DRY_FIRE_013) pass through
+# untouched. Common trailing punctuation is trimmed from the token.
+_FIREID_RE = re.compile(r'\bfireid\s+(\S+)', re.IGNORECASE)
+
+
+def _fire_id(message: str) -> str | None:
+    """The identifier following the "fireid" keyword, or None."""
+    match = _FIREID_RE.search(message)
+    if not match:
+        return None
+    return match.group(1).strip('.,;:!?()[]{}"\'') or None
+
+
 def parse_message(message):
     """Parse an SMS message for lat/long coordinates and optional filters.
 
     Supports:
         - Various coordinate formats, see coords_from_message().
+        - A specific fire lookup: "fireid <id>", see _fire_id().
         - Filter keywords: "active", "all"
         - Distance filters: "25km", "10mi"
         - Data type keywords: "avalanche", "fire"
         - Forecast time keywords: "current", "tomorrow", "all"
 
-    Returns:
-        dict: {
-            "coords": (lat, lon),
-            "filters": dict,
-            "data_type": str,
-            "forecast_time": str
-        }
-        or None if no coords found
+    Returns the parsed dict (with a "fire_id" key, None when absent) when the
+    message carries coordinates OR a fire lookup, and None only when it has
+    neither. Coordinates stay optional for lookups.
     """
 
     # Extract filters from message (case insensitive, using word boundaries)
@@ -200,13 +211,15 @@ def parse_message(message):
         avalanche_filters['forecast'] = 'all'
 
     coords = coords_from_message(message)
+    fire_id = _fire_id(message)
 
-    if not coords:
+    if not coords and not fire_id:
         return None
 
     return {
         "coords": coords,
         "fire_filters": filters,
+        "fire_id": fire_id,
         "data_type": data_type,
         "avalanche_filters": avalanche_filters
     }
