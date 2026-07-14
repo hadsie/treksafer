@@ -1,9 +1,10 @@
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
+import requests
 
-from app.messages import Messages, handle_message, in_fire_season
+from app.messages import Messages, handle_fire_request, handle_message, in_fire_season
 
 
 def mock_fire(**overrides):
@@ -348,6 +349,83 @@ class TestFallbackMarker:
     def test_data_age_format(self):
         from datetime import datetime
         assert Messages.data_age(datetime(2026, 7, 10, 14, 30)) == "Data from Jul 10 14:30"
+
+
+class TestFireLookupResponse:
+    """A "fireid <id>" request returns that one fire (from the fixture
+    database, realtime disabled) or the not-found reply -- never a radius
+    search."""
+
+    def test_distance_and_direction_only_with_coords(self):
+        with_coords = handle_message('fireid C10784 (50.5, -121.0)')
+        without_coords = handle_message('fireid C10784')
+
+        assert 'C10784' in with_coords and 'km ' in with_coords
+        assert 'C10784' in without_coords and 'km ' not in without_coords
+
+    def test_not_found_reply_exact_wording(self):
+        message = handle_message('fireid NOPE999')
+
+        assert message == ('No fire matching "NOPE999" was found. Check the fire '
+                           'number, or send "fires" with your location for nearby fires.')
+
+    def test_miss_with_coords_never_falls_back_to_radius_search(self):
+        """An explicit lookup gets a direct answer; coordinates in the
+        message do not turn a miss into a nearby-fires report."""
+        message = handle_message('fireid NOPE (50.5, -121.0)')
+
+        assert 'No fire matching "NOPE"' in message
+        assert 'No fires reported' not in message
+
+    def test_lookup_outranks_avalanche_keyword(self):
+        """A fireid request is answered even when the message also contains
+        the avalanche keyword."""
+        message = handle_message('avalanche fireid NOPE999')
+
+        assert 'No fire matching' in message
+
+    def test_reply_carries_perimeter_and_as_of_lines(self):
+        message = handle_message('fireid C10784')
+
+        assert 'Perim: ' in message
+        assert 'As of ' in message
+
+    def test_as_of_relative_to_stored_fetch(self, monkeypatch):
+        """A stale hit whose live refresh fails is served from storage with
+        an As-of age measured from the stored fetch time."""
+        from app.config import get_config
+        from tests.conftest import FIXTURE_FETCHED_AT
+        bc = next(d for d in get_config().data if d.location == 'BC')
+        monkeypatch.setattr(bc.realtime, 'enabled', True)
+        monkeypatch.setattr(bc.realtime, 'enrichment', None)
+        with patch('app.fires.lookup.fetch_fire', side_effect=requests.ConnectionError('x')), \
+             patch('app.messages.get_aqi', return_value=None):
+            message = handle_message('fireid C10784 (49.06, -120.79)')
+
+        days = round((datetime.now(timezone.utc) - FIXTURE_FETCHED_AT).total_seconds() / 86400)
+        assert message.endswith(f'As of {days}d ago')
+
+
+class TestLookupEnrichmentRendering:
+    """The fireid reply's perimeter and edge lines."""
+
+    PERIMETER = {'bounds': (50.97, 50.99, -89.44, -89.28)}
+
+    def test_perimeter_line_renders_bounds(self):
+        line = Messages().fire_perimeter(self.PERIMETER)
+        assert line == 'Perim: 50.97-50.99N 89.44-89.28W'
+
+    def test_edge_line_with_requester_distance(self):
+        edge = {'advance_m': 8000.0, 'direction': 'E', 'was_m': 19000.0,
+                'since': datetime.now(timezone.utc) - timedelta(hours=26)}
+        line = Messages().fire_edge(edge)
+        assert line == 'Edge: moved ~8km E in the last 26h, was 19km from you'
+
+    def test_edge_line_without_requester_distance(self):
+        edge = {'advance_m': 8000.0, 'direction': 'E', 'was_m': None,
+                'since': datetime.now(timezone.utc) - timedelta(hours=80)}
+        line = Messages().fire_edge(edge)
+        assert line == 'Edge: moved ~8km E in the last 3d'
 
 
 class TestHealthMessage:

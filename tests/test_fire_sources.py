@@ -7,7 +7,7 @@ import pytest
 import requests
 import responses
 
-from app.fires.sources import fetch_fires
+from app.fires.sources import fetch_fire, fetch_fires
 from app.config import RealtimeFireConfig
 
 POINTS_URL = 'https://example.test/points/FeatureServer/0/query'
@@ -413,6 +413,86 @@ class TestFetchFiresSpatial:
         assert gdf is not None
         assert list(gdf['Fire_Name']) == ['F1']
         assert 'Recovery query' in caplog.text
+
+
+@pytest.mark.usefixtures('plain_session')
+class TestFetchFire:
+    """A targeted single-fire query by displayed identifier."""
+
+    def test_field_join_matches_and_attaches_perimeter(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([point_feature('K1')]))
+        mocked_responses.get(PERIMS_URL, json=collection([perimeter_feature('K1')]))
+
+        gdf = fetch_fire(CONFIG, 'K1')
+
+        assert str(gdf.crs) == 'EPSG:3857'
+        assert list(gdf['FIRE_NUMBER']) == ['K1']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+        assert "UPPER(FIRE_NUMBER) = UPPER('K1')" in mocked_responses.calls[0].request.params['where']
+
+    def test_match_is_case_insensitive_via_upper(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([point_feature('K1')]))
+        mocked_responses.get(PERIMS_URL, json=collection([]))
+
+        fetch_fire(CONFIG, 'k1')
+
+        assert "UPPER(FIRE_NUMBER) = UPPER('k1')" in mocked_responses.calls[0].request.params['where']
+
+    def test_single_quotes_in_term_are_doubled(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([]))
+
+        fetch_fire(CONFIG, "O'Brien")
+
+        assert "UPPER('O''Brien')" in mocked_responses.calls[0].request.params['where']
+        assert len(mocked_responses.calls) == 1  # no match, no perimeter query
+
+    def test_no_match_returns_empty_without_perimeter_query(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([]))
+
+        gdf = fetch_fire(CONFIG, 'ZZZ')
+
+        assert gdf.empty
+        assert len(mocked_responses.calls) == 1
+
+    def test_never_runs_missing_point_recovery(self, mocked_responses):
+        """An identifier query returns only what it matched: a perimeter for a
+        different fire is dropped, and no recovery query is issued."""
+        mocked_responses.get(POINTS_URL, json=collection([point_feature('K1')]))
+        mocked_responses.get(PERIMS_URL, json=collection([
+            perimeter_feature('K1'), perimeter_feature('K9'),
+        ]))
+
+        gdf = fetch_fire(CONFIG, 'K1')
+
+        assert list(gdf['FIRE_NUMBER']) == ['K1']
+        assert len(mocked_responses.calls) == 2  # points + perimeters only
+
+    def test_spatial_join_matches_and_attaches_perimeter(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([ca_point_feature('F1')]))
+        mocked_responses.get(PERIMS_URL, json=collection([ca_perimeter_feature()]))
+
+        gdf = fetch_fire(SPATIAL_CONFIG, 'F1')
+
+        assert list(gdf['Fire_Name']) == ['F1']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+        where = mocked_responses.calls[0].request.params['where']
+        assert "Agency NOT IN ('BC','AB')" in where
+        assert "UPPER(Fire_Name) = UPPER('F1')" in where
+
+    def test_spatial_unmatched_point_gets_size_circle(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([ca_point_feature('F1', size=100.0)]))
+        mocked_responses.get(PERIMS_URL, json=collection([]))
+
+        gdf = fetch_fire(SPATIAL_CONFIG, 'F1')
+
+        assert list(gdf['Fire_Name']) == ['F1']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+
+    def test_query_failure_raises(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, status=503)
+
+        with pytest.raises(requests.RequestException):
+            fetch_fire(CONFIG, 'K1')
 
 
 @pytest.mark.live

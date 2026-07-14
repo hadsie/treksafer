@@ -2,13 +2,13 @@
 
 import logging
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Dict, Optional
 
 from .config import get_config
 from .health import health_report
 from .helpers import parse_message, get_aqi, local_time
-from .fires import FindFires
+from .fires import FindFires, FireLookup
 from .avalanche import AvalancheReport
 from .filters import STATUS_LEVELS
 
@@ -40,6 +40,31 @@ class Messages:
 
     def data_unavailable(self) -> str:
         return 'Fire data is temporarily unavailable for your area. Try again later.'
+
+    def fire_not_found(self, term: str) -> str:
+        """A fireid lookup matched nothing. Informational, so it carries no
+        TrekSafer branding."""
+        return (f'No fire matching "{term}" was found. Check the fire number, '
+                'or send "fires" with your location for nearby fires.')
+
+    def fire_perimeter(self, perimeter: Dict) -> str:
+        """One line of perimeter bounds, e.g.
+        'Perim: 50.97-50.99N 89.44-89.28W'."""
+        minlat, maxlat, minlon, maxlon = perimeter['bounds']
+        ns = 'N' if (minlat + maxlat) >= 0 else 'S'
+        ew = 'W' if (minlon + maxlon) < 0 else 'E'
+        return (f"Perim: {abs(minlat):.2f}-{abs(maxlat):.2f}{ns} "
+                f"{abs(minlon):.2f}-{abs(maxlon):.2f}{ew}")
+
+    def fire_edge(self, edge: Dict) -> str:
+        """One line of recent perimeter movement, e.g.
+        'Edge: moved ~8km E in the last 26h, was 19km from you'."""
+        moved = self._format_distance(edge['advance_m'])
+        line = (f"Edge: moved ~{moved}km {edge['direction']} "
+                f"in the last {self._ago(edge['since'])}")
+        if edge.get('was_m') is not None:
+            line += f", was {self._format_distance(edge['was_m'])}km from you"
+        return line
 
     def no_fires(self, distance: float, coords: tuple, status_filter: str = None) -> str:
         """Generate no fires message with optional status filter context.
@@ -92,6 +117,25 @@ class Messages:
     @staticmethod
     def _timestamp(dt: datetime) -> str:
         return f"{dt:%b} {dt.day} {dt:%H:%M}"
+
+    @staticmethod
+    def _span(hours: float) -> str:
+        """A compact duration: '<1h', hours up to 48 ('26h'), days beyond ('4d')."""
+        if hours < 1:
+            return '<1h'
+        return f"{round(hours)}h" if hours <= 48 else f"{round(hours / 24)}d"
+
+    @staticmethod
+    def _ago(moment: datetime) -> str:
+        """How long ago an aware UTC datetime was, e.g. '3h'."""
+        hours = (datetime.now(timezone.utc) - moment).total_seconds() / 3600
+        return Messages._span(hours)
+
+    @staticmethod
+    def as_of(current: datetime) -> str:
+        """How old the served fire's information is: the age of the agency's
+        own update where known, otherwise of the feed read."""
+        return f"As of {Messages._ago(current)} ago"
 
     @staticmethod
     def data_age(fetched: datetime) -> str:
@@ -159,8 +203,11 @@ class Messages:
             elif size == "medium":
                 fire['FullName'] = f"{fire['Name']} {fire['Fire']}"
 
-        distance = self._format_distance(fire['Distance'])
-        fire['DistDir'] = f"{distance}km {fire['Direction']}"
+        # Distance/direction are present only when the request carried
+        # coordinates (a bare id/name lookup has neither).
+        if 'Distance' in fire:
+            distance = self._format_distance(fire['Distance'])
+            fire['DistDir'] = f"{distance}km {fire['Direction']}"
         # New fires may not have a size estimate yet; the line is omitted.
         if 'Size' in fire:
             fire['Size'] = self._format_size(fire['Size'])
@@ -190,9 +237,7 @@ class Messages:
     @staticmethod
     def _size_change(change: Dict) -> str:
         """Render a growth.enrich size change, e.g. '+500 since 26h ago'."""
-        hours = change['hours']
-        span = f"{round(hours)}h" if hours <= 48 else f"{round(hours / 24)}d"
-        return f"{change['delta']:+d} since {span} ago"
+        return f"{change['delta']:+d} since {Messages._span(change['hours'])} ago"
 
     @staticmethod
     def _message_length(message: str) -> float:
@@ -288,6 +333,26 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     return aqi_message + "\n\n".join(fire_messages) + marker
 
 
+def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,
+                        responses: 'Messages') -> str:
+    """Resolve a "fireid <id>" lookup to its single fire, or not-found.
+
+    The reply is enriched with the perimeter extent, recent edge movement, and the
+    time the served data was current.
+    """
+    lookup = FireLookup(term, coords)
+    fire = lookup.result()
+    if fire is None:
+        return responses.fire_not_found(term)
+    lines = [responses.fire(fire)]
+    if lookup.perimeter:
+        lines.append(responses.fire_perimeter(lookup.perimeter))
+    if lookup.edge:
+        lines.append(responses.fire_edge(lookup.edge))
+    lines.append(responses.as_of(lookup.as_of))
+    return "\n".join(lines)
+
+
 def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:
     """Handle avalanche forecast requests.
 
@@ -359,8 +424,14 @@ def handle_message(message: str) -> str:
 
     coords = parsed_data["coords"]
     fire_filters = parsed_data["fire_filters"]
+    fire_id = parsed_data.get("fire_id")
     data_type = parsed_data.get("data_type", "auto")
     avalanche_filters = parsed_data.get("avalanche_filters", {})
+
+    # An explicit "fireid" lookup outranks data-type routing: the user asked
+    # about one specific fire.
+    if fire_id:
+        return _handle_fire_lookup(coords, fire_id, responses)
 
     # Auto-detect data type. During fire season, default straight to fire;
     # otherwise use avalanche when available, with out-of-season reports

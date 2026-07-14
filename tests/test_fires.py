@@ -233,6 +233,22 @@ class TestAllStatusDropsSizeFilter:
         assert 'Size' not in fires[0]
 
 
+class TestParseSourceTimestamp:
+    """Source timestamps arrive as epoch numbers (including numpy scalars
+    from pandas frames) or zoneless local strings."""
+
+    def test_numpy_integer_epoch(self):
+        import numpy as np
+        from app.fires.find import _parse_source_timestamp
+        from app.helpers import epoch_ms_to_datetime
+        value = np.int64(1783984857347)
+        assert _parse_source_timestamp(value, None) == epoch_ms_to_datetime(1783984857347)
+
+    def test_nan_returns_none(self):
+        from app.fires.find import _parse_source_timestamp
+        assert _parse_source_timestamp(float('nan'), None) is None
+
+
 class TestFireKeys:
     """Key derivation trusts the frame schema and fails loudly without it."""
 

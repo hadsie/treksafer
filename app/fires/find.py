@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import math
+import numbers
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -32,6 +33,16 @@ from ..filters import apply_filters, STATUS_LEVELS
 def _iso_datetime(value):
     """Parse an ISO8601 string (as stored in the fire database) to a datetime."""
     return datetime.fromisoformat(value) if value else None
+
+
+def is_stale(fetched: datetime, settings, now: Optional[datetime] = None) -> bool:
+    """Whether a stored fetch is old enough to warrant a "Data from" marker.
+
+    The single implementation of the staleness comparison, shared by the
+    radius path (FindFires.fallback_fetched) and the lookup path.
+    """
+    now = now or datetime.now(timezone.utc)
+    return now - fetched > timedelta(hours=settings.stale_data_hours)
 
 
 TRANSFORMS = {
@@ -159,14 +170,17 @@ def _process_fields(field_mapping, data_file, get_value_fn):
 
     return result
 
-def _normalize_row(data_file, row, location, closest_point, distance) -> dict:
+def _normalize_row(data_file, row, distance=None, direction=None) -> dict:
     """
     Normalizes a row of fire data according to the supplied data_file.mapping.
+
+    Distance and direction are attached only when supplied; a lookup with no
+    requester coordinates produces a fire dict without them.
     """
-    data = {
-        "Distance": distance,
-        "Direction": compass_direction(location, closest_point),
-    }
+    data = {}
+    if distance is not None:
+        data["Distance"] = distance
+        data["Direction"] = direction
     data.update(_process_fields(
         field_mapping=data_file.mapping.get("fields", {}),
         data_file=data_file,
@@ -210,10 +224,10 @@ def _parse_source_timestamp(value, tz):
     zoneless local strings instead, parsed in the source's configured IANA
     zone (a zoneless string without a configured zone fails loudly).
     """
-    if value is None or (isinstance(value, float) and math.isnan(value)):
+    if value is None:
         return None
-    if isinstance(value, (int, float)):
-        return epoch_ms_to_datetime(value)
+    if isinstance(value, numbers.Number):
+        return epoch_ms_to_datetime(float(value))
     if tz is None:
         raise ValueError(f"Zoneless timestamp {value!r} needs a configured source timezone")
     naive = datetime.strptime(str(value).strip(), '%Y/%m/%d %H:%M:%S')
@@ -320,7 +334,8 @@ class FindFires:
             if distance > search_limit:
                 continue
             pointB = nearest_points(self.location, fire_perimeter)[1]
-            data = _normalize_row(data_file, row, self.location, pointB, distance)
+            data = _normalize_row(data_file, row, distance=distance,
+                                  direction=compass_direction(self.location, pointB))
             # History join identity and (on the database path) the data's
             # own timestamp, consumed by growth.enrich().
             if row.get('fire_key') is not None:
@@ -404,10 +419,10 @@ class FindFires:
         """Oldest fetch time among sources whose stored fallback data is
         older than the configured staleness window, or None.
         """
-        window = timedelta(hours=self.settings.stale_data_hours)
         now = datetime.now(timezone.utc)
         stale = [fetched_at for fetched in self.fallback_fetches.values()
-                 if now - (fetched_at := datetime.fromisoformat(fetched)) > window]
+                 if is_stale(fetched_at := datetime.fromisoformat(fetched),
+                             self.settings, now)]
         return min(stale) if stale else None
 
     def nearby(self) -> list[Dict[str, Any]]:
