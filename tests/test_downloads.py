@@ -70,10 +70,14 @@ class TestRefreshSource:
 class TestMain:
     @staticmethod
     def _empty(config):
-        """A zero-fire fetch result carrying the source schema, as
-        arcgis._to_gdf guarantees for real zero-feature responses."""
-        return gpd.GeoDataFrame(columns=[*_points_fields(config), 'geometry'],
-                                geometry='geometry', crs='EPSG:4326')
+        """A zero-fire fetch result carrying the source schema (layer
+        fields plus any synthesized year column), as fetch_all_fires
+        produces for real zero-feature responses."""
+        columns = [*_points_fields(config),
+                   *([config.year_field] if config.year_field else []),
+                   'geometry']
+        return gpd.GeoDataFrame(columns=columns, geometry='geometry',
+                                crs='EPSG:4326')
 
     def _settings(self, tmp_path):
         settings = get_config().model_copy(deep=True)

@@ -55,7 +55,7 @@ monitoring:
   healthcheck_url: "${TREKSAFER_HEALTHCHECK_URL}"
   refresh_healthcheck_url: "${TREKSAFER_REFRESH_HEALTHCHECK_URL}"
   # Alert when a source's newest fetch is older than this (hours).
-  fetch_stale_hours: 12
+  fetch_stale_hours: 14
   state_file: "data/monitor_state.json"
   # Daily digest of requests with unusable coordinates (scripts/digest.py).
   # sms_log_file defaults to <log_dir>/sms.log.
@@ -132,20 +132,54 @@ data:
       enrichment:
         url: https://wildfiresituation.nrs.gov.bc.ca/wfnews-api/publicPublishedIncident/{FIRE_NUMBER}?fireYear={FIRE_YEAR}
         updated_field: updateDate
+  - location: "ON"
+    # AFFES/MNRF native layers. The points are split across three status
+    # layers (New/Active/Out), concatenated. FIRE_NAME carries the public
+    # fire number (e.g. NIP040), matching the perimeter layer's FIRENUMB.
+    # Fire numbers recycle annually and the layers have no year field, so
+    # the database key includes the synthesized FIRE_YEAR. No per-fire
+    # update timestamp is published; snapshots gate on field comparison.
+    realtime:
+      enabled: ${TREKSAFER_ON_REALTIME:-true}
+      points_url:
+        - https://ws.lioservices.lrc.gov.on.ca/arcgis1/rest/services/MNRF/Ontario_Fires_Map/MapServer/33/query
+        - https://ws.lioservices.lrc.gov.on.ca/arcgis1/rest/services/MNRF/Ontario_Fires_Map/MapServer/32/query
+        - https://ws.lioservices.lrc.gov.on.ca/arcgis1/rest/services/MNRF/Ontario_Fires_Map/MapServer/31/query
+      perimeters_url: https://ws.lioservices.lrc.gov.on.ca/arcgis2/rest/services/LIO_OPEN_DATA/LIO_Open09/MapServer/51/query
+      join_field: FIRE_NAME
+      perimeter_fire_field: FIRENUMB
+      key_fields: [FIRE_YEAR, FIRE_NAME]
+      year_field: FIRE_YEAR
+      cache_timeout: 900
+      mapping:
+        Fire: FIRE_NAME
+        Location: DISTRICT_NAME
+        Size: CURRENT_SIZE
+        Status: CONDITION_DESCRIPTION
+        Discovered: CONFIRMED_DATE
+      transforms:
+        Discovered: epoch_ms
+      status_map:
+        # Being Observed fires are deliberately watched rather than
+        # fought: uncontained, so classified active.
+        active: ['Not Under Control', 'Being Observed']
+        managed: ['Being Held']
+        controlled: ['Under Control']
+        out: ['Out']
   - location: CA
-    # National CWFIS layers (via Esri Canada). BC and AB are excluded; they
-    # have dedicated sources. The hotspot perimeters carry no fire ID, so
-    # points join to polygons by location; fires with no polygon get a
+    # National CWFIS layers (via Esri Canada). BC, AB, and ON are excluded;
+    # they have dedicated sources. The hotspot perimeters carry no fire ID,
+    # so points join to polygons by location; fires with no polygon get a
     # circle of their reported size.
     realtime:
       enabled: ${TREKSAFER_CA_REALTIME:-true}
       points_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/activefires/FeatureServer/0/query
       perimeters_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/Active_Wildfire_Perimeters_in_Canada/FeatureServer/0/query
       join: spatial
-      points_where: Agency NOT IN ('BC','AB')
+      points_where: Agency NOT IN ('BC','AB','ON')
       # Composite values like Manitoba/Saskatchewan survive NOT IN, so a
       # border-straddling patch whose fire we do cover still comes through.
-      perimeters_where: Province NOT IN ('British Columbia','Alberta')
+      perimeters_where: Province NOT IN ('British Columbia','Alberta','Ontario')
       key_fields: [Fire_Name]
       cache_timeout: 900
       mapping:

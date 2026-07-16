@@ -168,7 +168,7 @@ class TestCLITransport:
 
         report = json.loads(mock_writer.write.call_args[0][0].decode("utf-8"))
         assert report["status"] == "ok"
-        assert set(report["sources"]) == {"BC", "AB", "CA", "US"}
+        assert set(report["sources"]) == {"BC", "AB", "ON", "CA", "US"}
         assert report["sources"]["BC"]["latest_fetch"] is not None
 
     @pytest.mark.asyncio

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import math
+from datetime import datetime, timezone
 from typing import Optional
 
 import geopandas as gpd
@@ -28,7 +29,6 @@ _SPATIAL_JOIN_M = 1000
 _FRAGMENT_ASSOC_M = 20_000
 # Circle radius in true meters for fires that report no size.
 _MIN_CIRCLE_M = 100
-
 
 def _size_circle(point_3857, hectares, latitude):
     """Build a circle around a point, sized to the fire's reported area.
@@ -121,11 +121,48 @@ def spatial_merge(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
 
 def _points_fields(config: RealtimeFireConfig) -> list[str]:
     """Columns to request from the points layer: mapped fields plus the
-    join, identity-key, and update-timestamp fields."""
+    join, identity-key, and update-timestamp fields. The synthesized year
+    column is not a layer field and is skipped."""
     fields = list(config.mapping.values())
     extras = [config.join_field, *config.key_fields, config.updated_field]
-    fields += [f for f in extras if f and f not in fields]
+    fields += [f for f in extras
+               if f and f != config.year_field and f not in fields]
     return fields
+
+
+def _prepare_points(points: gpd.GeoDataFrame,
+                    config: RealtimeFireConfig) -> gpd.GeoDataFrame:
+    """Post-fetch points processing: synthesize the season-year column and
+    stash the report location."""
+    points = _stash_report_point(points)
+    if config.year_field:
+        points[config.year_field] = datetime.now(timezone.utc).year
+    return points
+
+
+def _combine_points(frames: list, config: RealtimeFireConfig) -> gpd.GeoDataFrame:
+    """Concatenate one result frame per points layer and prepare them.
+
+    A fire caught mid-move between two status layers is deduplicated on
+    the join field. Empty frames are excluded before concatenation (all
+    frames share the schema, so nothing is lost)."""
+    frames = [f for f in frames if not f.empty] or frames[:1]
+    points = frames[0] if len(frames) == 1 else gpd.GeoDataFrame(
+        pd.concat(frames, ignore_index=True), crs=frames[0].crs)
+    if len(frames) > 1 and config.join_field:
+        points = points.drop_duplicates(subset=config.join_field)
+    return _prepare_points(points, config)
+
+
+def _query_points(config: RealtimeFireConfig, spatial_filter: dict,
+                  where: str) -> gpd.GeoDataFrame:
+    """Query every points layer (cached) and combine the results.
+
+    Raises on any layer failure, like query_layer."""
+    return _combine_points(
+        [query_layer(url, spatial_filter, _points_fields(config),
+                     config.cache_timeout, where)
+         for url in config.points_url], config)
 
 
 def _expanded_bounds(gdf: gpd.GeoDataFrame, meters: float):
@@ -153,9 +190,7 @@ def _points_by_fire_number(fire_numbers, config: RealtimeFireConfig) -> Optional
     quoted = "','".join(str(n).replace("'", "''") for n in fire_numbers)
     where = f"({config.points_where}) AND {config.join_field} IN ('{quoted}')"
     try:
-        return _stash_report_point(
-            query_layer(config.points_url, {}, _points_fields(config),
-                        config.cache_timeout, where))
+        return _query_points(config, {}, where)
     except (RequestException, ValueError) as e:
         logging.warning(
             f"Recovery query for {len(fire_numbers)} unmatched fire perimeter(s) "
@@ -232,11 +267,9 @@ def _merge_spatial(points: gpd.GeoDataFrame, perimeters: gpd.GeoDataFrame,
     # patch itself, so the recovery envelope grows by the association
     # distance and recovered points may claim a patch from that far away.
     try:
-        extra = _stash_report_point(
-            query_layer(config.points_url,
-                        envelope_filter(_expanded_bounds(unused, _FRAGMENT_ASSOC_M)),
-                        _points_fields(config), config.cache_timeout,
-                        config.points_where))
+        extra = _query_points(
+            config, envelope_filter(_expanded_bounds(unused, _FRAGMENT_ASSOC_M)),
+            config.points_where)
     except (RequestException, ValueError) as e:
         logging.warning(
             f"Recovery query for {len(unused)} unmatched fire perimeter(s) failed; "
@@ -279,10 +312,7 @@ def fetch_fires(config: RealtimeFireConfig, coords: tuple,
     spatial_filter = radius_filter(coords, radius_km)
     perimeter_fields = [config.perimeter_fire_field] if config.join == 'field' else []
     try:
-        points = query_layer(config.points_url, spatial_filter,
-                             _points_fields(config), config.cache_timeout,
-                             config.points_where)
-        points = _stash_report_point(points)
+        points = _query_points(config, spatial_filter, config.points_where)
         perimeters = query_layer(config.perimeters_url, spatial_filter,
                                  perimeter_fields, config.cache_timeout,
                                  config.perimeters_where)
@@ -313,9 +343,7 @@ def fetch_fire(config: RealtimeFireConfig, term: str) -> gpd.GeoDataFrame:
     fire_field = config.mapping['Fire']
     escaped = term.replace("'", "''")
     where = f"({config.points_where}) AND UPPER({fire_field}) = UPPER('{escaped}')"
-    points = _stash_report_point(
-        query_layer(config.points_url, {}, _points_fields(config),
-                    config.cache_timeout, where))
+    points = _query_points(config, {}, where)
     if points.empty:
         return points.to_crs(epsg=3857)
 
@@ -341,8 +369,9 @@ def fetch_all_fires(config: RealtimeFireConfig) -> gpd.GeoDataFrame:
     so no recovery queries are needed; unmatched perimeters are stale and
     dropped with a warning. Raises on any query failure.
     """
-    points = fetch_layer(config.points_url, _points_fields(config), config.points_where)
-    points = _stash_report_point(points)
+    points = _combine_points(
+        [fetch_layer(url, _points_fields(config), config.points_where)
+         for url in config.points_url], config)
     perimeter_fields = [config.perimeter_fire_field] if config.join == 'field' else []
     perimeters = fetch_layer(config.perimeters_url, perimeter_fields, config.perimeters_where)
     if config.join == 'field':

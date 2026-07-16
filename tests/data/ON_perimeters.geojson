@@ -1,0 +1,12 @@
+{
+"type": "FeatureCollection",
+"name": "ON_perimeters",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "FIRE_NAME": "NIP991", "FIRE_YEAR": 2026, "CURRENT_SIZE": 850.0, "CONDITION_DESCRIPTION": "Not Under Control", "DISTRICT_NAME": "Nipigon" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -91.320, 49.977 ], [ -91.298, 49.975 ], [ -91.281, 49.984 ], [ -91.283, 50.000 ], [ -91.302, 50.004 ], [ -91.319, 49.996 ], [ -91.320, 49.977 ] ] ] } },
+{ "type": "Feature", "properties": { "FIRE_NAME": "DRY992", "FIRE_YEAR": 2026, "CURRENT_SIZE": 40.0, "CONDITION_DESCRIPTION": "Being Observed", "DISTRICT_NAME": "Dryden" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -91.584, 49.897 ], [ -91.576, 49.897 ], [ -91.575, 49.902 ], [ -91.580, 49.904 ], [ -91.585, 49.901 ], [ -91.584, 49.897 ] ] ] } },
+{ "type": "Feature", "properties": { "FIRE_NAME": "KEN993", "FIRE_YEAR": 2026, "CURRENT_SIZE": 5.0, "CONDITION_DESCRIPTION": "Under Control", "DISTRICT_NAME": "Kenora" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -91.3015, 49.629 ], [ -91.2985, 49.629 ], [ -91.2985, 49.6315 ], [ -91.3010, 49.632 ], [ -91.3015, 49.629 ] ] ] } },
+{ "type": "Feature", "properties": { "FIRE_NAME": "RED994", "FIRE_YEAR": 2026, "CURRENT_SIZE": 100.0, "CONDITION_DESCRIPTION": "Out", "DISTRICT_NAME": "Red Lake" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -91.096, 49.895 ], [ -91.083, 49.896 ], [ -91.082, 49.905 ], [ -91.094, 49.906 ], [ -91.096, 49.895 ] ] ] } },
+{ "type": "Feature", "properties": { "FIRE_NAME": "SLK995", "FIRE_YEAR": 2026, "CURRENT_SIZE": 0.5, "CONDITION_DESCRIPTION": "Not Under Control", "DISTRICT_NAME": "Sioux Lookout" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -91.4005, 49.9495 ], [ -91.3995, 49.9495 ], [ -91.4000, 49.9505 ], [ -91.4005, 49.9495 ] ] ] } }
+]
+}

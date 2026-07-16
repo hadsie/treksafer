@@ -150,7 +150,7 @@ class TestLoadSource:
 
 class TestLoadFire:
     """load_fire matches one fire by its displayed identifier, exactly and
-    case-insensitively, among only the source's newest fetch."""
+    case-insensitively, newest last_seen first."""
 
     def _record(self, conn, *fires):
         firedb.record_fires(
@@ -180,13 +180,33 @@ class TestLoadFire:
         # A LIKE-style '%' would match K1; here it is matched literally.
         assert firedb.load_fire(conn, 'BC', 'K%').empty
 
-    def test_only_matches_current_fetch(self, conn):
-        """A fire dropped from the newest fetch is not a current match."""
+    def test_dropped_fire_matches_with_its_age(self, conn):
+        """A fire no longer in the feed still matches; LastSeen tells the
+        caller how current its data is."""
         self._record(conn, 'K1', 'K2')
         firedb.record_fires(conn, 'BC', fires_gdf([{'fire_key': 'K1', 'Fire': 'K1'}]), T2)
 
-        assert firedb.load_fire(conn, 'BC', 'K2').empty
-        assert list(firedb.load_fire(conn, 'BC', 'K1')['Fire']) == ['K1']
+        assert firedb.load_fire(conn, 'BC', 'K2').iloc[0]['LastSeen'] == T1.isoformat()
+        assert firedb.load_fire(conn, 'BC', 'K1').iloc[0]['LastSeen'] == T2.isoformat()
 
-    def test_no_data_returns_none(self, conn):
-        assert firedb.load_fire(conn, 'BC', 'K1') is None
+    def test_recycled_number_resolves_to_newest_season(self, conn):
+        firedb.record_fires(conn, 'ON', fires_gdf(
+            [{'fire_key': '2025-NIP991', 'Fire': 'NIP991'}]), T1)
+        firedb.record_fires(conn, 'ON', fires_gdf(
+            [{'fire_key': '2026-NIP991', 'Fire': 'NIP991'}]), T2)
+
+        found = firedb.load_fire(conn, 'ON', 'NIP991')
+        assert list(found['fire_key']) == ['2026-NIP991']
+
+    def test_prior_season_serves_when_no_current_match(self, conn):
+        firedb.record_fires(conn, 'ON', fires_gdf(
+            [{'fire_key': '2025-NIP991', 'Fire': 'NIP991'}]), T1)
+        firedb.record_fires(conn, 'ON', fires_gdf(
+            [{'fire_key': '2026-DRY992', 'Fire': 'DRY992'}]), T2)
+
+        found = firedb.load_fire(conn, 'ON', 'NIP991')
+        assert list(found['fire_key']) == ['2025-NIP991']
+        assert found.iloc[0]['LastSeen'] == T1.isoformat()
+
+    def test_no_data_returns_empty(self, conn):
+        assert firedb.load_fire(conn, 'BC', 'K1').empty

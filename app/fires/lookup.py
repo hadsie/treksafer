@@ -1,11 +1,10 @@
 """Fire lookup by displayed identifier (fire number or name).
 
-Unlike the radius search, a lookup targets one source at a time. The fire
-database aggregates every source's recent fires, so it answers existence
-cheaply; only a database match whose fetch is older than the source's cache
-window triggers a single live re-query of that one source. All four sources
-are searched in config order -- the requester may be asking about a fire near
-someone else, so their own location never narrows the search.
+Unlike the radius search, a lookup targets one source at a time. Check the
+database first to determine the source, if found, search only that specific
+source, if not found, search all realtime APIs. Fire numbers that recycle
+annually use the current season's fire; a number with no current fire serves
+the most recent previous season.
 
 A looked-up fire is served enriched: perimeter bounds, recent edge movement
 derived from snapshot geometry history, and the time the served data was current.
@@ -151,15 +150,19 @@ class FireLookup:
 
     def _from_database(self, data_file: DataFile,
                        now: datetime) -> Optional[Dict[str, Any]]:
-        """Serve a database match, re-querying live when it is stale."""
-        stored, fetched = self._load_stored(data_file.location)
+        """Serve a database match, re-querying live when it is stale.
+
+        Staleness is per fire (its last_seen, not the source's newest
+        fetch), so a match outside the latest fetch's coverage -- or from
+        a prior season -- refreshes or is served honestly aged."""
+        stored = self._load_stored(data_file.location)
         if stored is None or stored.empty:
             return None
 
-        fetched_at = datetime.fromisoformat(fetched)
+        seen_at = _parse_ts(stored.iloc[0]['LastSeen'])
         realtime = data_file.realtime
         needs_refresh = (realtime and realtime.enabled
-                         and now - fetched_at >= timedelta(seconds=realtime.cache_timeout))
+                         and now - seen_at >= timedelta(seconds=realtime.cache_timeout))
         if needs_refresh:
             live = self._live(data_file.location, realtime)
             if live is not None and not live.empty:
@@ -168,19 +171,19 @@ class FireLookup:
                     data_file, now)
             # Live failed, or the fire dropped from the agency feed: serve
             # the stored record, honestly timestamped.
-        return self._normalize(stored, _DB_DATA_FILE, data_file, fetched_at)
+        return self._normalize(stored, _DB_DATA_FILE, data_file, seen_at)
 
-    def _load_stored(self, location: str) -> tuple[Optional[gpd.GeoDataFrame], Optional[str]]:
-        """Return (matching fire frame, newest fetch time) from the database."""
+    def _load_stored(self, location: str) -> Optional[gpd.GeoDataFrame]:
+        """The database's match for the term (newest last_seen), or None."""
         try:
             conn = firedb.connect(self.settings.database)
             try:
-                return firedb.load_fire(conn, location, self.term), firedb.latest_fetch(conn, location)
+                return firedb.load_fire(conn, location, self.term)
             finally:
                 conn.close()
         except sqlite3.Error as e:
             logging.error(f"Fire database read failed for {location}: {e}")
-            return None, None
+            return None
 
     def _live(self, location: str, realtime) -> Optional[gpd.GeoDataFrame]:
         """One targeted live query of a source, or None on failure."""

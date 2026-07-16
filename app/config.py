@@ -101,7 +101,7 @@ class EnrichmentConfig(BaseModel):
 class RealtimeFireConfig(BaseModel):
     """Realtime ArcGIS FeatureServer source for a fire data location."""
     enabled: bool = True
-    points_url: str
+    points_url: List[str]
     perimeters_url: str
     cache_timeout: int = 900
     mapping: Dict[str, str]
@@ -123,6 +123,10 @@ class RealtimeFireConfig(BaseModel):
     # seasons in the database (BC fire numbers recycle annually, so BC uses
     # [FIRE_YEAR, FIRE_NUMBER]).
     key_fields: List[str]
+    # Name of a synthesized points column holding the fetch's UTC year,
+    # for sources whose fire numbers recycle annually but whose layer has
+    # no year field. Usable in key_fields; never requested from the layer.
+    year_field: Optional[str] = None
     # Points-layer field holding the source's per-fire update timestamp,
     # where one exists; it gates snapshot writes. Sources without one gate
     # on field comparison instead.
@@ -142,6 +146,11 @@ class RealtimeFireConfig(BaseModel):
     # Per-fire enrichment API for data the layers lack (e.g. BC's last-update
     # time, which only its incident system publishes).
     enrichment: Optional[EnrichmentConfig] = None
+
+    @field_validator("points_url", mode="before")
+    @classmethod
+    def single_url_is_a_list_of_one(cls, value):
+        return [value] if isinstance(value, str) else value
 
     @model_validator(mode="after")
     def check_join_key(self):

@@ -58,10 +58,15 @@ def layer_conditions(data_files, now: datetime) -> dict:
         realtime = data_file.realtime
         if not (realtime and realtime.enabled):
             continue
-        for kind in ("points", "perimeters"):
-            name = f"layer:{data_file.location}:{kind}"
-            url = getattr(realtime, f"{kind}_url").removesuffix("/query")
-            conditions[name] = _check_layer(name, url, realtime.layer_stale_hours, now)
+        layers = {"points": realtime.points_url,
+                  "perimeters": [realtime.perimeters_url]}
+        for kind, urls in layers.items():
+            for index, url in enumerate(urls):
+                name = f"layer:{data_file.location}:{kind}"
+                if len(urls) > 1:
+                    name += f":{index}"
+                conditions[name] = _check_layer(name, url.removesuffix("/query"),
+                                                realtime.layer_stale_hours, now)
     return conditions
 
 

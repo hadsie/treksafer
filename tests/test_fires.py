@@ -329,3 +329,34 @@ class TestFallbackMatchesRealtime:
                 assert fallback_fire[key] == pytest.approx(realtime_fire[key], rel=1e-6)
             else:
                 assert fallback_fire[key] == realtime_fire[key], key
+
+
+class TestOntarioNormalization:
+    """A merged ON frame (rewritten ids, synthesized year) normalizes to
+    season-scoped database rows."""
+
+    def test_season_key_status_level_and_discovery(self):
+        from app.fires.find import normalize_for_db
+        on = next(df for df in get_config().data if df.location == 'ON').realtime
+        frame = gpd.GeoDataFrame(
+            {
+                'FIRE_NAME': ['NIP040'],
+                'DISTRICT_NAME': ['Nipigon'],
+                'CURRENT_SIZE': [25.0],
+                'CONDITION_DESCRIPTION': ['Being Observed'],
+                'CONFIRMED_DATE': [1783989660000],
+                'FIRE_YEAR': [2026],
+                'latitude': [49.95], 'longitude': [-91.35],
+            },
+            geometry=gpd.GeoSeries([Point(-91.35, 49.95)], crs='EPSG:4326'),
+        ).to_crs(epsg=3857)
+
+        rows = normalize_for_db(frame, 'ON', on)
+
+        row = rows.iloc[0]
+        assert row['fire_key'] == '2026-NIP040'
+        assert row['Fire'] == 'NIP040'
+        assert row['Location'] == 'Nipigon'
+        assert (row['Status'], row['StatusLevel']) == ('Being Observed', 1)
+        assert row['Discovered'] == datetime(2026, 7, 14, 0, 41, tzinfo=timezone.utc)
+        assert row['Updated'] is None
