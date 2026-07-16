@@ -160,3 +160,39 @@ TREKSAFER_ENV=prod python -m app
 Fire data is fetched live from the sources' ArcGIS layers at request time, with a 15-minute cache. Every fetch is also recorded to a local  database (`data/fires.db`), which provides the history used in the  size-change reporting and also serves as the fallback when a source's API is unavailable.
 
 Run `python scripts/downloads.py` to refresh the database from every source (production runs this daily via cron at 6:30am Pacific time).
+
+### Adding a fire data source
+
+Fire sources are defined in `config.yaml` under `data:`. The idea is that no code changes will be needed to add a new source, but unless a new source has a very similar structure to one of the existing ones, there will likely need to be small code changes made still.
+
+Each source is a pair of realtime ArcGIS layers: incident points (one row per fire, carrying its attributes) and mapped perimeter polygons. The layers must answer standard `/query` requests (`f=geojson`, geometry filters, `resultOffset` pagination); test with `curl` before configuring.
+
+1. **Pick the location code.** It must match a polygon the boundary files know: an ISO country code (`boundaries/countries.zip`) or a Canadian province postal code (`boundaries/canada_provinces.zip`). Quote codes YAML would read as booleans (`"ON"`). If the region is already covered by a broader source (like the CA national feed), exclude it there via that source's `points_where`/`perimeters_where`.
+2. **Choose the join.** `field` (default) when the perimeters layer carries the fire number (`join_field` on points, `perimeter_fire_field` on perimeters); `spatial` when it doesn't, which assigns polygons by location and disables perimeter/edge reporting on `fireid` lookups.
+3. **Map the fields.** `mapping` translates the layer's column names to response fields: `Fire` (required, the displayed identifier users look up), `Name`, `Location`, `Type`, `Size` (hectares), `Status`, `Discovered`. `transforms` converts values by mapping key: `epoch_ms` and `iso_datetime` for dates, `acres_to_hectares` for size, `wfigs_status` to derive status from percent contained.
+4. **Classify statuses.** `status_map` sorts the feed's raw status values into `active` / `managed` / `controlled` / `out`. Unmapped values are logged and shown as active, so a fire is never silently hidden.
+5. **Give fires a stable identity.** `key_fields` are the points columns whose combined values identify a fire across the season in the database. If the agency recycles fire numbers annually but publishes no year column, name a `year_field`: a synthesized column holding the fetch's UTC year, usable in `key_fields`.
+6. **Wire the kill switch.** Follow the `enabled: ${TREKSAFER_XX_REALTIME:-true}` convention and add the variable to `dotenv.example`.
+
+All options on a source's `realtime:` block:
+
+| Option | Required | Purpose |
+|---|---|---|
+| `points_url` | yes | Points layer `/query` endpoint; a list when the feed is split across layers (ex: Ontario's New/Active/Out), concatenated and deduplicated |
+| `perimeters_url` | yes | Perimeter polygons `/query` endpoint |
+| `mapping` | yes | Layer columns to response fields; `Fire` is mandatory |
+| `status_map` | yes | Raw status values to `active`/`managed`/`controlled`/`out` |
+| `key_fields` | yes | Columns forming the fire's database identity |
+| `join` | no | `field` (default) or `spatial` |
+| `join_field` / `perimeter_fire_field` | field join | Fire-number columns on each layer (they may be named differently) |
+| `transforms` | no | Value conversions by mapping key (`epoch_ms`, `iso_datetime`, `acres_to_hectares`, `wfigs_status`) |
+| `year_field` | no | Synthesized fetch-year column for annually recycled fire numbers |
+| `updated_field` | no | Per-fire update timestamp column; gates database snapshots (without it, snapshots gate on field comparison) and feeds the `fireid` reply's "As of" age |
+| `timezone` | no | IANA zone for parsing zoneless local timestamp strings (AB) |
+| `points_where` / `perimeters_where` | no | Attribute filters, e.g. excluding regions served by a dedicated source |
+| `cache_timeout` | no | Realtime response cache in seconds (default 900) |
+| `layer_stale_hours` | no | Monitor alert threshold for a frozen upstream layer (default 24) |
+| `enrichment` | no | Per-fire API (`url` template over `key_fields` placeholders + `updated_field`) for data the layers lack, used on `fireid` lookups (BC's update time) |
+| `enabled` | no | Realtime toggle; when false the source serves from the database |
+
+For tests, add a fixture GeoJSON (`tests/data/<LOC>_perimeters.geojson`, fabricated fires with the real column names), a normalizer branch in `tests/conftest.py`, the location in its fixture-build loop and realtime-off env vars, and a live-marked endpoint test in `tests/test_fire_sources.py`. Update the expected source sets in the health tests.

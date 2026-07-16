@@ -53,9 +53,9 @@ A `fireid <id>` message carries a `fire_id` lookup (the single token after the k
 
 ### Data sources
 
-All four fire sources (BC, AB, CA, US) are pairs of realtime ArcGIS layers (incident points + perimeters), configured with field mappings and status maps in `config.yaml` under `data:`. BC/AB/US join their layers on a fire-number field; CA's national hotspot perimeters carry no fire ID, so points join spatially, with fires that have no perimeter getting a circle of their reported size.
+All five fire sources (BC, AB, ON, CA, US) are pairs of realtime ArcGIS layers (incident points + perimeters), configured with field mappings and status maps in `config.yaml` under `data:`. BC/AB/ON/US join their layers on a fire-number field; CA's national hotspot perimeters carry no fire ID, so points join spatially, with fires that have no perimeter getting a circle of their reported size. ON's points are split across three status layers (New/Active/Out), listed together under `points_url` and concatenated, and its database key includes a synthesized season year (`year_field`) because Ontario fire numbers recycle annually and the layers carry no year field.
 
-Every successful fetch is recorded to the fire database (`data/fires.db`): fire identities plus a snapshot history gated on the source's own update signal (per-fire timestamp where published, field comparison otherwise). When an API is unavailable, the source serves from the database at any age (logged); a source with no stored data returns "data unavailable", never "no fires". Set `TREKSAFER_{BC,AB,CA,US}_REALTIME=false` to disable realtime per source.
+Every successful fetch is recorded to the fire database (`data/fires.db`): fire identities plus a snapshot history gated on the source's own update signal (per-fire timestamp where published, field comparison otherwise). When an API is unavailable, the source serves from the database at any age (logged); a source with no stored data returns "data unavailable", never "no fires". Set `TREKSAFER_{BC,AB,ON,CA,US}_REALTIME=false` to disable realtime per source.
 
 Avalanche providers are configured in `config.yaml` under `avalanche.providers:` and selected dynamically based on location.
 

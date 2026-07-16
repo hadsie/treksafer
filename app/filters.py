@@ -48,7 +48,8 @@ def apply_status_filter(items, status_filter, **kwargs):
 
 def _within_new_fire_window(item, settings):
     """True when the item was discovered within the new-fire age window."""
-    discovered = item.get('Discovered')
+    # If we don't have Discovered from the source, use our own first seen date.
+    discovered = item.get('Discovered') or item.get('FirstSeen')
     if discovered is None or settings is None:
         return False
     return datetime.now(timezone.utc) - discovered < timedelta(days=settings.new_fire_age_days)

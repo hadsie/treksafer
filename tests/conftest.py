@@ -17,8 +17,10 @@ _STAGE_LEVELS = {
     'OUT_CNTRL': ('Out of Control', 'active'), 'OC': ('OC', 'active'),
     'HOLDING': ('Being Held', 'managed'), 'BH': ('BH', 'managed'),
     'UNDR_CNTRL': ('Under Control', 'controlled'), 'UC': ('UC', 'controlled'),
-    'OUT': ('Out', 'out'),
+    'OUT': ('Out', 'out'), 'Out': ('Out', 'out'),
     'Out of Control': ('Out of Control', 'active'),
+    'Not Under Control': ('Not Under Control', 'active'),
+    'Being Observed': ('Being Observed', 'active'),
     'Being Held': ('Being Held', 'managed'),
     'Under Control': ('Under Control', 'controlled'),
 }
@@ -51,6 +53,13 @@ def _normalize_fixture(location, props):
                 'Location': props.get('COMPLEX'), 'Type': None,
                 'Size': props['AREA'], 'Status': status, 'level': level,
                 'fire_key': props['FIRE_NUMBE']}
+    if location == 'ON':
+        status, level = _STAGE_LEVELS[props['CONDITION_DESCRIPTION']]
+        return {'Fire': props['FIRE_NAME'], 'Name': None,
+                'Location': props.get('DISTRICT_NAME'), 'Type': None,
+                'Size': props['CURRENT_SIZE'], 'Status': status,
+                'level': level,
+                'fire_key': f"{props['FIRE_YEAR']}-{props['FIRE_NAME']}"}
     if location == 'CA':
         status, level = _STAGE_LEVELS[props['stage_of_c']]
         return {'Fire': props['firename'], 'Name': None,
@@ -77,7 +86,7 @@ def build_fixture_db(path, fetched_at=FIXTURE_FETCHED_AT):
     data_dir = Path(__file__).parent / 'data'
     conn = firedb.connect(str(path))
     try:
-        for location in ('BC', 'AB', 'CA', 'US'):
+        for location in ('BC', 'AB', 'ON', 'CA', 'US'):
             geojson = json.load(open(data_dir / f'{location}_perimeters.geojson'))
             records = []
             for feature in geojson['features']:
@@ -99,6 +108,7 @@ def pytest_configure(config):
     # Unit tests never hit the realtime APIs
     os.environ.setdefault("TREKSAFER_BC_REALTIME", "false")
     os.environ.setdefault("TREKSAFER_AB_REALTIME", "false")
+    os.environ.setdefault("TREKSAFER_ON_REALTIME", "false")
     os.environ.setdefault("TREKSAFER_CA_REALTIME", "false")
     os.environ.setdefault("TREKSAFER_US_REALTIME", "false")
     # Serve fire data from a fixture database built from tests/data/

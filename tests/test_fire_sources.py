@@ -2,6 +2,7 @@
 
 import logging
 import math
+from datetime import datetime, timezone
 
 import pytest
 import requests
@@ -495,6 +496,128 @@ class TestFetchFire:
             fetch_fire(CONFIG, 'K1')
 
 
+POINTS2_URL = 'https://example.test/points2/FeatureServer/0/query'
+
+ON_CONFIG = RealtimeFireConfig(
+    points_url=[POINTS_URL, POINTS2_URL],
+    perimeters_url=PERIMS_URL,
+    join_field='FIRE_NAME',
+    perimeter_fire_field='FIRENUMB',
+    key_fields=['FIRE_YEAR', 'FIRE_NAME'],
+    year_field='FIRE_YEAR',
+    mapping={
+        'Fire': 'FIRE_NAME',
+        'Location': 'DISTRICT_NAME',
+        'Size': 'CURRENT_SIZE',
+        'Status': 'CONDITION_DESCRIPTION',
+        'Discovered': 'CONFIRMED_DATE',
+    },
+    transforms={'Discovered': 'epoch_ms'},
+    status_map={
+        'active': ['Not Under Control', 'Being Observed'],
+        'managed': ['Being Held'],
+        'controlled': ['Under Control'],
+        'out': ['Out'],
+    },
+)
+
+ON_COORDS = (49.9, -91.3)
+
+
+def on_point_feature(name, status='Not Under Control', size=25.0,
+                     lon=-91.35, lat=49.95):
+    return {
+        'type': 'Feature',
+        'geometry': {'type': 'Point', 'coordinates': [lon, lat]},
+        'properties': {
+            'FIRE_NAME': name,
+            'DISTRICT_NAME': 'Testville',
+            'CURRENT_SIZE': size,
+            'CONDITION_DESCRIPTION': status,
+            'CONFIRMED_DATE': 1783899060000,
+        },
+    }
+
+
+@pytest.mark.usefixtures('plain_session')
+class TestFetchFiresMultiLayer:
+    """A source whose points are split across several status layers (ON)."""
+
+    def test_layers_concatenated_and_year_synthesized(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([on_point_feature('NIP991')]))
+        mocked_responses.get(POINTS2_URL, json=collection(
+            [on_point_feature('DRY992', status='Being Observed')]))
+        mocked_responses.get(PERIMS_URL, json=collection([]))
+
+        gdf = fetch_fires(ON_CONFIG, ON_COORDS, 50)
+
+        assert sorted(gdf['FIRE_NAME']) == ['DRY992', 'NIP991']
+        assert set(gdf['FIRE_YEAR']) == {datetime.now(timezone.utc).year}
+
+    def test_fire_in_two_layers_is_deduplicated(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([on_point_feature('NIP991')]))
+        mocked_responses.get(POINTS2_URL, json=collection([on_point_feature('NIP991')]))
+        mocked_responses.get(PERIMS_URL, json=collection([]))
+
+        gdf = fetch_fires(ON_CONFIG, ON_COORDS, 50)
+
+        assert list(gdf['FIRE_NAME']) == ['NIP991']
+
+    def test_year_not_requested_from_layer(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(POINTS2_URL, json=collection([]))
+        mocked_responses.get(PERIMS_URL, json=collection([]))
+
+        fetch_fires(ON_CONFIG, ON_COORDS, 50)
+
+        out_fields = mocked_responses.calls[0].request.params['outFields'].split(',')
+        assert 'FIRE_YEAR' not in out_fields
+        assert 'FIRE_NAME' in out_fields
+
+    def test_perimeter_joins_across_layers(self, mocked_responses):
+        """A perimeter attaches to its fire no matter which layer served it."""
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(POINTS2_URL, json=collection(
+            [on_point_feature('NIP991', lon=-91.35, lat=49.95)]))
+        mocked_responses.get(PERIMS_URL, json=collection(
+            [perimeter_feature('NIP991', lon=-91.35, lat=49.95, fire_field='FIRENUMB')]))
+
+        gdf = fetch_fires(ON_CONFIG, ON_COORDS, 50)
+
+        assert list(gdf['FIRE_NAME']) == ['NIP991']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+
+    def test_recovery_queries_every_layer(self, mocked_responses):
+        """A perimeter whose fire point lies outside the radius is recovered
+        by fire number from any of the points layers."""
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(POINTS2_URL, json=collection([]))
+        mocked_responses.get(PERIMS_URL, json=collection(
+            [perimeter_feature('NIP991', lon=-91.35, lat=49.95, fire_field='FIRENUMB')]))
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(POINTS2_URL, json=collection(
+            [on_point_feature('NIP991', lon=-91.35, lat=49.95)]))
+
+        gdf = fetch_fires(ON_CONFIG, ON_COORDS, 50)
+
+        assert "IN ('NIP991')" in mocked_responses.calls[3].request.params['where']
+        assert list(gdf['FIRE_NAME']) == ['NIP991']
+
+    def test_fetch_fire_checks_every_layer(self, mocked_responses):
+        mocked_responses.get(POINTS_URL, json=collection([]))
+        mocked_responses.get(POINTS2_URL, json=collection(
+            [on_point_feature('NIP991', lon=-91.35, lat=49.95)]))
+        mocked_responses.get(PERIMS_URL, json=collection(
+            [perimeter_feature('NIP991', lon=-91.35, lat=49.95, fire_field='FIRENUMB')]))
+
+        gdf = fetch_fire(ON_CONFIG, 'nip991')
+
+        for call in mocked_responses.calls[:2]:
+            assert "UPPER(FIRE_NAME) = UPPER('nip991')" in call.request.params['where']
+        assert list(gdf['FIRE_NAME']) == ['NIP991']
+        assert gdf.geometry.iloc[0].geom_type == 'Polygon'
+
+
 @pytest.mark.live
 class TestLiveEndpoint:
     def test_bcws_layers_respond(self):
@@ -537,3 +660,13 @@ class TestLiveEndpoint:
         assert gdf is not None
         assert str(gdf.crs) == 'EPSG:3857'
         assert 'IncidentName' in gdf.columns
+
+    def test_ontario_layers_respond(self):
+        """The real AFFES/MNRF layers answer a query near Sioux Lookout."""
+        from app.config import get_config
+        on = next(d for d in get_config().data if d.location == 'ON')
+        gdf = fetch_fires(on.realtime, (50.1, -91.9), 150)
+
+        assert gdf is not None
+        assert str(gdf.crs) == 'EPSG:3857'
+        assert 'FIRE_NAME' in gdf.columns

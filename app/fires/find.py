@@ -342,6 +342,10 @@ class FindFires:
                 data['FireKey'] = row['fire_key']
             if isinstance(row.get('Updated'), str):
                 data['DataTime'] = row['Updated']
+            # Discovery-date stand-in for the size filter's new-fire
+            # exemption (see filters._within_new_fire_window).
+            if isinstance(row.get('FirstSeen'), str):
+                data['FirstSeen'] = growth._parse_ts(row['FirstSeen'])
             fires.append(data)
 
         # Return filtered fires.
@@ -364,6 +368,34 @@ class FindFires:
         except (sqlite3.Error, OSError, ValueError, KeyError, AttributeError) as e:
             logging.error(f"Failed to record {location} fires to the database: {e}")
 
+    def _first_seen_usable(self, conn, location: str) -> bool:
+        """Whether the source's fetch history reaches past the new-fire
+        window, making first_seen a meaningful discovery stand-in. A
+        younger history would exempt the source's whole fire set from the
+        size filter."""
+        oldest = firedb.oldest_fetch(conn, location)
+        window = timedelta(days=self.settings.new_fire_age_days)
+        return (oldest is not None
+                and growth._parse_ts(oldest) <= datetime.now(timezone.utc) - window)
+
+    def _attach_first_seen(self, location: str,
+                           fires: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """Attach each fire's first appearance in the fetch history, the
+        discovery-date stand-in for fires whose source publishes no
+        discovery date. Failures degrade to no attachment."""
+        try:
+            conn = firedb.connect(self.settings.database)
+            try:
+                if not self._first_seen_usable(conn, location):
+                    return fires
+                seen = firedb.first_seen_map(conn, location)
+            finally:
+                conn.close()
+        except (sqlite3.Error, OSError) as e:
+            logging.warning(f"First-seen history unavailable for {location}: {e}")
+            return fires
+        return fires.assign(FirstSeen=fires['fire_key'].map(seen))
+
     def _load_stored(self, location: str, fallback: bool = False) -> Optional[gpd.GeoDataFrame]:
         """Serve a source from the database, at any age, logging staleness.
 
@@ -379,6 +411,8 @@ class FindFires:
             try:
                 fires = firedb.load_source(conn, location)
                 fetched = firedb.latest_fetch(conn, location)
+                if fires is not None and not self._first_seen_usable(conn, location):
+                    fires = fires.drop(columns='FirstSeen')
             finally:
                 conn.close()
         except sqlite3.Error as e:
@@ -407,6 +441,7 @@ class FindFires:
             if fires is not None:
                 self._record(data_file.location, fires, realtime)
                 fires = fires.assign(fire_key=fire_keys(fires, realtime.key_fields))
+                fires = self._attach_first_seen(data_file.location, fires)
                 return fires, _realtime_data_file(data_file.location, realtime)
             logging.warning(
                 f"Realtime {data_file.location} fire data unavailable; using stored data."

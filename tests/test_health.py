@@ -10,7 +10,7 @@ class TestHealthReport:
         report = health_report()
 
         assert report['status'] == 'ok'
-        assert set(report['sources']) == {'BC', 'AB', 'CA', 'US'}
+        assert set(report['sources']) == {'BC', 'AB', 'ON', 'CA', 'US'}
         for source in report['sources'].values():
             assert source['latest_fetch'] == FIXTURE_FETCHED_AT.isoformat()
 

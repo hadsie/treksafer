@@ -390,6 +390,20 @@ class TestFireLookupResponse:
         assert 'Perim: ' in message
         assert 'As of ' in message
 
+    def test_ontario_fire_resolves_with_perimeter(self):
+        """ON joins perimeters by fire number, so its fixture fire's mapped
+        polygon is served with perimeter bounds and the as-of age."""
+        message = handle_message('fireid NIP991')
+
+        assert 'Fire: NIP991' in message
+        assert 'Location: Nipigon' in message
+        assert 'Status: Not Under Control' in message
+        assert 'Perim: ' in message
+        assert 'As of ' in message
+
+    def test_ontario_lookup_is_case_insensitive(self):
+        assert 'Fire: NIP991' in handle_message('fireid nip991')
+
     def test_as_of_relative_to_stored_fetch(self, monkeypatch):
         """A stale hit whose live refresh fails is served from storage with
         an As-of age measured from the stored fetch time."""
@@ -437,7 +451,7 @@ class TestHealthMessage:
         response = handle_message(message)
 
         assert response.startswith('TrekSafer OK')
-        for source in ('BC', 'AB', 'CA', 'US'):
+        for source in ('BC', 'AB', 'ON', 'CA', 'US'):
             assert source in response
 
     @pytest.mark.parametrize('message', [

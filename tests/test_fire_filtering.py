@@ -188,6 +188,39 @@ class TestGenericFilterSystem:
         result = apply_size_filter(test_fires, 1.0, settings=MockSettings())
         assert set(f['Fire'] for f in result) == {'NewSmall', 'NewNoSize', 'OldBig'}
 
+    def test_size_filter_falls_back_to_first_seen(self):
+        """Fires whose source publishes no discovery date use their first
+        appearance in the fetch history for the new-fire exemption."""
+        now = datetime.now(timezone.utc)
+
+        class MockSettings:
+            new_fire_age_days = 7
+
+        test_fires = [
+            {'Fire': 'NewSmall', 'Size': 0.5, 'FirstSeen': now - timedelta(days=2)},
+            {'Fire': 'OldSmall', 'Size': 0.5, 'FirstSeen': now - timedelta(days=9)},
+            {'Fire': 'NoHistorySmall', 'Size': 0.5},
+        ]
+
+        result = apply_size_filter(test_fires, 1.0, settings=MockSettings())
+        assert [f['Fire'] for f in result] == ['NewSmall']
+
+    def test_agency_discovered_outranks_first_seen(self):
+        """A fire the agency dates outside the window is not exempted by a
+        recent first appearance (e.g. a fire that entered our history late)."""
+        now = datetime.now(timezone.utc)
+
+        class MockSettings:
+            new_fire_age_days = 7
+
+        test_fires = [
+            {'Fire': 'OldFire', 'Size': 0.5,
+             'Discovered': now - timedelta(days=30),
+             'FirstSeen': now - timedelta(days=1)},
+        ]
+
+        assert apply_size_filter(test_fires, 1.0, settings=MockSettings()) == []
+
     def test_size_filter_without_settings_has_no_exemption(self):
         """Direct calls without settings keep plain size semantics."""
         test_fires = [
@@ -425,3 +458,89 @@ class TestWfigsStatus:
 
         assert display == '60% contained'
         assert level == STATUS_LEVELS['active']
+
+
+class TestFirstSeenSizeBypass:
+    """End to end: fires whose feed row carries no discovery date are
+    exempted from the size minimum via the fetch history, guarded on that
+    history reaching past the window."""
+
+    ON_COORDS = (49.9, -91.3)
+
+    @staticmethod
+    def _settings(db):
+        settings = get_config().model_copy(deep=True)
+        on = next(df for df in settings.data if df.location == 'ON')
+        on.realtime = on.realtime.model_copy(update={'enabled': False})
+        settings.data = [on]
+        settings.database = db
+        return settings
+
+    @staticmethod
+    def _on_fires(rows):
+        import geopandas as gpd
+        from shapely.geometry import Point
+        records = [{'Fire': fire, 'Name': None, 'Location': None, 'Type': None,
+                    'Discovered': None, 'Updated': None, 'Size': size,
+                    'Status': 'Out of Control', 'StatusLevel': 1,
+                    'latitude': 49.95, 'longitude': -91.35,
+                    'fire_key': f'2026-{fire}'} for fire, size in rows]
+        return gpd.GeoDataFrame(records, geometry=[Point(-91.35, 49.95)] * len(rows),
+                                crs='EPSG:4326')
+
+    def _build_db(self, db, fetches):
+        from app.fires import db as firedb
+        conn = firedb.connect(db)
+        try:
+            for age_days, rows in fetches:
+                firedb.record_fires(
+                    conn, 'ON', self._on_fires(rows),
+                    datetime.now(timezone.utc) - timedelta(days=age_days))
+        finally:
+            conn.close()
+
+    def _nearby(self, db):
+        with patch('app.fires.find.get_config', return_value=self._settings(db)):
+            return FindFires(self.ON_COORDS).nearby()
+
+    def test_new_small_fire_bypasses_size_filter(self, tmp_path):
+        db = str(tmp_path / 'fires.db')
+        self._build_db(db, [
+            (8, [('NIP991', 850.0)]),
+            (2, [('NIP991', 850.0), ('SLK995', 0.5)]),
+        ])
+
+        assert {f['Fire'] for f in self._nearby(db)} == {'NIP991', 'SLK995'}
+
+    def test_long_known_small_fire_is_filtered(self, tmp_path):
+        db = str(tmp_path / 'fires.db')
+        self._build_db(db, [
+            (10, [('NIP991', 850.0), ('SLK995', 0.5)]),
+            (2, [('NIP991', 850.0), ('SLK995', 0.5)]),
+        ])
+
+        assert {f['Fire'] for f in self._nearby(db)} == {'NIP991'}
+
+    def test_fresh_history_suppresses_the_bypass(self, tmp_path):
+        """A source whose whole history is younger than the window would
+        mark every fire new; the bypass stays off until it matures."""
+        db = str(tmp_path / 'fires.db')
+        self._build_db(db, [(2, [('NIP991', 850.0), ('SLK995', 0.5)])])
+
+        assert {f['Fire'] for f in self._nearby(db)} == {'NIP991'}
+
+
+class TestOntarioStatusVisibility:
+    """Being Observed fires are uncontained, so they classify as active."""
+
+    def test_being_observed_shows_under_active_filter(self):
+        fires = FindFires((49.9, -91.5), filters={'status': 'active'}).nearby()
+        by_id = {f['Fire']: f for f in fires}
+
+        assert by_id['DRY992']['Status'] == 'Being Observed'
+
+    def test_ca_source_excludes_provinces_with_dedicated_sources(self):
+        ca = next(d for d in get_config().data if d.location == 'CA').realtime
+
+        assert "'ON'" in ca.points_where
+        assert "'Ontario'" in ca.perimeters_where

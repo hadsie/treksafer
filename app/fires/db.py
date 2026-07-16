@@ -111,7 +111,7 @@ def record_fires(conn: sqlite3.Connection, source: str, fires: gpd.GeoDataFrame,
 
     Args:
         conn: Open database connection
-        source: Source code (BC, AB, CA, US)
+        source: Source code (BC, AB, US, etc.)
         fires: Normalized fires in EPSG:4326 (see fires.normalize_for_db)
         fetched_at: When the fetch happened (UTC)
 
@@ -168,6 +168,13 @@ def record_fires(conn: sqlite3.Connection, source: str, fires: gpd.GeoDataFrame,
             (source, fetched, len(fires)),
         )
     return written
+
+
+def first_seen_map(conn: sqlite3.Connection, source: str) -> dict:
+    """fire_key -> first_seen for every fire recorded for a source."""
+    return dict(conn.execute(
+        "SELECT fire_key, first_seen FROM fires WHERE source = ?", (source,)
+    ).fetchall())
 
 
 def fire_first_seen(conn: sqlite3.Connection, source: str,
@@ -229,24 +236,23 @@ def latest_fetch(conn: sqlite3.Connection, source: str) -> Optional[str]:
     return row[0]
 
 
-# Current fires for a source: the latest snapshot of every fire still present
-# in the source's newest fetch. Callers append their own predicate and pass
-# the matching parameters after (source, newest).
-_CURRENT_FIRES_SQL = """
+# A source's fires, each with its latest snapshot. Callers append their own
+# predicates and pass the matching parameters after (source,).
+_FIRES_SQL = """
     SELECT f.fire, f.name, f.location, f.type, f.discovered,
            s.size_ha, s.status, s.status_level,
            COALESCE(s.source_updated, s.fetched_at), s.geometry, f.fire_key,
-           s.source_updated
+           s.source_updated, f.first_seen, f.last_seen
     FROM fires f
     JOIN snapshots s ON s.id = (
         SELECT id FROM snapshots WHERE fire_id = f.id ORDER BY id DESC LIMIT 1
     )
-    WHERE f.source = ? AND f.last_seen = ?
+    WHERE f.source = ?
 """
 
 
 def _fires_frame(rows) -> gpd.GeoDataFrame:
-    """Build the normalized EPSG:3857 frame from _CURRENT_FIRES_SQL rows."""
+    """Build the normalized EPSG:3857 frame from _FIRES_SQL rows."""
     frame = gpd.GeoDataFrame(
         {
             'Fire': [r[0] for r in rows],
@@ -262,6 +268,8 @@ def _fires_frame(rows) -> gpd.GeoDataFrame:
             # The source's own per-fire update time, un-coalesced: None for
             # sources that publish none (BC, CA).
             'SourceUpdated': [r[11] for r in rows],
+            'FirstSeen': [r[12] for r in rows],
+            'LastSeen': [r[13] for r in rows],
         },
         geometry=gpd.GeoSeries([wkb.loads(r[9]) for r in rows], crs='EPSG:4326'),
     )
@@ -278,28 +286,31 @@ def load_source(conn: sqlite3.Connection, source: str) -> Optional[gpd.GeoDataFr
     newest = latest_fetch(conn, source)
     if newest is None:
         return None
-    rows = conn.execute(_CURRENT_FIRES_SQL, (source, newest)).fetchall()
+    rows = conn.execute(
+        _FIRES_SQL + " AND f.last_seen = ?", (source, newest)
+    ).fetchall()
     return _fires_frame(rows)
 
 
 def load_fire(conn: sqlite3.Connection, source: str,
-              fire: str) -> Optional[gpd.GeoDataFrame]:
-    """Load a single current fire matching its displayed identifier.
+              fire: str) -> gpd.GeoDataFrame:
+    """Load the most recently seen fire matching its displayed identifier.
 
-    Matches case-insensitively and exactly against the displayed fire field,
-    among only the fires present in the source's newest fetch (the same rule
-    as load_source). The identifier is a bound parameter, so % and _ are
-    matched literally rather than as LIKE wildcards.
+    Matches case-insensitively and exactly against the displayed fire field.
+    Fires no longer in the source's feed still match, newest last_seen
+    first, so a fire number that recycles annually resolves to the current
+    season's fire and falls back to the most recent previous season only
+    when no current fire carries the number. The frame's LastSeen column
+    tells the caller how current the data is. The identifier is a bound
+    parameter, so % and _ are matched literally rather than as LIKE
+    wildcards.
 
-    Returns a one-row (or empty) GeoDataFrame in EPSG:3857, or None when the
-    source has no data at all.
+    Returns a one-row (or empty) GeoDataFrame in EPSG:3857.
     """
-    newest = latest_fetch(conn, source)
-    if newest is None:
-        return None
     rows = conn.execute(
-        _CURRENT_FIRES_SQL + " AND f.fire = ? COLLATE NOCASE",
-        (source, newest, fire),
+        _FIRES_SQL + " AND f.fire = ? COLLATE NOCASE "
+        "ORDER BY f.last_seen DESC LIMIT 1",
+        (source, fire),
     ).fetchall()
     return _fires_frame(rows)
 
