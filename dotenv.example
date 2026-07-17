@@ -21,6 +21,9 @@ TREKSAFER_SW_NUMBER=[REPLACE WITH YOUR SIGNALWIRE PHONE NUMBER]
 # Fire database path (snapshot history + fallback for API outages).
 # TREKSAFER_DATABASE=data/fires.db
 
+# SMS opt-out list (numbers that texted STOP).
+# TREKSAFER_OPTOUT_DATABASE=data/optouts.db
+
 # Directory for runtime logs (app log, sms.log).
 # TREKSAFER_LOG_DIR=logs
 

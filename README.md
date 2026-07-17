@@ -92,6 +92,14 @@ Coordinates you type take priority over the device location your messenger appen
 
 Send **`fireid <number>`** to monitor a specific fire, e.g. `fireid K70597`. Include your coordinates and for the reply to includes the distance and direction from you to the fire.
 
+### Service keywords
+
+- **`help`** or **`info`** - What the service is and how to use it.
+- **`usage`** or **`examples`** - Advanced usage: filters, fire tracking, avalanche options, coordinate formats.
+- **`stop`** / **`start`** - Opt out of, or back in to, SMS replies (SMS only). An opted-out number receives nothing until it opts back in.
+
+Keywords only apply when they are the entire message, so they never override a real request.
+
 ### Examples
 ```
 Basic: fires

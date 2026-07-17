@@ -9,7 +9,7 @@ class TestFireSeasonValidation:
 
     def test_valid_dates_accepted(self):
         settings = Settings(fire_season_start="05-15", fire_season_end="08-15",
-                            stale_data_hours=6)
+                            stale_data_hours=6, optout_database="data/optouts.db")
         assert settings.fire_season_start == "05-15"
         assert settings.fire_season_end == "08-15"
 
