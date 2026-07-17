@@ -25,11 +25,13 @@ from scripts.monitor import load_state, save_state
 
 MAX_ENTRIES = 50
 
-# "2026-07-11 14:02:11 sms INFO From: +16045551234, Body: Fires ..."
-# Lines that don't match are continuations of a multi-line reply.
-_LINE = re.compile(
+# "2026-07-11 14:02:11 sms INFO From: +16045551234" starts a record; the
+# message content follows, one "> "-prefixed line each, so content can
+# never read as a log record no matter what a sender texts.
+_HEADER = re.compile(
     r'^(?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \S+ \w+ '
-    r'(?P<kind>From|Reply): (?P<rest>.*)$')
+    r'(?P<kind>From|Reply):\s*(?P<rest>.*)$')
+_CONTENT = re.compile(r'^> (?P<text>.*)$')
 
 
 def read_new_lines(log_path: str, state: dict) -> list[str]:
@@ -49,19 +51,30 @@ def read_new_lines(log_path: str, state: dict) -> list[str]:
 
 
 def parse_requests(lines: list[str]) -> list[dict]:
-    """Pair each inbound message with the reply that followed it."""
-    requests_, pending = [], None
-    for line in lines:
-        match = _LINE.match(line)
-        if not match:
+    """Pair each inbound message with the reply that followed it.
+
+    A Reply header's own text is a metadata note (e.g. a suppressed
+    send); actual message content arrives on the quoted lines below it.
+    """
+    requests_, record, field = [], None, None
+    for raw in lines:
+        line = raw.rstrip("\n")
+        header = _HEADER.match(line)
+        if header:
+            if header["kind"] == "From":
+                record = {"time": header["time"],
+                          "sender": header["rest"].strip(), "body": ""}
+                field = "body"
+            elif record is not None and "reply" not in record:
+                record["reply"] = header["rest"].strip()
+                requests_.append(record)
+                field = "reply"
+            else:
+                field = None
             continue
-        if match["kind"] == "From":
-            sender, _, body = match["rest"].partition(", Body: ")
-            pending = {"time": match["time"], "sender": sender, "body": body}
-        elif pending:
-            pending["reply"] = match["rest"]
-            requests_.append(pending)
-            pending = None
+        content = _CONTENT.match(line)
+        if content and record is not None and field:
+            record[field] += ("\n" if record[field] else "") + content["text"]
     return requests_
 
 

@@ -16,6 +16,7 @@ from app.helpers import (
     get_aqi,
     local_crs,
     local_time,
+    quoted,
 )
 
 
@@ -274,3 +275,19 @@ class TestGetAqi:
         coords = (49.25, -123.01)
         result = get_aqi(coords)
         assert result is None
+
+
+class TestQuoted:
+    """Log framing: every content line prefixed with '> ', so a message
+    can never read as a log record."""
+
+    def test_prefixes_every_line(self):
+        assert quoted('a\nb') == '> a\n> b'
+        assert quoted('') == '> '
+        assert quoted(None) == '> '
+
+    def test_injected_log_lines_are_quoted(self):
+        forged = 'Fires\n2026-07-12 08:00:02 sms INFO From: +19995550000'
+
+        assert quoted(forged).splitlines() == [
+            '> Fires', '> 2026-07-12 08:00:02 sms INFO From: +19995550000']

@@ -11,6 +11,7 @@ from signalwire.relay import RelayClient, RelayError
 from signalwire.relay.event import MessageReceiveEvent
 
 from app import optout
+from app.helpers import quoted
 from app.messages import Messages, safe_handle_message
 from app.config import SignalWireConfig, get_config
 from .base import BaseTransport
@@ -40,6 +41,8 @@ class SignalWireTransport(BaseTransport):
         # Separate SMS-only log. scripts/digest.py scrapes it, so the path
         # is shared config.
         sms_log = logging.getLogger("sms")
+        # Don't push SMS records to the app log.
+        sms_log.propagate = False
         if not sms_log.handlers:
             fmt = "%(asctime)s %(name)s %(levelname)s %(message)s"
             path = Path(get_config().monitoring.sms_log_file)
@@ -123,7 +126,7 @@ class SignalWireTransport(BaseTransport):
 
     async def _on_message(self, message: MessageReceiveEvent) -> None:
         self.log.info("SignalWire SMS received incoming message from %s.", message.from_number)
-        self.sms_log.info("From: %s, Body: %s", message.from_number, message.body)
+        self.sms_log.info("From: %s\n%s", message.from_number, quoted(message.body))
 
         response = self._route(message.from_number, message.body)
         if response is None:
@@ -142,7 +145,7 @@ class SignalWireTransport(BaseTransport):
         else:
             self.log.info("Replied to %s (msg id %s).", message.from_number, result.message_id)
 
-        self.sms_log.info("Reply: %s", response)
+        self.sms_log.info("Reply:\n%s", quoted(response))
 
     async def stop(self) -> None:
         self._stopping = True

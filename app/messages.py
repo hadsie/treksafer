@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 from .config import get_config
 from .health import health_report
-from .helpers import parse_message, get_aqi, local_time
+from .helpers import parse_message, get_aqi, local_time, quoted
 from .fires import FindFires, FireLookup
 from .avalanche import AvalancheReport
 from .filters import STATUS_LEVELS
@@ -454,8 +454,7 @@ def handle_message(message: str) -> str:
 
     parsed_data = parse_message(message)
     if not parsed_data:
-        logging.warning('No GPS coords found in message.')
-        logging.warning(message)
+        logging.warning('No GPS coords found in message:\n%s', quoted(message))
         return responses.no_gps()
 
     coords = parsed_data["coords"]
@@ -479,7 +478,7 @@ def handle_message(message: str) -> str:
             if avalanche.has_data() and not avalanche.out_of_season():
                 data_type = "avalanche"
 
-    logging.info(f"Message: {message}")
+    logging.info("Message:\n%s", quoted(message))
     logging.info(f"Data type: {data_type}")
 
     # Route to appropriate handler

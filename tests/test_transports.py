@@ -297,3 +297,33 @@ class TestSignalWireOptOut:
         kwargs = sw_transport._client.send_message.call_args.kwargs
         assert kwargs['body'] == Messages().opt_out_confirmed()
         assert kwargs['to_number'] == self.NUMBER
+
+
+class TestSmsLogFraming:
+    """Message content in sms.log is '> '-quoted line by line, so a sender
+    can never forge a log record."""
+
+    def test_sms_records_stay_out_of_the_app_log(self, sw_transport):
+        import logging
+
+        assert logging.getLogger('sms').propagate is False
+
+    @pytest.mark.asyncio
+    async def test_on_message_logs_quoted_body_and_reply(self, sw_transport, caplog):
+        import logging
+        # The sms logger does not propagate, so capture on it directly.
+        sms_logger = logging.getLogger('sms')
+        sms_logger.addHandler(caplog.handler)
+        sw_transport._client = AsyncMock()
+        event = Mock(from_number='+15551230002', body='Fires\n(50.5, -121.0)')
+
+        try:
+            with patch('app.transport.signalwire.safe_handle_message',
+                       return_value='line1\nline2'):
+                await sw_transport._on_message(event)
+        finally:
+            sms_logger.removeHandler(caplog.handler)
+
+        messages = [r.getMessage() for r in caplog.records if r.name == 'sms']
+        assert 'From: +15551230002\n> Fires\n> (50.5, -121.0)' in messages
+        assert 'Reply:\n> line1\n> line2' in messages
