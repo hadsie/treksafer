@@ -32,6 +32,11 @@ _DEG_HEMI_PATTERNS = [
     ),
 ]
 
+def quoted(text) -> str:
+    """Prefixed actual message content with '> '."""
+    return '\n'.join(f"> {line}" for line in (text or '').splitlines()) or '> '
+
+
 def acres_to_hectares(acres):
     return round(float(acres)/2.4710538147, 2)
 

@@ -12,17 +12,25 @@ from scripts import digest
 NO_GPS = Messages().no_gps()
 
 LOG = (
-    "2026-07-12 08:00:01 sms INFO From: +15550000001, Body: Fires (49.2, -123.1)\n"
-    "2026-07-12 08:00:03 sms INFO Reply: Fire: Test Fire (K10001)\n"
-    "12km NW\n"
-    "Size: 100 ha\n"
-    f"2026-07-12 09:10:11 sms INFO From: +15550000002, Body: fires near the lake\n"
-    f"2026-07-12 09:10:12 sms INFO Reply: {NO_GPS}\n"
-    "2026-07-12 10:30:00 sms INFO From: +15550000003, Body: health\n"
-    "2026-07-12 10:30:01 sms INFO Reply: TrekSafer OK. Data fetched (UTC):\n"
-    "BC Jul 12 06:00\n"
-    f"2026-07-12 11:45:59 sms INFO From: +15550000004, Body: inreachlink.com/FAKE123\n"
-    f"2026-07-12 11:46:02 sms INFO Reply: {NO_GPS}\n"
+    "2026-07-12 08:00:01 sms INFO From: +15550000001\n"
+    "> Fires (49.2, -123.1)\n"
+    "2026-07-12 08:00:03 sms INFO Reply:\n"
+    "> Fire: Test Fire (K10001)\n"
+    "> 12km NW\n"
+    "> Size: 100 ha\n"
+    "2026-07-12 09:10:11 sms INFO From: +15550000002\n"
+    "> fires near the lake\n"
+    "2026-07-12 09:10:12 sms INFO Reply:\n"
+    f"> {NO_GPS}\n"
+    "2026-07-12 10:30:00 sms INFO From: +15550000003\n"
+    "> health\n"
+    "2026-07-12 10:30:01 sms INFO Reply:\n"
+    "> TrekSafer OK. Data fetched (UTC):\n"
+    "> BC Jul 12 06:00\n"
+    "2026-07-12 11:45:59 sms INFO From: +15550000004\n"
+    "> inreachlink.com/FAKE123\n"
+    "2026-07-12 11:46:02 sms INFO Reply:\n"
+    f"> {NO_GPS}\n"
 )
 
 
@@ -36,11 +44,42 @@ class TestParseRequests:
                                 'body': 'fires near the lake',
                                 'reply': NO_GPS}
 
-    def test_multi_line_replies_do_not_confuse_pairing(self):
+    def test_multi_line_replies_are_collected(self):
         requests_ = digest.parse_requests(LOG.splitlines())
 
-        assert requests_[0]['reply'] == 'Fire: Test Fire (K10001)'
+        assert requests_[0]['reply'] == ('Fire: Test Fire (K10001)\n'
+                                         '12km NW\nSize: 100 ha')
         assert requests_[2]['sender'] == '+15550000003'
+
+    def test_injected_log_lines_in_a_body_stay_content(self):
+        """A message whose text mimics log records is quoted line by line
+        and can never mint a phantom request."""
+        log = (
+            "2026-07-12 08:00:01 sms INFO From: +15550000007\n"
+            "> Fires\n"
+            "> 2026-07-12 08:00:02 sms INFO From: +19995550000\n"
+            f"> 2026-07-12 08:00:03 sms INFO Reply: {NO_GPS}\n"
+            "2026-07-12 08:00:04 sms INFO Reply:\n"
+            "> No fires reported within 50km\n"
+        )
+
+        requests_ = digest.parse_requests(log.splitlines())
+
+        assert len(requests_) == 1
+        assert requests_[0]['sender'] == '+15550000007'
+        assert '+19995550000' in requests_[0]['body']
+        assert requests_[0]['reply'] == 'No fires reported within 50km'
+
+    def test_suppressed_send_note_is_the_reply(self):
+        log = (
+            "2026-07-12 08:00:01 sms INFO From: +15550000008\n"
+            "> fires (49.2, -123.1)\n"
+            "2026-07-12 08:00:02 sms INFO Reply: (suppressed: recipient opted out)\n"
+        )
+
+        requests_ = digest.parse_requests(log.splitlines())
+
+        assert requests_[0]['reply'] == '(suppressed: recipient opted out)'
 
 
 class TestRun:
@@ -76,8 +115,10 @@ class TestRun:
 
     def test_no_failures_sends_nothing(self, env):
         env['log'].write_text(
-            "2026-07-12 08:00:01 sms INFO From: +15550000001, Body: (49.2, -123.1)\n"
-            "2026-07-12 08:00:03 sms INFO Reply: No fires reported within 50km\n")
+            "2026-07-12 08:00:01 sms INFO From: +15550000001\n"
+            "> (49.2, -123.1)\n"
+            "2026-07-12 08:00:03 sms INFO Reply:\n"
+            "> No fires reported within 50km\n")
 
         assert digest.run(env['settings']) == 0
         assert env['emails'] == []
@@ -96,8 +137,10 @@ class TestRun:
     def test_rotated_log_rescans_from_start(self, env):
         digest.run(env['settings'])
         env['log'].write_text(
-            "2026-07-13 08:00:00 sms INFO From: +15550000009, Body: garbled\n"
-            f"2026-07-13 08:00:01 sms INFO Reply: {NO_GPS}\n")
+            "2026-07-13 08:00:00 sms INFO From: +15550000009\n"
+            "> garbled\n"
+            "2026-07-13 08:00:01 sms INFO Reply:\n"
+            f"> {NO_GPS}\n")
 
         digest.run(env['settings'])
 
