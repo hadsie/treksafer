@@ -1,6 +1,8 @@
 
 import asyncio
 import logging
+import re
+import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -8,12 +10,19 @@ import websockets
 from signalwire.relay import RelayClient, RelayError
 from signalwire.relay.event import MessageReceiveEvent
 
-from app.messages import safe_handle_message
+from app import optout
+from app.messages import Messages, safe_handle_message
 from app.config import SignalWireConfig, get_config
 from .base import BaseTransport
 
 # Time to wait before reconnecting after a dropped connection (in seconds)
 RECONNECT_DELAY = 5
+
+# Carrier-standard opt-out/opt-in keywords, honored only when they are the
+# whole message so "stop" inside a real request never opts anyone out.
+_OPT_OUT_PATTERN = re.compile(
+    r'\s*(stop|stopall|unsubscribe|cancel|end|quit)\s*', re.IGNORECASE)
+_OPT_IN_PATTERN = re.compile(r'\s*(start|unstop)\s*', re.IGNORECASE)
 
 
 class SignalWireTransport(BaseTransport):
@@ -77,11 +86,49 @@ class SignalWireTransport(BaseTransport):
         except asyncio.CancelledError:
             pass
 
+    def _route(self, number: str, body: str) -> Optional[str]:
+        """Resolve the reply, applying opt-out compliance around the
+        message pipeline.
+
+        STOP records the number and gets only the confirmation; START
+        clears it. An opted-out number gets no reply at all -- the check
+        sits here, the last place before a send, so suppression holds no
+        matter what the pipeline produces. Returns None for no reply.
+        """
+        db = get_config().optout_database
+        opting_out = _OPT_OUT_PATTERN.fullmatch(body or '') is not None
+        opting_in = _OPT_IN_PATTERN.fullmatch(body or '') is not None
+        try:
+            if opting_out:
+                optout.opt_out(db, number)
+                self.log.info("Opt-out recorded for %s.", number)
+                return Messages().opt_out_confirmed()
+            if opting_in:
+                optout.opt_in(db, number)
+                self.log.info("Opt-out cleared for %s.", number)
+                return Messages().opt_in_confirmed()
+            suppressed = optout.is_opted_out(db, number)
+        except (sqlite3.Error, OSError) as e:
+            self.log.error("Opt-out store unavailable: %s", e)
+            if opting_out or opting_in:
+                # An opt-out that cannot be recorded must not be confirmed.
+                return Messages().system_error()
+            # A failed check must not block safety information; the error
+            # above alerts the operator.
+            suppressed = False
+        if suppressed:
+            self.log.info("No reply to %s: recipient opted out.", number)
+            return None
+        return safe_handle_message(body)
+
     async def _on_message(self, message: MessageReceiveEvent) -> None:
         self.log.info("SignalWire SMS received incoming message from %s.", message.from_number)
         self.sms_log.info("From: %s, Body: %s", message.from_number, message.body)
 
-        response = safe_handle_message(message.body)
+        response = self._route(message.from_number, message.body)
+        if response is None:
+            self.sms_log.info("Reply: (suppressed: recipient opted out)")
+            return
 
         try:
             result = await self._client.send_message(

@@ -20,6 +20,11 @@ _SMS_LIMIT = 160
 # can include a link and coordinates.
 _HEALTH_PATTERN = re.compile(r'\s*health\s*', re.IGNORECASE)
 
+# Service-information keywords, answered only when they are the whole
+# message so "help" inside a real request never hijacks it.
+_HELP_PATTERN = re.compile(r'\s*(help|info)\s*', re.IGNORECASE)
+_USAGE_PATTERN = re.compile(r'\s*(usage|examples)\s*', re.IGNORECASE)
+
 class Messages:
     @staticmethod
     def _location(coords: tuple) -> str:
@@ -40,6 +45,33 @@ class Messages:
 
     def data_unavailable(self) -> str:
         return 'Fire data is temporarily unavailable for your area. Try again later.'
+
+    def help(self) -> str:
+        """The HELP/INFO reply, one SMS segment. Must match the help copy
+        declared in the SignalWire campaign registration verbatim."""
+        return ('TrekSafer: Wildfire & avalanche info. Text GPS coordinates '
+                '(e.g. fires (49.2, -123.1)) to get a report. '
+                'https://treksafer.com. Reply STOP to opt out.')
+
+    def usage(self) -> str:
+        """The USAGE/EXAMPLES reply: the advanced guide, capped at two SMS
+        segments for satellite users."""
+        return ('Filters: "fires active", "fires all", "fires 25km"/"10mi" '
+                '(max 150km).\n'
+                'Track one fire: "fireid K70597" (perimeter + movement).\n'
+                'Avalanche: "avalanche", "avalanche tomorrow", "avalanche all".\n'
+                'Coords: decimal, hemisphere or map/inReach links. Typed '
+                'coords override device location.')
+
+    def opt_out_confirmed(self) -> str:
+        """The one reply a STOP still receives. Must match the opt-out copy
+        declared in the SignalWire campaign registration verbatim."""
+        return ('TrekSafer: You are opted out and will receive no further '
+                'messages. Reply START to opt back in.')
+
+    def opt_in_confirmed(self) -> str:
+        return ('TrekSafer: You are opted back in and will receive replies '
+                'to your requests. Reply STOP to opt out.')
 
     def fire_not_found(self, term: str) -> str:
         """A fireid lookup matched nothing. Informational, so it carries no
@@ -415,6 +447,10 @@ def handle_message(message: str) -> str:
     responses = Messages()
     if _HEALTH_PATTERN.fullmatch(message):
         return responses.health(health_report())
+    if _HELP_PATTERN.fullmatch(message):
+        return responses.help()
+    if _USAGE_PATTERN.fullmatch(message):
+        return responses.usage()
 
     parsed_data = parse_message(message)
     if not parsed_data:

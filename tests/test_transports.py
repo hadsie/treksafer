@@ -195,3 +195,105 @@ class TestCLITransport:
             # Verify UTF-8 encoding
             expected_response = "Résultat: Aucun feu\n"
             mock_writer.write.assert_called_once_with(expected_response.encode("utf-8"))
+
+
+@pytest.fixture
+def sw_transport(tmp_path, monkeypatch):
+    """A SignalWire transport wired to a throwaway opt-out database."""
+    from app.config import SignalWireConfig, get_config
+    from app.transport.signalwire import SignalWireTransport
+    monkeypatch.setattr(get_config(), 'optout_database',
+                        str(tmp_path / 'optouts.db'))
+    return SignalWireTransport(SignalWireConfig(type='signalwire', enabled=False))
+
+
+class TestSignalWireOptOut:
+    """STOP/START compliance: recorded persistently, suppression enforced in
+    the last place before a send."""
+
+    NUMBER = '+15551230001'
+
+    def test_stop_records_and_returns_only_the_confirmation(self, sw_transport):
+        from app.messages import Messages
+
+        response = sw_transport._route(self.NUMBER, 'STOP')
+
+        assert response == Messages().opt_out_confirmed()
+        assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') is None
+
+    @pytest.mark.parametrize('body', ['stop', ' Unsubscribe ', 'QUIT',
+                                      'stopall', 'End', 'cancel'])
+    def test_every_opt_out_variant_suppresses(self, sw_transport, body):
+        sw_transport._route(self.NUMBER, body)
+
+        assert sw_transport._route(self.NUMBER, 'anything at all') is None
+
+    def test_start_clears_the_opt_out(self, sw_transport):
+        from app.messages import Messages
+        sw_transport._route(self.NUMBER, 'STOP')
+
+        response = sw_transport._route(self.NUMBER, 'START')
+
+        assert response == Messages().opt_in_confirmed()
+        with patch('app.transport.signalwire.safe_handle_message',
+                   return_value='OK'):
+            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == 'OK'
+
+    def test_stop_inside_a_request_is_not_an_opt_out(self, sw_transport):
+        with patch('app.transport.signalwire.safe_handle_message',
+                   return_value='OK'):
+            assert sw_transport._route(
+                self.NUMBER, 'please stop the fires (50.5, -121.0)') == 'OK'
+            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == 'OK'
+
+    def test_suppression_bypasses_the_pipeline_entirely(self, sw_transport):
+        sw_transport._route(self.NUMBER, 'STOP')
+
+        with patch('app.transport.signalwire.safe_handle_message') as pipeline:
+            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') is None
+
+        pipeline.assert_not_called()
+
+    def test_unrecordable_opt_out_is_not_confirmed(self, sw_transport, monkeypatch):
+        import sqlite3
+        from app.messages import Messages
+        monkeypatch.setattr('app.transport.signalwire.optout.opt_out',
+                            Mock(side_effect=sqlite3.Error('locked')))
+
+        response = sw_transport._route(self.NUMBER, 'STOP')
+
+        assert response == Messages().system_error()
+
+    def test_failed_check_does_not_block_information(self, sw_transport, monkeypatch, caplog):
+        import logging
+        import sqlite3
+        monkeypatch.setattr('app.transport.signalwire.optout.is_opted_out',
+                            Mock(side_effect=sqlite3.Error('locked')))
+
+        with patch('app.transport.signalwire.safe_handle_message',
+                   return_value='OK'), caplog.at_level(logging.ERROR):
+            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == 'OK'
+
+        assert 'Opt-out store unavailable' in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_opted_out_number_gets_no_send(self, sw_transport):
+        sw_transport._route(self.NUMBER, 'STOP')
+        sw_transport._client = AsyncMock()
+        event = Mock(from_number=self.NUMBER, body='fires (50.5, -121.0)')
+
+        await sw_transport._on_message(event)
+
+        sw_transport._client.send_message.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stop_confirmation_is_sent(self, sw_transport):
+        from app.messages import Messages
+        sw_transport._client = AsyncMock()
+        event = Mock(from_number=self.NUMBER, body='STOP')
+
+        await sw_transport._on_message(event)
+
+        kwargs = sw_transport._client.send_message.call_args.kwargs
+        assert kwargs['body'] == Messages().opt_out_confirmed()
+        assert kwargs['to_number'] == self.NUMBER

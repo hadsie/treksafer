@@ -442,6 +442,46 @@ class TestLookupEnrichmentRendering:
         assert line == 'Edge: moved ~8km E in the last 3d'
 
 
+class TestServiceKeywords:
+    """HELP/INFO and USAGE/EXAMPLES answer only as the whole message."""
+
+    @pytest.mark.parametrize('message', ['help', 'HELP', ' Info ', '\nhelp\n'])
+    def test_help_keyword_returns_help(self, message):
+        assert handle_message(message) == Messages().help()
+
+    def test_help_copy_matches_campaign_registration(self):
+        """The declared help copy and the app's must never drift apart."""
+        assert Messages().help() == (
+            'TrekSafer: Wildfire & avalanche info. Text GPS coordinates '
+            '(e.g. fires (49.2, -123.1)) to get a report. '
+            'https://treksafer.com. Reply STOP to opt out.')
+
+    def test_help_fits_one_sms_segment(self):
+        assert Messages()._message_length(Messages().help()) <= 160
+
+    @pytest.mark.parametrize('message', ['usage', 'EXAMPLES', ' Usage '])
+    def test_usage_keyword_returns_guide(self, message):
+        assert handle_message(message) == Messages().usage()
+
+    def test_keyword_replies_fit_two_sms_segments(self):
+        for text in (Messages().help(), Messages().usage(),
+                     Messages().opt_out_confirmed(), Messages().opt_in_confirmed()):
+            assert Messages()._message_length(text) <= 306
+
+    def test_keyword_inside_request_is_not_hijacked(self):
+        with patch('app.messages.get_aqi', return_value=None):
+            response = handle_message('help fires (50.5, -121.0)')
+
+        assert response != Messages().help()
+        assert 'fires' in response.lower() or 'Fire' in response
+
+    @pytest.mark.parametrize('message', ['helpful', 'information', 'usages'])
+    def test_longer_words_are_not_keywords(self, message):
+        response = handle_message(message)
+
+        assert response not in (Messages().help(), Messages().usage())
+
+
 class TestHealthMessage:
     """The message "health" (any case, surrounding whitespace, nothing else)
     returns a health summary on any transport."""
