@@ -58,6 +58,9 @@ def layer_conditions(data_files, now: datetime) -> dict:
         realtime = data_file.realtime
         if not (realtime and realtime.enabled):
             continue
+        # No published lastEditDate, so skip check.
+        if realtime.layer_stale_hours is None:
+            continue
         layers = {"points": realtime.points_url,
                   "perimeters": [realtime.perimeters_url]}
         for kind, urls in layers.items():

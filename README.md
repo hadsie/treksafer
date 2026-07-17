@@ -199,7 +199,7 @@ All options on a source's `realtime:` block:
 | `timezone` | no | IANA zone for parsing zoneless local timestamp strings (AB) |
 | `points_where` / `perimeters_where` | no | Attribute filters, e.g. excluding regions served by a dedicated source |
 | `cache_timeout` | no | Realtime response cache in seconds (default 900) |
-| `layer_stale_hours` | no | Monitor alert threshold for a frozen upstream layer (default 24) |
+| `layer_stale_hours` | no | Monitor alert threshold for a frozen upstream layer (default 24) | `null` disables the check for servers that don't publish lastEditDate |
 | `enrichment` | no | Per-fire API (`url` template over `key_fields` placeholders + `updated_field`) for data the layers lack, used on `fireid` lookups (BC's update time) |
 | `enabled` | no | Realtime toggle; when false the source serves from the database |
 

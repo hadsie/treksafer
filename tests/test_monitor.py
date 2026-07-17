@@ -82,6 +82,18 @@ class TestLayerConditions:
 
         assert 'no lastEditDate' in self.check()
 
+    @responses.activate
+    def test_null_stale_hours_skips_the_source_entirely(self):
+        """A source whose server publishes no lastEditDate (ON) opts out
+        via layer_stale_hours: null. No mocked responses are registered,
+        so any metadata request here would fail the test."""
+        from app.config import get_config
+        on = next(d for d in get_config().data if d.location == 'ON')
+        on = on.model_copy(deep=True)
+        on.realtime.enabled = True
+
+        assert monitor.layer_conditions([on], NOW) == {}
+
 
 class TestTransitions:
     def test_new_problem_trips_once(self):
