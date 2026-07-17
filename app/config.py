@@ -142,7 +142,7 @@ class RealtimeFireConfig(BaseModel):
     perimeters_where: str = "1=1"
     # The monitor alerts when the source's ArcGIS layers haven't been
     # republished (layer metadata lastEditDate) within this many hours.
-    layer_stale_hours: int = 24
+    layer_stale_hours: Optional[int] = 24
     # Per-fire enrichment API for data the layers lack (e.g. BC's last-update
     # time, which only its incident system publishes).
     enrichment: Optional[EnrichmentConfig] = None

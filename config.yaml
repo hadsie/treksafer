@@ -155,6 +155,8 @@ data:
       key_fields: [FIRE_YEAR, FIRE_NAME]
       year_field: FIRE_YEAR
       cache_timeout: 900
+      # The LIO servers (classic ArcGIS Server) don't publish lastEditDate.
+      layer_stale_hours: null
       mapping:
         Fire: FIRE_NAME
         Location: DISTRICT_NAME
