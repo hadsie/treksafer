@@ -212,6 +212,81 @@ class TestDMSCoordinates:
         assert result["coords"] != (49.12, -123.77)
         assert result["coords"] == pytest.approx((49.2077778, -123.1186111))
 
+    def test_bare_dms_space_separated(self):
+        """DMS with no punctuation marks at all."""
+        result = parse_message("50 34 56 N, 122 05 28 W")
+        assert result["coords"] == pytest.approx((50.5822222, -122.0911111))
+
+    def test_bare_ddm_space_separated(self):
+        """Decimal minutes with no punctuation marks."""
+        result = parse_message("50 34.935 N, 122 05.468 W")
+        assert result["coords"] == pytest.approx((50.58225, -122.0911333))
+
+    def test_bare_dms_no_comma(self):
+        result = parse_message("fires 50 34 56 N 122 05 28 W")
+        assert result["coords"] == pytest.approx((50.5822222, -122.0911111))
+
+    def test_bare_dms_hemisphere_first(self):
+        result = parse_message("N 50 34 56, W 122 05 28")
+        assert result["coords"] == pytest.approx((50.5822222, -122.0911111))
+
+    def test_bare_minutes_over_59_rejected(self):
+        assert parse_message("50 60 12 N, 122 05 28 W") is None
+
+    def test_bare_pair_not_pulled_from_longer_number(self):
+        """Digits belonging to a longer number never seed a bare match."""
+        assert parse_message("1250 34 56 N, 122 05 28 W") is None
+
+    def test_comma_separated_prose_numbers_not_coordinates(self):
+        """Bare numbers only chain through whitespace, so list-style prose
+        with commas between the numbers stays unmatched."""
+        assert parse_message("party of 2, 5 N, then 3, 12 W to the lake") is None
+
+    def test_bare_pair_after_unrelated_number_rejected(self):
+        """A bare pair preceded by another free-standing number is an
+        ambiguous digit run: there is no telling which number is degrees."""
+        assert parse_message("elev 2100 50 34 56 N, 122 05 28 W") is None
+
+    def test_marked_pair_after_unrelated_number_parses(self):
+        """Degree marks make the format explicit, so a preceding number
+        does not poison the match the way it does for a bare pair."""
+        result = parse_message("elev 2100 49°12′28″ N, 123°7′7″ W")
+        assert result["coords"] == pytest.approx((49.2077778, -123.1186111))
+
+
+class TestLatLonLabelFormat:
+    """Test the labelled format inReach emails append: 'Lat X Lon Y'."""
+
+    def test_inreach_email_line(self):
+        message = "Alex Fable sent this message from: Lat 50.123456 Lon -89.654321"
+        result = parse_message(message)
+        assert result["coords"] == (50.123456, -89.654321)
+
+    def test_spelled_out_with_comma(self):
+        result = parse_message("latitude 50.1, longitude -89.7")
+        assert result["coords"] == (50.1, -89.7)
+
+    def test_colons_and_long(self):
+        result = parse_message("Lat: 50.5 Long: -120.3")
+        assert result["coords"] == (50.5, -120.3)
+
+    def test_integers_accepted_with_labels(self):
+        """The labels disambiguate, so integer values parse here even though
+        the plain decimal-pair path requires a decimal point."""
+        result = parse_message("lat 50 lon -120")
+        assert result["coords"] == (50.0, -120.0)
+
+    def test_typed_coords_beat_appended_lat_lon_line(self):
+        message = "(49.2827, -123.1207) sent from: Lat 50.123456 Lon -89.654321"
+        result = parse_message(message)
+        assert result["coords"] == (49.2827, -123.1207)
+
+    def test_lon_prefix_of_word_not_matched(self):
+        assert parse_message("lat 50.1 london -89.7") is None
+
+    def test_out_of_range_latitude_rejected(self):
+        assert parse_message("Lat 95.5 Lon -89.6") is None
+
 
 class TestCoordinateValidation:
     """Test coordinate boundary validation."""
