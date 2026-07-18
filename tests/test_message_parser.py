@@ -254,6 +254,51 @@ class TestDMSCoordinates:
         assert result["coords"] == pytest.approx((49.2077778, -123.1186111))
 
 
+class TestAmbiguousTextRejection:
+    """Coordinate-shaped text that must NOT parse.
+
+    Every message here contains numbers and letters arranged closely enough
+    to a supported format that a sloppy pattern would extract coordinates.
+    Refusing (None) is the required behavior: a wrong location is worse
+    than asking the user to resend.
+    """
+
+    @pytest.mark.parametrize("message", [
+        # A compass heading: '350' must not shed its 3 and read as 50 N.
+        "heading 350 N, 120 W",
+        # A time of day followed by a direction word.
+        "meet at 5 30 pm N of the junction",
+        # Counts and distances with direction letters.
+        "2 fires 30 km N, 3 fires 15 km W",
+        # Directions in prose: single numbers before N/W, words between.
+        "I'll be 5 N of the 12 W junction",
+        # A phone number ending near a direction letter.
+        "call 250 555 0134 N side of the lake",
+        # Latitude half only: half a coordinate cannot locate anyone.
+        "50 34 56 N",
+        # Three-digit seconds, hemisphere-first: 561 is not 56 plus noise.
+        "N 50 34 561, W 122 05 28",
+        # Three-digit seconds at the very end of the match.
+        "N 50 34 56, W 122 05 289",
+        # NMEA-style compact ddmm.mm: unsupported, must not read as 49.12.
+        "4912.28N 12205.47W",
+        # 'flat' is not a Lat label.
+        "flat 50.1 long -120.5",
+        # 'latest'/'along' are not Lat/Lon labels.
+        "the latest 50.2 along -120.3",
+        # Four-digit value after a lon label: 5000 is not 500 plus noise.
+        "lat 12 lon 5000",
+        # Labelled but impossible longitude.
+        "Lat 50.1 Lon -189.7",
+        # The N in 'ON' must not start a hemisphere-first match.
+        "CHECK POINT ON 50 34 12 W 122 05 28",
+        # Numbered prose that mimics the bare pair shape around commas.
+        "site 2 sector 5 N, area 3 zone 12 W",
+    ])
+    def test_ambiguous_text_finds_no_coordinates(self, message):
+        assert parse_message(message) is None
+
+
 class TestLatLonLabelFormat:
     """Test the labelled format inReach emails append: 'Lat X Lon Y'."""
 

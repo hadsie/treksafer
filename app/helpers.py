@@ -20,14 +20,14 @@ _LON = r'-?\d{1,3}(?:\.\d+)?'   # up to ±180
 _DEG_HEMI_PATTERNS = [
     # 1) "50.58225° N, 122.09114° W"
     re.compile(
-        r'(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lat_dir>[NS])\s*[,;]?\s*'
-        r'(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lon_dir>[EW])',
+        r'(?<![\d.])(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lat_dir>[NS])\s*[,;]?\s*'
+        r'(?<![\d.])(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lon_dir>[EW])',
         re.IGNORECASE | re.UNICODE
     ),
     # 2) "N 50.58225°, W 122.09114°"
     re.compile(
-        r'(?P<lat_dir>[NS])\s*(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*[,;]?\s*'
-        r'(?P<lon_dir>[EW])\s*(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)\s*[°º]?',
+        r'\b(?P<lat_dir>[NS])\s*(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*[,;]?\s*'
+        r'\b(?P<lon_dir>[EW])\s*(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)(?!\.?\d)\s*[°º]?',
         re.IGNORECASE | re.UNICODE
     ),
 ]
