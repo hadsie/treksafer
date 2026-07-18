@@ -20,10 +20,11 @@ _SMS_LIMIT = 160
 # can include a link and coordinates.
 _HEALTH_PATTERN = re.compile(r'\s*health\s*', re.IGNORECASE)
 
-# Service-information keywords, answered only when they are the whole
-# message so "help" inside a real request never hijacks it.
+# Help answers only when it is the whole message, so "help" inside a real
+# request never hijacks it. Usage answers all requests when `usage` is
+# the first word in the message.
 _HELP_PATTERN = re.compile(r'\s*(help|info)\s*', re.IGNORECASE)
-_USAGE_PATTERN = re.compile(r'\s*(usage|examples)\s*', re.IGNORECASE)
+_USAGE_PATTERN = re.compile(r'\s*(usage|examples)\b', re.IGNORECASE)
 
 class Messages:
     @staticmethod
@@ -47,21 +48,18 @@ class Messages:
         return 'Fire data is temporarily unavailable for your area. Try again later.'
 
     def help(self) -> str:
-        """The HELP/INFO reply, one SMS segment. Must match the help copy
-        declared in the SignalWire campaign registration verbatim."""
+        """The HELP/INFO reply. Must match the help copy declared in the SMS transport
+        messaging campaign registration verbatim."""
         return ('TrekSafer: Wildfire & avalanche info. Text GPS coordinates '
                 '(e.g. fires (49.2, -123.1)) to get a report. '
                 'https://treksafer.com. Reply STOP to opt out.')
 
     def usage(self) -> str:
-        """The USAGE/EXAMPLES reply: the advanced guide, capped at two SMS
-        segments for satellite users."""
-        return ('Filters: "fires active", "fires all", "fires 25km"/"10mi" '
-                '(max 150km).\n'
-                'Track one fire: "fireid K70597" (perimeter + movement).\n'
-                'Avalanche: "avalanche", "avalanche tomorrow", "avalanche all".\n'
-                'Coords: decimal, hemisphere or map/inReach links. Typed '
-                'coords override device location.')
+        """The USAGE/EXAMPLES reply: the advanced guide."""
+        return ('Keyword: fire or avalanche w/ coords\n'
+                'Filters: active|all|25km|10mi (max 150km)\n'
+                'fireid K70597 - single fire\n'
+                'Coords: (lat,lon) or map link')
 
     def opt_out_confirmed(self) -> str:
         """The one reply a STOP still receives. Must match the opt-out copy
@@ -449,7 +447,7 @@ def handle_message(message: str) -> str:
         return responses.health(health_report())
     if _HELP_PATTERN.fullmatch(message):
         return responses.help()
-    if _USAGE_PATTERN.fullmatch(message):
+    if _USAGE_PATTERN.match(message):
         return responses.usage()
 
     parsed_data = parse_message(message)

@@ -463,10 +463,26 @@ class TestServiceKeywords:
     def test_usage_keyword_returns_guide(self, message):
         assert handle_message(message) == Messages().usage()
 
-    def test_keyword_replies_fit_two_sms_segments(self):
+    @pytest.mark.parametrize('message', [
+        'usage (49.2, -123.1)',
+        'Usage inreachlink.com/FAKE123',
+        ' usage\n(49.2, -123.1)',
+    ])
+    def test_usage_at_start_wins_over_appended_location(self, message):
+        """Satellite messengers append their location to every message, so
+        usage matches at the start of the message, unlike the other keywords."""
+        assert handle_message(message) == Messages().usage()
+
+    def test_usage_elsewhere_in_a_request_is_not_a_keyword(self):
+        with patch('app.messages.get_aqi', return_value=None):
+            response = handle_message('fires usage (50.5, -121.0)')
+
+        assert response != Messages().usage()
+
+    def test_keyword_replies_fit_one_sms_segment(self):
         for text in (Messages().help(), Messages().usage(),
                      Messages().opt_out_confirmed(), Messages().opt_in_confirmed()):
-            assert Messages()._message_length(text) <= 306
+            assert Messages()._message_length(text) <= 160
 
     def test_keyword_inside_request_is_not_hijacked(self):
         with patch('app.messages.get_aqi', return_value=None):

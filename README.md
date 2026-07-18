@@ -98,7 +98,7 @@ Send **`fireid <number>`** to monitor a specific fire, e.g. `fireid K70597`. Inc
 - **`usage`** or **`examples`** - Advanced usage: filters, fire tracking, avalanche options, coordinate formats.
 - **`stop`** / **`start`** - Opt out of, or back in to, SMS replies (SMS only). An opted-out number receives nothing until it opts back in.
 
-Keywords only apply when they are the entire message, so they never override a real request.
+Keywords only apply when they are the entire message, so they never override a real request, except `usage`, which will always return usage information if it's the first word in the message.
 
 ### Examples
 ```
@@ -195,7 +195,7 @@ All options on a source's `realtime:` block:
 | `join_field` / `perimeter_fire_field` | field join | Fire-number columns on each layer (they may be named differently) |
 | `transforms` | no | Value conversions by mapping key (`epoch_ms`, `iso_datetime`, `acres_to_hectares`, `wfigs_status`) |
 | `year_field` | no | Synthesized fetch-year column for annually recycled fire numbers |
-| `updated_field` | no | Per-fire update timestamp column; gates database snapshots (without it, snapshots gate on field comparison) and feeds the `fireid` reply's "As of" age |
+| `updated_field` | no | Per-fire update timestamp column |
 | `timezone` | no | IANA zone for parsing zoneless local timestamp strings (AB) |
 | `points_where` / `perimeters_where` | no | Attribute filters, e.g. excluding regions served by a dedicated source |
 | `cache_timeout` | no | Realtime response cache in seconds (default 900) |
