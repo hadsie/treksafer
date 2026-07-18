@@ -159,6 +159,60 @@ class TestHemisphereCoordinates:
         assert result["coords"] == (33.11111, -116.22222)
 
 
+class TestDMSCoordinates:
+    """Test degrees-minutes-seconds and degrees-decimal-minutes formats."""
+
+    def test_unicode_primes(self):
+        """DMS with Unicode prime marks and spaced hemisphere letters."""
+        result = parse_message("49°12′28″ N  123°7′7″ W")
+        assert result["coords"] == pytest.approx((49.2077778, -123.1186111))
+
+    def test_google_maps_copy_format(self):
+        """Google Maps copy-paste: ASCII quotes, decimal seconds, no spaces."""
+        result = parse_message("fires 49°12'35.0\"N 121°04'45.8\"W")
+        assert result["coords"] == pytest.approx((49.2097222, -121.0793889))
+
+    def test_decimal_minutes_no_seconds(self):
+        """Degrees decimal minutes, Garmin's on-screen position format."""
+        result = parse_message("49°12.467' N, 123°6.317' W")
+        assert result["coords"] == pytest.approx((49.2077833, -123.1052833))
+
+    def test_hemisphere_before_degrees(self):
+        """Hemisphere letters leading each coordinate."""
+        result = parse_message("N 49°12′28″ W 123°7′7″")
+        assert result["coords"] == pytest.approx((49.2077778, -123.1186111))
+
+    def test_curly_quotes(self):
+        """Curly quote marks from phone keyboard autocorrect."""
+        result = parse_message("49°12’28”N 123°7’7”W")
+        assert result["coords"] == pytest.approx((49.2077778, -123.1186111))
+
+    def test_lowercase_south_east(self):
+        result = parse_message("33°30'15\"s 18°25'45\"e")
+        assert result["coords"] == pytest.approx((-33.5041667, 18.4291667))
+
+    def test_minutes_over_59_rejected(self):
+        assert parse_message("49°72'10\"N 123°7'7\"W") is None
+
+    def test_seconds_over_59_rejected(self):
+        assert parse_message("49°12'80\"N 123°7'7\"W") is None
+
+    def test_typed_dms_beats_appended_device_location(self):
+        """A typed DMS pair outranks the trailing decimal pair the inReach
+        gateway appends (the device's own location)."""
+        message = ("Fires 49°12'35.0\"N 121°04'45.8\"W "
+                   "inreachlink.com/ABC123XYZ  (-43.51234, 172.61234)")
+        result = parse_message(message)
+        assert result["coords"] == pytest.approx((49.2097222, -121.0793889))
+
+    def test_dms_not_misread_as_decimal_degrees(self):
+        """A DMS pair yields its converted value, never the raw '49.12'-style
+        fragments a decimal parser could pull out of it."""
+        result = parse_message("49°12′28″ N, 123°7′7″ W")
+        assert result["coords"] != (49.12, -123.77)
+        assert result["coords"] == pytest.approx((49.2077778, -123.1186111))
+
+
 class TestCoordinateValidation:
     """Test coordinate boundary validation."""
 

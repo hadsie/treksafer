@@ -32,6 +32,41 @@ _DEG_HEMI_PATTERNS = [
     ),
 ]
 
+def _dms_part(prefix: str, deg_max: int) -> str:
+    """Regex for one DMS coordinate: degrees, minutes, optional seconds.
+
+    Decimal minutes with no seconds (Garmin's on-screen format) and decimal
+    seconds (Google Maps copy-paste) both match. Minute and second marks
+    accept the ASCII quotes, Unicode primes, and curly quotes that phone
+    keyboards produce.
+    """
+    return (
+        rf'(?P<{prefix}_deg>\d{{1,{deg_max}}})\s*[°º]\s*'
+        rf'(?P<{prefix}_min>[0-5]?\d(?:\.\d+)?)\s*[\'′’‘]\s*'
+        rf'(?:(?P<{prefix}_sec>[0-5]?\d(?:\.\d+)?)\s*["″”“]\s*)?'
+    )
+
+_DMS_PATTERNS = [
+    # 3) 49°12′28″ N, 123°7′7″ W / 49°12'35.0"N 121°04'45.8"W / 49°12.467' N ...
+    re.compile(
+        _dms_part('lat', 2) + r'(?P<lat_dir>[NS])\s*[,;]?\s*'
+        + _dms_part('lon', 3) + r'(?P<lon_dir>[EW])',
+        re.IGNORECASE
+    ),
+    # 4) N 49°12′28″, W 123°7′7″
+    re.compile(
+        r'(?P<lat_dir>[NS])\s*' + _dms_part('lat', 2) + r'[,;]?\s*'
+        r'(?P<lon_dir>[EW])\s*' + _dms_part('lon', 3),
+        re.IGNORECASE
+    ),
+]
+
+def _dms_degrees(m: re.Match, prefix: str) -> float:
+    """Decimal degrees from a _dms_part match's deg/min/sec groups."""
+    value = float(m.group(f'{prefix}_deg')) + float(m.group(f'{prefix}_min')) / 60
+    sec = m.group(f'{prefix}_sec')
+    return value + float(sec) / 3600 if sec else value
+
 def quoted(text) -> str:
     """Prefixed actual message content with '> '."""
     return '\n'.join(f"> {line}" for line in (text or '').splitlines()) or '> '
@@ -295,6 +330,8 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
         - Apple Maps links
         - Google Maps links
         - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
+        - Degrees minutes seconds: 49°12'35.0"N 121°04'45.8"W
+        - Degrees decimal minutes: 49°12.467' N, 123°6.317' W
 
     Every format is matched across the whole message and the earliest valid
     match wins, so coordinates a user typed take precedence over the
@@ -328,6 +365,14 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
         for m in pattern.finditer(message):
             lat = _apply_hemisphere(float(m.group('lat')), m.group('lat_dir'), for_lat=True)
             lon = _apply_hemisphere(float(m.group('lon')), m.group('lon_dir'), for_lat=False)
+            if _valid_coords(lat, lon):
+                candidates.append((m.start(), lat, lon))
+
+    # Degrees minutes seconds / degrees decimal minutes.
+    for pattern in _DMS_PATTERNS:
+        for m in pattern.finditer(message):
+            lat = _apply_hemisphere(_dms_degrees(m, 'lat'), m.group('lat_dir'), for_lat=True)
+            lon = _apply_hemisphere(_dms_degrees(m, 'lon'), m.group('lon_dir'), for_lat=False)
             if _valid_coords(lat, lon):
                 candidates.append((m.start(), lat, lon))
 
