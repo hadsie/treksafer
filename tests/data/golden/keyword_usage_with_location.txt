@@ -1,0 +1,4 @@
+Keyword: fire or avalanche w/ coords
+Filters: active|all|25km|10mi (max 150km)
+fireid K70597 - single fire
+Coords: (lat,lon) or map link

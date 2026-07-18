@@ -1,0 +1,3 @@
+AQI: 42
+
+No fires reported within 50km of your location (54.50000, -125.50000).
