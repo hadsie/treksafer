@@ -82,8 +82,9 @@ By default, fires within 50km of your GPS location are returned. If you’re in 
 ### Coordinate Formats Supported
 - Decimal degrees: `(49.123, -123.456)`
 - Hemisphere notation: `50.58225° N, 122.09114° W`
-- Degrees minutes seconds: `49°12'35.0"N 121°04'45.8"W` (Google Maps copy-paste, straight or curly quote marks)
-- Degrees decimal minutes: `49°12.467' N, 123°6.317' W` (Garmin's on-screen format)
+- Degrees minutes seconds: `49°12'35.0"N 121°04'45.8"W` (Google Maps copy-paste, straight or curly quote marks) or bare `50 34 56 N, 122 05 28 W`
+- Degrees decimal minutes: `49°12.467' N, 123°6.317' W` (Garmin's on-screen format) or bare `50 34.935 N, 122 05.468 W`
+- Labelled decimals: `Lat 50.123456 Lon -89.654321` (inReach email format; `latitude`/`longitude` and `long` also work)
 - Apple Maps and Google Maps share links
 - inReach / ZOLEO share links, resolved to the device's location
 - InReach automatic format: `fires (lat, lon)`

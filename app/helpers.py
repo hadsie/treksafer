@@ -20,14 +20,14 @@ _LON = r'-?\d{1,3}(?:\.\d+)?'   # up to ±180
 _DEG_HEMI_PATTERNS = [
     # 1) "50.58225° N, 122.09114° W"
     re.compile(
-        r'(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lat_dir>[NS])\s*[,;]?\s*'
-        r'(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lon_dir>[EW])',
+        r'(?<![\d.])(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lat_dir>[NS])\s*[,;]?\s*'
+        r'(?<![\d.])(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)\s*[°º]?\s*(?P<lon_dir>[EW])',
         re.IGNORECASE | re.UNICODE
     ),
     # 2) "N 50.58225°, W 122.09114°"
     re.compile(
-        r'(?P<lat_dir>[NS])\s*(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*[,;]?\s*'
-        r'(?P<lon_dir>[EW])\s*(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)\s*[°º]?',
+        r'\b(?P<lat_dir>[NS])\s*(?P<lat>-?\d{1,2}(?:\.\d{1,8})?)\s*[°º]?\s*[,;]?\s*'
+        r'\b(?P<lon_dir>[EW])\s*(?P<lon>-?\d{1,3}(?:\.\d{1,8})?)(?!\.?\d)\s*[°º]?',
         re.IGNORECASE | re.UNICODE
     ),
 ]
@@ -35,28 +35,35 @@ _DEG_HEMI_PATTERNS = [
 def _dms_part(prefix: str, deg_max: int) -> str:
     """Regex for one DMS coordinate: degrees, minutes, optional seconds.
 
-    Decimal minutes with no seconds (Garmin's on-screen format) and decimal
-    seconds (Google Maps copy-paste) both match. Minute and second marks
-    accept the ASCII quotes, Unicode primes, and curly quotes that phone
-    keyboards produce.
+    - Decimal minutes with no seconds (Garmin's on-screen format)
+    - Decimal seconds (Google Maps copy-paste).
+
+    Each separator is a degree/minute/second mark:
+     - ASCII quotes
+     - Unicode primes
+     - Curly quotes
+     - Plain whitespace ('50 34 56 N')
     """
     return (
-        rf'(?P<{prefix}_deg>\d{{1,{deg_max}}})\s*[°º]\s*'
-        rf'(?P<{prefix}_min>[0-5]?\d(?:\.\d+)?)\s*[\'′’‘]\s*'
-        rf'(?:(?P<{prefix}_sec>[0-5]?\d(?:\.\d+)?)\s*["″”“]\s*)?'
+        rf'(?<![\d.])(?P<{prefix}_deg>\d{{1,{deg_max}}})(?:\s*[°º]\s*|\s+)'
+        rf'(?P<{prefix}_min>[0-5]?\d(?:\.\d+)?)(?:\s*[\'′’‘]\s*|\s+)'
+        rf'(?:(?P<{prefix}_sec>[0-5]?\d(?:\.\d+)?)\s*["″”“]?\s*)?'
     )
 
 _DMS_PATTERNS = [
-    # 3) 49°12′28″ N, 123°7′7″ W / 49°12'35.0"N 121°04'45.8"W / 49°12.467' N ...
+    # 3) 49°12′28″ N, 123°7′7″ W / 49°12'35.0"N 121°04'45.8"W / 49°12.467' N
+    #    / 50 34 56 N, 122 05 28 W
     re.compile(
         _dms_part('lat', 2) + r'(?P<lat_dir>[NS])\s*[,;]?\s*'
         + _dms_part('lon', 3) + r'(?P<lon_dir>[EW])',
         re.IGNORECASE
     ),
-    # 4) N 49°12′28″, W 123°7′7″
+    # 4) N 49°12′28″, W 123°7′7″ / N 50 34 56, W 122 05 28. The trailing
+    #    lookahead keeps the seconds from matching a fragment of a longer
+    #    number, which patterns ending on a hemisphere letter can't do.
     re.compile(
-        r'(?P<lat_dir>[NS])\s*' + _dms_part('lat', 2) + r'[,;]?\s*'
-        r'(?P<lon_dir>[EW])\s*' + _dms_part('lon', 3),
+        r'\b(?P<lat_dir>[NS])\s*' + _dms_part('lat', 2) + r'[,;]?\s*'
+        r'\b(?P<lon_dir>[EW])\s*' + _dms_part('lon', 3) + r'(?!\.?\d)',
         re.IGNORECASE
     ),
 ]
@@ -66,6 +73,26 @@ def _dms_degrees(m: re.Match, prefix: str) -> float:
     value = float(m.group(f'{prefix}_deg')) + float(m.group(f'{prefix}_min')) / 60
     sec = m.group(f'{prefix}_sec')
     return value + float(sec) / 3600 if sec else value
+
+def _ambiguous_bare_run(message: str, m: re.Match) -> bool:
+    """True when a mark-free DMS match sits mid-run of bare numbers.
+
+    In '50 60 12 N' the regex would happily read 60°12', but there's no way
+    to tell which number the sender meant as degrees, so don't guess: drop
+    the candidate. Any degree/minute/second mark makes the format explicit,
+    and then a number sitting in front of the match is harmless.
+    """
+    return (re.search(r'[°º\'′’‘"″”“]', m.group()) is None
+            and re.search(r'[\d.]\s+$', message[:m.start()]) is not None)
+
+# 5) "Lat 50.123456 Lon -89.654321" (inReach emails append this), and the
+#    spelled-out "latitude 50.1, longitude -89.7". The labels remove any
+#    ambiguity, so integer values are accepted here unlike the plain
+#    decimal-pair path.
+_LAT_LON_RE = re.compile(
+    r'\blat(?:itude)?\b[.:]?\s*(?P<lat>-?\d{1,2}(?:\.\d+)?)[,;]?\s*'
+    r'\blon(?:g|gitude)?\b[.:]?\s*(?P<lon>-?\d{1,3}(?:\.\d+)?)(?!\.?\d)',
+    re.IGNORECASE)
 
 def quoted(text) -> str:
     """Prefixed actual message content with '> '."""
@@ -330,8 +357,9 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
         - Apple Maps links
         - Google Maps links
         - Degrees with hemisphere letters: 50.58225° N, 122.09114° W
-        - Degrees minutes seconds: 49°12'35.0"N 121°04'45.8"W
-        - Degrees decimal minutes: 49°12.467' N, 123°6.317' W
+        - Degrees minutes seconds: 49°12'35.0"N 121°04'45.8"W or 50 34 56 N, 122 05 28 W
+        - Degrees decimal minutes: 49°12.467' N, 123°6.317' W or 50 34.935 N, 122 05.468 W
+        - Labelled decimals: Lat 50.123456 Lon -89.654321
 
     Every format is matched across the whole message and the earliest valid
     match wins, so coordinates a user typed take precedence over the
@@ -371,10 +399,18 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
     # Degrees minutes seconds / degrees decimal minutes.
     for pattern in _DMS_PATTERNS:
         for m in pattern.finditer(message):
+            if _ambiguous_bare_run(message, m):
+                continue
             lat = _apply_hemisphere(_dms_degrees(m, 'lat'), m.group('lat_dir'), for_lat=True)
             lon = _apply_hemisphere(_dms_degrees(m, 'lon'), m.group('lon_dir'), for_lat=False)
             if _valid_coords(lat, lon):
                 candidates.append((m.start(), lat, lon))
+
+    # Labelled decimal degrees ("Lat 50.123456 Lon -89.654321").
+    for m in _LAT_LON_RE.finditer(message):
+        lat, lon = float(m.group('lat')), float(m.group('lon'))
+        if _valid_coords(lat, lon):
+            candidates.append((m.start(), lat, lon))
 
     # Plain decimal pairs. Coordinates must include a decimal point: every
     # satellite messenger and map share emits decimals, so requiring them
