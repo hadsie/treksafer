@@ -1,0 +1,9 @@
+# Tunable thresholds governing what fire responses include. Structural
+# configuration (data sources, transports, paths) stays in config.yaml.
+# Values support the same ${VAR:-default} placeholder syntax.
+
+# The wind line adds the forecast peak ("rising to 65") only when the
+# 12-hour peak gust exceeds current gusts by this margin (km/h). Small
+# enough to catch an evening blow-up while the afternoon is calm, large
+# enough that ordinary forecast noise doesn't lengthen every reply.
+wind_peak_gust_margin: 15

@@ -25,8 +25,11 @@ fire_season_end: "08-15"
 # Avalanche forecast settings
 avalanche_distance_buffer: 5  # Distance buffer for avalanche provider selection (km)
 
-# Include the AQI at the specified coordinates in the response.
+# Include the AQI in the fire responses.
 include_aqi: true
+
+# Include current wind conditions in fire responses.
+include_wind: true
 
 # Fire database: snapshot history and the fallback for API outages.
 database: "${TREKSAFER_DATABASE:-data/fires.db}"

@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.messaging.fire import FireMessages
+from app.weather import WindReport
 
 
 def mock_fire(**overrides):
@@ -276,3 +277,22 @@ class TestLookupEnrichmentRendering:
                 'since': datetime.now(timezone.utc) - timedelta(hours=80)}
         line = FireMessages().fire_edge(edge)
         assert line == 'Edge: moved ~8km E in the last 3d'
+
+
+class TestWindLine:
+    """Test the wind conditions line."""
+
+    def test_current_conditions_when_peak_is_similar(self):
+        report = WindReport(speed=20, gusts=40, direction="SW", peak_gust=50)
+        assert FireMessages.wind(report) == "Wind: 20km/h from SW, gusts 40"
+
+    def test_peak_gust_appended_when_meaningfully_worse(self):
+        report = WindReport(speed=20, gusts=40, direction="SW", peak_gust=65)
+        assert FireMessages.wind(report) == "Wind: 20km/h from SW, gusts 40 rising to 65"
+
+    def test_peak_threshold_boundary(self):
+        """The peak shows at 15km/h over current gusts, not below."""
+        at = WindReport(speed=10, gusts=20, direction="N", peak_gust=35)
+        below = WindReport(speed=10, gusts=20, direction="N", peak_gust=34)
+        assert "rising to 35" in FireMessages.wind(at)
+        assert "rising" not in FireMessages.wind(below)

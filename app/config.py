@@ -24,6 +24,14 @@ from pydantic_settings import BaseSettings
 
 
 CONFIG_YAML = Path.cwd() / "config.yaml"
+THRESHOLDS_YAML = Path.cwd() / "thresholds.yaml"
+
+class Thresholds(BaseModel):
+    """Tunable messaging thresholds, loaded from thresholds.yaml."""
+    # Margin (km/h) over current gusts before the wind line shows the
+    # 12-hour peak gust; the trade-off is documented in thresholds.yaml.
+    wind_peak_gust_margin: int
+
 
 class SignalWireConfig(BaseModel):
     type: Literal["signalwire"]
@@ -233,6 +241,8 @@ class Settings(BaseSettings):
     fire_season_start: str = "05-15"
     fire_season_end: str = "08-15"
     include_aqi: bool = True
+    include_wind: bool = True
+    thresholds: Thresholds
 
     # Avalanche forecast configuration
     avalanche: Optional[AvalancheConfig] = None
@@ -279,10 +289,13 @@ def _expand_placeholders(text: str) -> str:
     return _PLACEHOLDER_RE.sub(repl, text)
 
 def _yaml_defaults() -> dict[str, Any]:
-    """Return dict from config.yaml with ${VAR} placeholders expanded."""
-    raw = CONFIG_YAML.read_text()
-    raw = _expand_placeholders(raw)
-    return yaml.safe_load(raw) or {}
+    """Return the merged dicts from config.yaml and thresholds.yaml
+    (under the 'thresholds' key), with ${VAR} placeholders expanded."""
+    raw = _expand_placeholders(CONFIG_YAML.read_text())
+    defaults = yaml.safe_load(raw) or {}
+    raw = _expand_placeholders(THRESHOLDS_YAML.read_text())
+    defaults['thresholds'] = yaml.safe_load(raw) or {}
+    return defaults
 
 def _load_dotenv() -> None:
     """Populate os.environ from .env.<env> if it exists."""

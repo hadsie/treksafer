@@ -1,19 +1,15 @@
 """Tests for helper utility functions.
 
-Focuses on non-messaging utilities like coordinate transformations,
-compass direction calculations, and external API integrations.
+Focuses on non-messaging utilities like coordinate transformations and
+compass direction calculations.
 """
-import pytest
-from unittest.mock import Mock, patch
 from datetime import datetime, timezone
 from shapely.geometry import Point
-from requests import RequestException
 
 from app.helpers import (
     acres_to_hectares,
     compass_direction,
     epoch_ms_to_datetime,
-    get_aqi,
     local_crs,
     local_time,
     quoted,
@@ -160,121 +156,6 @@ class TestCompassDirection:
         origin = Point(0, 0)
         far = Point(1000000, 0)  # 1000km east
         assert compass_direction(origin, far) == "E"
-
-
-class TestGetAqi:
-    """Test Air Quality Index API integration."""
-
-    @patch('app.helpers._aqi_session')
-    @patch('app.helpers.datetime')
-    def test_success_response(self, mock_datetime, mock_session):
-        mock_get = mock_session.return_value.get
-        """Successful API response returns AQI value."""
-        # Mock current time
-        mock_now = Mock()
-        mock_now.strftime.return_value = "2025-12-24T14:00"
-        mock_datetime.now.return_value = mock_now
-
-        # Mock API response
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "timezone": "America/Los_Angeles",
-            "hourly": {
-                "time": ["2025-12-24T13:00", "2025-12-24T14:00", "2025-12-24T15:00"],
-                "us_aqi": [38, 42, 45]
-            }
-        }
-        mock_get.return_value = mock_response
-
-        coords = (49.25, -123.01)
-        aqi = get_aqi(coords)
-
-        # Should return current hour's AQI
-        assert aqi == 42
-
-    @patch('app.helpers._aqi_session')
-    @patch('app.helpers.datetime')
-    def test_first_hour_in_array(self, mock_datetime, mock_session):
-        mock_get = mock_session.return_value.get
-        """Returns correct AQI when current hour is first in array."""
-        mock_now = Mock()
-        mock_now.strftime.return_value = "2025-12-24T00:00"
-        mock_datetime.now.return_value = mock_now
-
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "timezone": "America/Vancouver",
-            "hourly": {
-                "time": ["2025-12-24T00:00", "2025-12-24T01:00"],
-                "us_aqi": [25, 30]
-            }
-        }
-        mock_get.return_value = mock_response
-
-        aqi = get_aqi((50.0, -120.0))
-        assert aqi == 25
-
-    @patch('app.helpers._aqi_session')
-    @patch('app.helpers.datetime')
-    def test_last_hour_in_array(self, mock_datetime, mock_session):
-        mock_get = mock_session.return_value.get
-        """Returns correct AQI when current hour is last in array."""
-        mock_now = Mock()
-        mock_now.strftime.return_value = "2025-12-24T23:00"
-        mock_datetime.now.return_value = mock_now
-
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "timezone": "America/Vancouver",
-            "hourly": {
-                "time": ["2025-12-24T22:00", "2025-12-24T23:00"],
-                "us_aqi": [35, 40]
-            }
-        }
-        mock_get.return_value = mock_response
-
-        aqi = get_aqi((50.0, -120.0))
-        assert aqi == 40
-
-    @patch('app.helpers._aqi_session')
-    @patch('app.helpers.datetime')
-    def test_constructs_correct_url(self, mock_datetime, mock_session):
-        mock_get = mock_session.return_value.get
-        """API URL is constructed correctly with coordinates."""
-        # Mock current time
-        mock_now = Mock()
-        mock_now.strftime.return_value = "2025-12-24T14:00"
-        mock_datetime.now.return_value = mock_now
-
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            "timezone": "America/Los_Angeles",
-            "hourly": {
-                "time": ["2025-12-24T14:00"],
-                "us_aqi": [42]
-            }
-        }
-        mock_get.return_value = mock_response
-
-        coords = (49.25, -123.01)
-        get_aqi(coords)
-
-        # Verify URL construction
-        call_args = mock_get.call_args
-        url = call_args[0][0]
-        assert "latitude=49.25" in url
-        assert "longitude=-123.01" in url
-        assert "air-quality-api.open-meteo.com" in url
-
-    @patch('app.helpers._aqi_session')
-    def test_network_error_returns_none(self, mock_session):
-        mock_get = mock_session.return_value.get
-        """Network errors return None gracefully."""
-        mock_get.side_effect = RequestException("Network timeout")
-
-        coords = (49.25, -123.01)
-        result = get_aqi(coords)
-        assert result is None
 
 
 class TestQuoted:

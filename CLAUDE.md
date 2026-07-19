@@ -46,7 +46,8 @@ A `fireid <id>` message carries a `fire_id` lookup (the single token after the k
 - `app/fires/` -- Wildfire package: `find.py` (FindFires search + normalization), `sources.py` (realtime fetching and point/perimeter merging), `db.py` (SQLite fire database: snapshot history + API-outage fallback)
 - `app/arcgis.py` -- ArcGIS FeatureServer transport client
 - `app/filters.py` -- Generic status/size filtering
-- `app/helpers.py` -- Coord parsing (decimal, hemisphere, map URLs), AQI, compass bearing
+- `app/helpers.py` -- Coord parsing (decimal, hemisphere, DMS/DDM, labelled, map URLs), compass bearing
+- `app/weather.py` -- Conditions for fire responses (AQI, wind) behind a provider-agnostic interface; Open-Meteo today, swappable without touching consumers
 - `app/messages.py` -- Request routing, keyword handling, and service copy (help/usage/opt-out text)
 - `app/messaging/` -- Transport-blind rendering package: `fire.py` (fire blocks with auto-downsize for SMS), `avalanche.py` (forecast formatting), `assembler.py` (segment math, 160 char limit)
 - `app/transport/` -- Pluggable transports (CLI TCP, SignalWire SMS). Abstract base in `base.py`. The SignalWire transport honors STOP/START (persistent opt-out list, `optout_database` in config; suppression checked last before every send); HELP/INFO and USAGE keywords are answered in `messages.py` on all transports
@@ -89,6 +90,10 @@ The `conftest.py` sets `TREKSAFER_ENV=test`, disables realtime, and builds a fix
 ## Configuration
 
 Three-tier precedence: env vars > `.env.<ENV>` file > `config.yaml`.
+
+Tunable messaging thresholds live in `thresholds.yaml` (same placeholder
+syntax), validated by the `Thresholds` model and exposed as
+`settings.thresholds`; structural configuration stays in `config.yaml`.
 
 All config placeholders use `${VAR:-default}` syntax. Pydantic validates everything in `app/config.py`.
 

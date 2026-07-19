@@ -3,11 +3,9 @@ import math
 import pytz
 import re
 import requests
-import requests_cache
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from functools import lru_cache
-from pathlib import Path
 from pyproj import CRS
 from timezonefinder import TimezoneFinder
 from urllib.parse import urlparse, parse_qs, unquote_plus
@@ -154,60 +152,6 @@ def compass_direction(pointA, pointB):
                   "SW", "WSW", "W", "WNW" ,"NW" ,"NNW", "N"]
     bearing = math.degrees(math.atan2(pointB.x - pointA.x, pointB.y - pointA.y)) % 360
     return directions[round(bearing/22.5)]
-
-@lru_cache(maxsize=1)
-def _aqi_session():
-    """Cached HTTP session for AQI lookups (the data is hourly)."""
-    Path('cache').mkdir(exist_ok=True)
-    return requests_cache.CachedSession(
-        cache_name='cache/aqi',
-        expire_after=timedelta(hours=1),
-        allowable_methods=['GET'],
-        stale_if_error=True,
-    )
-
-
-def get_aqi(coords):
-    """
-    Fetch the current US Air Quality Index (AQI) for given coordinates.
-
-    Makes a request to the Open-Meteo Air Quality API to grab the most
-    recent AQI reading.
-
-    Args:
-        coords (tuple): A tuple containing (latitude, longitude) as floats.
-
-    Returns:
-        int or None: The current US Air Quality Index value, or None if unavailable.
-    """
-    try:
-        url = (
-            "https://air-quality-api.open-meteo.com/v1/air-quality"
-            f"?latitude={coords[0]}&longitude={coords[1]}"
-            "&hourly=us_aqi&timezone=America%2FLos_Angeles&forecast_days=1"
-        )
-
-        resp = _aqi_session().get(url, timeout=10)
-        resp.raise_for_status()  # Raise for 4xx/5xx errors
-        data = resp.json()
-
-        # Get the current "hour" in the same timezone as the JSON data is giving us.
-        api_timezone = data["timezone"]
-        current_time = datetime.now(pytz.timezone(api_timezone))
-        current_hour = current_time.strftime('%Y-%m-%dT%H:00')
-
-        # Find the index of current time in the hourly time array, and match that to the AQI array.
-        current_index = data["hourly"]["time"].index(current_hour)
-
-        # Get latest AQI
-        return data["hourly"]["us_aqi"][current_index]
-
-    except requests.RequestException as e:
-        logging.warning(f"Failed to fetch AQI data: network error - {e}")
-        return None
-    except (KeyError, ValueError, IndexError) as e:
-        logging.warning(f"Failed to parse AQI data: {e}")
-        return None
 
 # An explicit fire lookup: "fireid <token>". The token is the next run of
 # non-whitespace characters, so identifiers with hyphens, underscores, or the

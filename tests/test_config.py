@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.config import RealtimeFireConfig, Settings
+from app.config import RealtimeFireConfig, Settings, Thresholds, get_config
 
 
 class TestFireSeasonValidation:
@@ -9,7 +9,8 @@ class TestFireSeasonValidation:
 
     def test_valid_dates_accepted(self):
         settings = Settings(fire_season_start="05-15", fire_season_end="08-15",
-                            stale_data_hours=6, optout_database="data/optouts.db")
+                            stale_data_hours=6, optout_database="data/optouts.db",
+                            thresholds=Thresholds(wind_peak_gust_margin=15))
         assert settings.fire_season_start == "05-15"
         assert settings.fire_season_end == "08-15"
 
@@ -81,3 +82,14 @@ class TestRealtimeFireConfig:
         assert config.join == "spatial"
         assert config.points_where == "1=1"
         assert config.perimeters_where == "1=1"
+
+
+class TestThresholds:
+    """Thresholds load from thresholds.yaml and reject missing values."""
+
+    def test_loaded_from_thresholds_yaml(self):
+        assert get_config().thresholds.wind_peak_gust_margin == 15
+
+    def test_missing_value_rejected(self):
+        with pytest.raises(ValidationError):
+            Thresholds()

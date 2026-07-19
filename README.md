@@ -18,6 +18,7 @@ See https://treksafer.com for more information.
 **Fire response example:**
 ```
 AQI: 42
+Wind: 20km/h from SW, gusts 40 rising to 65
 
 Fire: Lower Young Creek (K50911)
 Location: 7 km NE of Lillooet
@@ -33,6 +34,8 @@ Status: Out of Control
 ```
 
 Fires that grew or shrank recently show the change next to their size, and fires that where discovered since the last full data sync are labelled `(NEW)`.
+
+Wind direction is where the wind blows *from* (a SW wind pushes fire toward the NE). The `rising to` figure is the strongest gust forecast in the next 12 hours, shown only when it's well above current gusts. Air quality and wind data by [Open-Meteo.com](https://open-meteo.com) (CC-BY 4.0).
 
 **Avalanche response example:**
 ```
@@ -139,7 +142,9 @@ pip install -r requirements.txt
 
 ### Configuration
 
-Edit config.yaml for defaults (fire radius, data sources, etc.).
+Edit config.yaml for defaults (fire radius, data sources, etc.). Tunable
+message thresholds (e.g. minimum AQI level to include in the message) live
+in thresholds.yaml.
 
 Create an env file for your environment (eg. `.env.dev`):
 

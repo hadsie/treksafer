@@ -4,7 +4,9 @@ and the no-result replies (no fires, out of coverage, data unavailable)."""
 from datetime import datetime, timezone
 from typing import Dict
 
+from ..config import get_config
 from ..filters import STATUS_LEVELS
+from ..weather import WindReport
 from .assembler import SMS_LIMIT, message_length
 
 
@@ -113,6 +115,17 @@ class FireMessages:
         """Freshness marker shown when a response was built from stored
         data. fetched must already be in the user's local timezone."""
         return f"Data from {FireMessages._timestamp(fetched)}"
+
+    @staticmethod
+    def wind(report: WindReport) -> str:
+        """One line of current wind. The 12-hour peak gust is added only
+        when it clears the configured margin over the gusts blowing now,
+        so calm forecasts don't cost message budget."""
+        line = f"Wind: {report.speed}km/h from {report.direction}, gusts {report.gusts}"
+        margin = get_config().thresholds.wind_peak_gust_margin
+        if report.peak_gust >= report.gusts + margin:
+            line += f" rising to {report.peak_gust}"
+        return line
 
     def fires(self, fires: list[Dict]) -> list[str]:
         messages = []
