@@ -27,6 +27,7 @@ default:
     "Low": "L"
     "Early Season": "ES"
     "Spring Conditions": "Spring"
+    "Summer Conditions": "Summer"
     "No Rating": "N/A"
 
   likelihood:
