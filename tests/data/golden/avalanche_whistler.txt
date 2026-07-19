@@ -1,0 +1,12 @@
+Spearhead
+Fri: ALP:C TL:M BTL:M
+Sat: ALP:C TL:M BTL:M
+Sun: ALP:C TL:C BTL:M
+
+StormSlb
+AllElev Slp:All
+Lkly, Sz:1-2.5
+
+PrsistSlb
+ALP Slp:All
+UnLkly/Poss, Sz:2.5-3.5

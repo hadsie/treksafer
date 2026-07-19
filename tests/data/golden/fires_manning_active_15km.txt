@@ -1,0 +1,7 @@
+AQI: 42
+
+Fire: Manning_West (C10801)
+Location: Manning Park
+0km N
+Size: 120 ha
+Status: Out of Control

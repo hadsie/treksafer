@@ -1,0 +1,1 @@
+No fire matching "NOPE999" was found. Check the fire number, or send "fires" with your location for nearby fires.

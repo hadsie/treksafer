@@ -1,0 +1,1 @@
+TrekSafer: Wildfire & avalanche info. Text GPS coordinates (e.g. fires (49.2, -123.1)) to get a report. https://treksafer.com. Reply STOP to opt out.

@@ -47,7 +47,8 @@ A `fireid <id>` message carries a `fire_id` lookup (the single token after the k
 - `app/arcgis.py` -- ArcGIS FeatureServer transport client
 - `app/filters.py` -- Generic status/size filtering
 - `app/helpers.py` -- Coord parsing (decimal, hemisphere, map URLs), AQI, compass bearing
-- `app/messages.py` -- Response formatting with auto-downsize for SMS (160 char limit)
+- `app/messages.py` -- Request routing, keyword handling, and service copy (help/usage/opt-out text)
+- `app/messaging/` -- Transport-blind rendering package: `fire.py` (fire blocks with auto-downsize for SMS), `avalanche.py` (forecast formatting), `assembler.py` (segment math, 160 char limit)
 - `app/transport/` -- Pluggable transports (CLI TCP, SignalWire SMS). Abstract base in `base.py`. The SignalWire transport honors STOP/START (persistent opt-out list, `optout_database` in config; suppression checked last before every send); HELP/INFO and USAGE keywords are answered in `messages.py` on all transports
 - `app/avalanche/` -- Provider pattern: `base.py` ABC, implementations for Avalanche Canada (`avcan.py`), US NAC (`us_nac.py`), Quebec (`quebec.py`). `report.py` aggregates/formats
 
