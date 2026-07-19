@@ -1,11 +1,10 @@
-"""Golden tests: pin response output across the messaging refactor.
+"""Golden tests: every response shape, pinned byte-for-byte.
 
-These exist to protect the app/messaging extraction (HAD-221a): the
-refactor must keep every response byte-identical. Each scenario's full
-response is stored under tests/data/golden/ and compared exactly, except
-volatile time spans ("26h ago", "3d ago"), which are normalized to
-"T ago" because they grow with wall-clock time against the fixed-date
-fixture database.
+Each scenario's full response is stored under tests/data/golden/ and
+compared exactly, so any change to response output, intended or not,
+fails here first. The one exception is volatile time spans ("26h ago",
+"3d ago"), which are normalized to "T ago" because they grow with
+wall-clock time against the fixed-date fixture database.
 
 Regenerate after an INTENDED output change:
 
