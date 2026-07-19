@@ -22,6 +22,7 @@ import pytest
 
 from app.avalanche.avcan import AvalancheCanadaProvider
 from app.messages import handle_message
+from app.weather import WindReport
 
 GOLDEN_DIR = Path(__file__).parent / 'data' / 'golden'
 
@@ -66,11 +67,20 @@ class TestGoldenResponses:
 
     @pytest.mark.parametrize('name,message', SCENARIOS)
     def test_fire_and_service_responses(self, name, message):
-        with patch('app.messages.get_aqi', return_value=42):
+        with patch('app.messages.get_aqi', return_value=42), \
+             patch('app.messages.get_wind', return_value=None):
             _check(name, handle_message(message))
 
+    def test_conditions_header_with_wind(self):
+        report = WindReport(speed=25, gusts=45, direction='SW', peak_gust=60)
+        with patch('app.messages.get_aqi', return_value=42), \
+             patch('app.messages.get_wind', return_value=report):
+            _check('fires_manning_all_with_wind',
+                   handle_message('fires all (49.064646, -120.7919022)'))
+
     def test_aqi_absent_when_unavailable(self):
-        with patch('app.messages.get_aqi', return_value=None):
+        with patch('app.messages.get_aqi', return_value=None), \
+             patch('app.messages.get_wind', return_value=None):
             _check('fires_manning_all_no_aqi',
                    handle_message('fires all (49.064646, -120.7919022)'))
 

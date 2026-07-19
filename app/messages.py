@@ -7,10 +7,11 @@ from typing import Dict, Optional
 
 from .config import get_config
 from .health import health_report
-from .helpers import parse_message, get_aqi, local_time, quoted
+from .helpers import parse_message, local_time, quoted
 from .fires import FindFires, FireLookup
 from .avalanche import AvalancheReport
 from .messaging import FireMessages
+from .weather import get_aqi, get_wind
 
 # The message "health" (any case, surrounding whitespace allowed, nothing
 # else) requests a health summary instead of a fire/avalanche report.
@@ -82,22 +83,28 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     """
     responses = Messages()
 
-    # Get AQI if configured
-    aqi_message = ""
+    # Current conditions header. Each line is dropped when its lookup
+    # fails or is disabled; fire data must never be blocked on weather.
+    conditions = ""
     settings = get_config()
     if settings.include_aqi:
         aqi = get_aqi(coords)
-        aqi_message = f"AQI: {aqi}\n\n" if aqi else ''
+        conditions += f"AQI: {aqi}\n" if aqi else ''
+    if settings.include_wind:
+        wind = get_wind(coords)
+        conditions += responses.wind(wind) + "\n" if wind else ''
+    if conditions:
+        conditions += "\n"
 
     # Find fires
     findfires = FindFires(coords, fire_filters)
     if findfires.out_of_range():
-        return aqi_message + responses.outside_of_area(coords)
+        return conditions + responses.outside_of_area(coords)
 
     fires = findfires.nearby()
     # A source that produced no data at all must not read as "no fires".
     if not fires and findfires.unavailable_sources:
-        return aqi_message + responses.data_unavailable()
+        return conditions + responses.data_unavailable()
 
     # When a realtime source failed and stored data was used instead, add
     # a freshness marker so old data is never presented as current. It goes
@@ -110,10 +117,10 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     if not fires:
         distance = min(findfires.filters['distance'], settings.max_radius)
         status_filter = fire_filters.get('status')
-        return aqi_message + responses.no_fires(distance, coords, status_filter) + marker
+        return conditions + responses.no_fires(distance, coords, status_filter) + marker
 
     fire_messages = [responses.fire(fire) for fire in fires]
-    return aqi_message + "\n\n".join(fire_messages) + marker
+    return conditions + "\n\n".join(fire_messages) + marker
 
 
 def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,

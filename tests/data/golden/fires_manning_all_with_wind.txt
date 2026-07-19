@@ -1,0 +1,32 @@
+AQI: 42
+Wind: 25km/h from SW, gusts 45 rising to 60
+
+Fire: Manning_West (C10801)
+Location: Manning Park
+0km N
+Size: 120 ha
+Status: Out of Control
+
+Fire: Skagit_Close (C20146)
+Location: Skagit Valley
+24km W
+Size: 1.5 ha
+Status: Being Held
+
+Fire: Manning_East (C10802)
+Location: Manning Park
+14km E
+Size: 90 ha
+Status: Under Control
+
+Fire: Fraser_Medium (C20147)
+Location: Fraser Valley
+37km WNW
+Size: 25 ha
+Status: Under Control
+
+Fire: Hope_VeryClose (C20145)
+Location: Hope
+17km WSW
+Size: 0.5 ha
+Status: Out

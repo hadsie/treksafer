@@ -5,14 +5,16 @@ import pytest
 import requests
 
 from app.messages import Messages, handle_fire_request, handle_message, in_fire_season
+from app.weather import WindReport
 
 
 class TestOutsideCoverage:
     """An out-of-coverage location must never read as 'no fires reported'."""
 
+    @patch("app.messages.get_wind", return_value=None)
     @patch("app.messages.get_aqi", return_value=None)
     @patch("app.messages.FindFires")
-    def test_out_of_range_returns_outside_area_message(self, mock_ff_cls, mock_aqi):
+    def test_out_of_range_returns_outside_area_message(self, mock_ff_cls, mock_aqi, mock_wind):
         ff = mock_ff_cls.return_value
         ff.out_of_range.return_value = True
 
@@ -27,9 +29,10 @@ class TestOutsideCoverage:
 class TestDataUnavailable:
     """An unavailable source must never read as 'no fires reported'."""
 
+    @patch("app.messages.get_wind", return_value=None)
     @patch("app.messages.get_aqi", return_value=None)
     @patch("app.messages.FindFires")
-    def test_unavailable_source_with_no_fires(self, mock_ff_cls, mock_aqi):
+    def test_unavailable_source_with_no_fires(self, mock_ff_cls, mock_aqi, mock_wind):
         ff = mock_ff_cls.return_value
         ff.out_of_range.return_value = False
         ff.nearby.return_value = []
@@ -41,9 +44,10 @@ class TestDataUnavailable:
         assert 'temporarily unavailable' in message
         assert 'No fires reported' not in message
 
+    @patch("app.messages.get_wind", return_value=None)
     @patch("app.messages.get_aqi", return_value=None)
     @patch("app.messages.FindFires")
-    def test_all_sources_available_with_no_fires(self, mock_ff_cls, mock_aqi):
+    def test_all_sources_available_with_no_fires(self, mock_ff_cls, mock_aqi, mock_wind):
         ff = mock_ff_cls.return_value
         ff.out_of_range.return_value = False
         ff.nearby.return_value = []
@@ -55,6 +59,31 @@ class TestDataUnavailable:
         message = handle_fire_request((50.0, -122.0), {})
 
         assert 'No fires reported' in message
+
+
+class TestConditionsHeader:
+    """The AQI/wind conditions header on fire responses."""
+
+    @patch("app.messages.get_wind")
+    @patch("app.messages.get_aqi", return_value=42)
+    def test_fire_response_leads_with_conditions_header(self, mock_aqi, mock_wind):
+        mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=32)
+        message = handle_message("fires all (49.06, -120.79)")
+        assert message.startswith("AQI: 42\nWind: 15km/h from NW, gusts 30\n\n")
+
+    @patch("app.messages.get_wind")
+    @patch("app.messages.get_aqi", return_value=None)
+    def test_wind_line_stands_alone_without_aqi(self, mock_aqi, mock_wind):
+        mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=32)
+        message = handle_message("fires all (49.06, -120.79)")
+        assert message.startswith("Wind: 15km/h from NW, gusts 30\n\n")
+
+    @patch("app.messages.get_wind", return_value=None)
+    @patch("app.messages.get_aqi", return_value=None)
+    def test_no_conditions_header_when_both_unavailable(self, mock_aqi, mock_wind):
+        message = handle_message("fires all (49.06, -120.79)")
+        assert "Wind:" not in message
+        assert not message.startswith("\n")
 
 
 class TestFallbackMarker:
@@ -73,7 +102,8 @@ class TestFallbackMarker:
         bc = next(d for d in get_config().data if d.location == 'BC')
         monkeypatch.setattr(bc.realtime, 'enabled', True)
         with patch('app.fires.find.fetch_fires', return_value=None), \
-             patch('app.messages.get_aqi', return_value=None):
+             patch('app.messages.get_aqi', return_value=None), \
+             patch('app.messages.get_wind', return_value=None):
             yield
 
     def test_marker_appended_after_realtime_failure(self, bc_realtime_failing):
@@ -163,7 +193,8 @@ class TestFireLookupResponse:
         monkeypatch.setattr(bc.realtime, 'enabled', True)
         monkeypatch.setattr(bc.realtime, 'enrichment', None)
         with patch('app.fires.lookup.fetch_fire', side_effect=requests.ConnectionError('x')), \
-             patch('app.messages.get_aqi', return_value=None):
+             patch('app.messages.get_aqi', return_value=None), \
+             patch('app.messages.get_wind', return_value=None):
             message = handle_message('fireid C10784 (49.06, -120.79)')
 
         days = round((datetime.now(timezone.utc) - FIXTURE_FETCHED_AT).total_seconds() / 86400)
@@ -202,7 +233,8 @@ class TestServiceKeywords:
         assert handle_message(message) == Messages().usage()
 
     def test_usage_elsewhere_in_a_request_is_not_a_keyword(self):
-        with patch('app.messages.get_aqi', return_value=None):
+        with patch('app.messages.get_aqi', return_value=None), \
+             patch('app.messages.get_wind', return_value=None):
             response = handle_message('fires usage (50.5, -121.0)')
 
         assert response != Messages().usage()
@@ -213,7 +245,8 @@ class TestServiceKeywords:
             assert Messages()._message_length(text) <= 160
 
     def test_keyword_inside_request_is_not_hijacked(self):
-        with patch('app.messages.get_aqi', return_value=None):
+        with patch('app.messages.get_aqi', return_value=None), \
+             patch('app.messages.get_wind', return_value=None):
             response = handle_message('help fires (50.5, -121.0)')
 
         assert response != Messages().help()
