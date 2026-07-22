@@ -1,5 +1,6 @@
 """Tests for FindFires source loading (realtime vs downloaded)."""
 
+import math
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
@@ -108,6 +109,21 @@ class TestLoadSource:
 
         assert fires_gdf.drop(columns='fire_key').equals(gdf)
         assert 'Failed to record' in caplog.text
+
+    def test_field_transform_failure_skips_the_field_not_the_fire(self, caplog):
+        """A field whose transform raises is logged with the stack trace and
+        left off the fire; the fire itself still appears in the results."""
+        gdf = realtime_gdf(*BC_COORDS, ignition_date='not-a-date')
+        with patch('app.fires.find.get_config', return_value=realtime_settings()), \
+             patch('app.fires.find.fetch_fires', return_value=gdf):
+            ff = FindFires(BC_COORDS, filters={'status': 'all', 'distance': 20})
+            fires = ff.nearby()
+
+        assert len(fires) == 1
+        assert 'Discovered' not in fires[0]
+        assert fires[0]['Fire'] == 'K1'
+        assert "Skipping BC fire field Discovered" in caplog.text
+        assert 'Traceback' in caplog.text
 
     def test_realtime_failure_falls_back_to_database(self, caplog):
         """API down: the source serves from the session fixture database."""
@@ -329,6 +345,57 @@ class TestFallbackMatchesRealtime:
                 assert fallback_fire[key] == pytest.approx(realtime_fire[key], rel=1e-6)
             else:
                 assert fallback_fire[key] == realtime_fire[key], key
+
+
+class TestUSNormalization:
+    """WFIGS incidents normalize with sizes converted from acres, including
+    incidents that have no size estimate yet."""
+
+    @staticmethod
+    def _frame(sizes):
+        n = len(sizes)
+        return gpd.GeoDataFrame(
+            {
+                'IrwinID': [f'IRWIN-{i}' for i in range(n)],
+                'IncidentName': [f'Fire {i}' for i in range(n)],
+                'IncidentShortDescription': ['Test Forest'] * n,
+                'IncidentSize': sizes,
+                'PercentContained': [None] * n,
+                'IncidentTypeCategory': ['WF'] * n,
+                'FireDiscoveryDateTime': [1783989660000] * n,
+                'ModifiedOnDateTime_dt': [1783989660000] * n,
+                'latitude': [48.45] * n, 'longitude': [-113.22] * n,
+            },
+            geometry=gpd.GeoSeries([Point(-113.22, 48.45)] * n, crs='EPSG:4326'),
+        ).to_crs(epsg=3857)
+
+    def test_size_converts_from_acres(self):
+        from app.fires.find import normalize_for_db
+        us = next(df for df in get_config().data if df.location == 'US').realtime
+        rows = normalize_for_db(self._frame([247.10538147]), 'US', us)
+        assert rows.iloc[0]['Size'] == 100.0
+
+    def test_null_size_normalizes_to_none(self):
+        """An all-null size column carries None (object dtype), which the
+        acres transform maps to a missing size."""
+        from app.fires.find import normalize_for_db
+        us = next(df for df in get_config().data if df.location == 'US').realtime
+        rows = normalize_for_db(self._frame([None]), 'US', us)
+        assert rows.iloc[0]['Size'] is None
+
+    def test_nan_size_is_stripped_from_the_fire_dict(self):
+        """Nulls mixed with real sizes arrive as NaN (numeric dtype); the
+        fire dict omits Size so no 'nan ha' line ever renders."""
+        from app.fires.find import _normalize_row, _realtime_data_file
+        us = next(df for df in get_config().data if df.location == 'US').realtime
+        data_file = _realtime_data_file('US', us)
+        row = next(self._frame([None, 247.10538147]).itertuples())
+        assert math.isnan(row.IncidentSize)
+
+        fire = _normalize_row(data_file, row, distance=1000.0, direction='NW')
+
+        assert 'Size' not in fire
+        assert fire['Fire'] == 'Fire 0'
 
 
 class TestOntarioNormalization:

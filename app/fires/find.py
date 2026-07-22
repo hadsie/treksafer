@@ -163,10 +163,17 @@ def _process_fields(field_mapping, data_file, get_value_fn):
     result = {}
     for data_key, source_key in field_mapping.items():
         raw_value = get_value_fn(source_key)
-        if data_key == 'Status':
-            result['Status'], result['StatusLevel'] = _resolve_status(raw_value, data_file, get_value_fn)
-        else:
-            result[data_key] = _apply_transform(data_key, raw_value, data_file.mapping)
+        # Try/Except the transform so that individual fields values that break the system
+        # don't prevent the overall fire alert from being sent out.
+        try:
+            if data_key == 'Status':
+                result['Status'], result['StatusLevel'] = _resolve_status(raw_value, data_file, get_value_fn)
+            else:
+                result[data_key] = _apply_transform(data_key, raw_value, data_file.mapping)
+        except Exception:
+            logging.exception(
+                f"Skipping {data_file.location} fire field {data_key}: "
+                f"failed to process {source_key}={raw_value!r}.")
 
     return result
 
@@ -365,8 +372,8 @@ class FindFires:
                 firedb.record_fires(conn, location, normalized, datetime.now(timezone.utc))
             finally:
                 conn.close()
-        except (sqlite3.Error, OSError, ValueError, KeyError, AttributeError) as e:
-            logging.error(f"Failed to record {location} fires to the database: {e}")
+        except (sqlite3.Error, OSError, ValueError, TypeError, KeyError, AttributeError):
+            logging.exception(f"Failed to record {location} fires to the database.")
 
     def _first_seen_usable(self, conn, location: str) -> bool:
         """Whether the source's fetch history reaches past the new-fire

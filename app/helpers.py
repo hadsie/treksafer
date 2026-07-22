@@ -100,6 +100,9 @@ def quoted(text) -> str:
 
 
 def acres_to_hectares(acres):
+    """Convert a size in acres to hectares, rounded to 2 decimals."""
+    if acres is None or math.isnan(float(acres)):
+        return None
     return round(float(acres)/2.4710538147, 2)
 
 def epoch_ms_to_datetime(ms):
