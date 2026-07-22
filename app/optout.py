@@ -76,6 +76,41 @@ def first_contact(path: str, number: str) -> bool:
         conn.close()
 
 
+def forget_contact(path: str, number: str) -> bool:
+    """Erase a number's first-contact record, so its next message is
+    treated as a first contact again. Returns whether one existed."""
+    conn = _connect(path)
+    try:
+        with conn:
+            cur = conn.execute(
+                "DELETE FROM contacts WHERE number = ?", (number,))
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def contacts(path: str) -> list[tuple[str, str]]:
+    """All known senders as (number, first_contact_at), oldest first."""
+    conn = _connect(path)
+    try:
+        return conn.execute(
+            "SELECT number, first_contact_at FROM contacts "
+            "ORDER BY first_contact_at, number").fetchall()
+    finally:
+        conn.close()
+
+
+def optouts(path: str) -> list[tuple[str, str]]:
+    """All opted-out numbers as (number, opted_out_at), oldest first."""
+    conn = _connect(path)
+    try:
+        return conn.execute(
+            "SELECT number, opted_out_at FROM optouts "
+            "ORDER BY opted_out_at, number").fetchall()
+    finally:
+        conn.close()
+
+
 def is_opted_out(path: str, number: str) -> bool:
     """Whether a number has opted out."""
     conn = _connect(path)
