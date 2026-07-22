@@ -5,8 +5,19 @@ import pytest
 from pydantic import SecretStr, ValidationError
 from signalwire.relay import RelayError
 
-from app.config import SignalWireConfig
+from app import optout
+from app.config import SignalWireConfig, get_config
 from app.transport.signalwire import SignalWireTransport
+
+
+@pytest.fixture(autouse=True)
+def optout_db(tmp_path, monkeypatch):
+    """Point the compliance store at a throwaway database and mark the
+    default sender known, so replies carry no first-contact notice."""
+    db = str(tmp_path / 'optouts.db')
+    monkeypatch.setattr(get_config(), 'optout_database', db)
+    optout.first_contact(db, '+15559876543')
+    return db
 
 
 @pytest.fixture

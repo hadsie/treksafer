@@ -1,10 +1,11 @@
-"""Persistent SMS opt-out list.
+"""Persistent SMS compliance state: opt-outs and first-contact records.
 
-A number that texted STOP receives nothing until it texts START. The list
-lives in its own database, separate from the fire database, so resetting
-fire data can never erase compliance state. All functions raise
-sqlite3.Error (or OSError creating the directory) to the caller: whether a
-failed check blocks or allows a send is the transport's decision.
+A number that texted STOP receives nothing until it texts START, and a
+number's first message triggers a one-time opt-in confirmation. Both live
+in their own database, separate from the fire database, so resetting fire
+data can never erase compliance state. All functions raise sqlite3.Error
+(or OSError creating the directory) to the caller: whether a failed check
+blocks or allows a send is the transport's decision.
 """
 from __future__ import annotations
 
@@ -16,6 +17,10 @@ _SCHEMA = """
 CREATE TABLE IF NOT EXISTS optouts (
     number       TEXT PRIMARY KEY,
     opted_out_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS contacts (
+    number           TEXT PRIMARY KEY,
+    first_contact_at TEXT NOT NULL
 );
 """
 
@@ -48,6 +53,60 @@ def opt_in(path: str, number: str) -> None:
     try:
         with conn:
             conn.execute("DELETE FROM optouts WHERE number = ?", (number,))
+    finally:
+        conn.close()
+
+
+def first_contact(path: str, number: str) -> bool:
+    """Record a sender and report whether this was their first message.
+
+    The insert and the check are one statement, so concurrent messages
+    from the same number yield True exactly once.
+    """
+    conn = _connect(path)
+    try:
+        with conn:
+            cur = conn.execute(
+                "INSERT INTO contacts (number, first_contact_at) VALUES (?, ?) "
+                "ON CONFLICT (number) DO NOTHING",
+                (number, datetime.now(timezone.utc).isoformat()),
+            )
+        return cur.rowcount == 1
+    finally:
+        conn.close()
+
+
+def forget_contact(path: str, number: str) -> bool:
+    """Erase a number's first-contact record, so its next message is
+    treated as a first contact again. Returns whether one existed."""
+    conn = _connect(path)
+    try:
+        with conn:
+            cur = conn.execute(
+                "DELETE FROM contacts WHERE number = ?", (number,))
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def contacts(path: str) -> list[tuple[str, str]]:
+    """All known senders as (number, first_contact_at), oldest first."""
+    conn = _connect(path)
+    try:
+        return conn.execute(
+            "SELECT number, first_contact_at FROM contacts "
+            "ORDER BY first_contact_at, number").fetchall()
+    finally:
+        conn.close()
+
+
+def optouts(path: str) -> list[tuple[str, str]]:
+    """All opted-out numbers as (number, opted_out_at), oldest first."""
+    conn = _connect(path)
+    try:
+        return conn.execute(
+            "SELECT number, opted_out_at FROM optouts "
+            "ORDER BY opted_out_at, number").fetchall()
     finally:
         conn.close()
 

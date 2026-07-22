@@ -89,14 +89,16 @@ class SignalWireTransport(BaseTransport):
         except asyncio.CancelledError:
             pass
 
-    def _route(self, number: str, body: str) -> Optional[str]:
-        """Resolve the reply, applying opt-out compliance around the
+    def _route(self, number: str, body: str) -> list[str]:
+        """Resolve the replies, applying opt-out compliance around the
         message pipeline.
 
         STOP records the number and gets only the confirmation; START
         clears it. An opted-out number gets no reply at all -- the check
         sits here, the last place before a send, so suppression holds no
-        matter what the pipeline produces. Returns None for no reply.
+        matter what the pipeline produces. A number's first message earns
+        the one-time opt-in notice ahead of its reply. Returns the replies
+        to send in order, empty for none.
         """
         db = get_config().optout_database
         opting_out = _OPT_OUT_PATTERN.fullmatch(body or '') is not None
@@ -105,47 +107,58 @@ class SignalWireTransport(BaseTransport):
             if opting_out:
                 optout.opt_out(db, number)
                 self.log.info("Opt-out recorded for %s.", number)
-                return Messages().opt_out_confirmed()
+                return [Messages().opt_out_confirmed()]
             if opting_in:
                 optout.opt_in(db, number)
                 self.log.info("Opt-out cleared for %s.", number)
-                return Messages().opt_in_confirmed()
+                return [Messages().opt_in_confirmed()]
             suppressed = optout.is_opted_out(db, number)
         except (sqlite3.Error, OSError) as e:
             self.log.error("Opt-out store unavailable: %s", e)
             if opting_out or opting_in:
                 # An opt-out that cannot be recorded must not be confirmed.
-                return Messages().system_error()
+                return [Messages().system_error()]
             # A failed check must not block safety information; the error
             # above alerts the operator.
             suppressed = False
         if suppressed:
             self.log.info("No reply to %s: recipient opted out.", number)
-            return None
-        return safe_handle_message(body)
+            return []
+        replies = []
+        try:
+            if optout.first_contact(db, number):
+                self.log.info("First contact from %s: sending opt-in notice.", number)
+                replies.append(Messages().opt_in_notice())
+        except (sqlite3.Error, OSError) as e:
+            # A missed notice must not block safety information; the error
+            # above alerts the operator.
+            self.log.error("Compliance store unavailable: %s", e)
+        replies.append(safe_handle_message(body))
+        return replies
 
     async def _on_message(self, message: MessageReceiveEvent) -> None:
         self.log.info("SignalWire SMS received incoming message from %s.", message.from_number)
         self.sms_log.info("From: %s\n%s", message.from_number, quoted(message.body))
 
-        response = self._route(message.from_number, message.body)
-        if response is None:
+        responses = self._route(message.from_number, message.body)
+        if not responses:
             self.sms_log.info("Reply: (suppressed: recipient opted out)")
             return
 
-        try:
-            result = await self._client.send_message(
-                context=self.config.context,
-                from_number=self.config.phone_number,
-                to_number=message.from_number,
-                body=response,
-            )
-        except RelayError as e:
-            self.log.error("Failed to reply to %s: %s", message.from_number, e)
-        else:
-            self.log.info("Replied to %s (msg id %s).", message.from_number, result.message_id)
+        for response in responses:
+            try:
+                result = await self._client.send_message(
+                    context=self.config.context,
+                    from_number=self.config.phone_number,
+                    to_number=message.from_number,
+                    body=response,
+                )
+            except RelayError as e:
+                self.log.error("Failed to reply to %s: %s", message.from_number, e)
+            else:
+                self.log.info("Replied to %s (msg id %s).", message.from_number, result.message_id)
 
-        self.sms_log.info("Reply:\n%s", quoted(response))
+            self.sms_log.info("Reply:\n%s", quoted(response))
 
     async def stop(self) -> None:
         self._stopping = True
