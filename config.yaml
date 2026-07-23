@@ -39,10 +39,7 @@ database: "${TREKSAFER_DATABASE:-data/fires.db}"
 optout_database: "${TREKSAFER_OPTOUT_DATABASE:-data/optouts.db}"
 
 # Inbound request log: who asked, what they asked, and the reply outcome.
-# Feeds the daily digest. The data includes sender identity and location,
-# so rows past the retention cap are pruned on every write.
 request_database: "${TREKSAFER_REQUEST_DATABASE:-data/requests.db}"
-request_log_retention_days: 90
 
 # Responses built from stored data (realtime API down) carry a "Data from"
 # freshness marker only when the stored fetch is older than this (hours).

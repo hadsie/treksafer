@@ -12,7 +12,7 @@ class TestRecord:
     def test_roundtrip(self, tmp_path):
         path = _db(tmp_path)
         request_log.record(path, '+15550000001', 'fires (49.1, -120.2)',
-                           (49.1, -120.2), 'fires', retention_days=90)
+                           (49.1, -120.2), 'fires')
 
         rows = request_log.requests_since(
             path, datetime.now(timezone.utc) - timedelta(minutes=1))
@@ -27,7 +27,7 @@ class TestRecord:
     def test_no_coordinates_stored_as_null(self, tmp_path):
         path = _db(tmp_path)
         request_log.record(path, '+15550000001', 'fires please', None,
-                           'no_gps', retention_days=90)
+                           'no_gps')
 
         row = request_log.requests_since(
             path, datetime.now(timezone.utc) - timedelta(minutes=1))[0]
@@ -38,7 +38,7 @@ class TestRecord:
         path = _db(tmp_path)
         for n in range(3):
             request_log.record(path, '+15550000001', f'message {n}', None,
-                               'no_gps', retention_days=90)
+                               'no_gps')
 
         rows = request_log.requests_since(
             path, datetime.now(timezone.utc) - timedelta(minutes=1))
@@ -47,31 +47,10 @@ class TestRecord:
 
     def test_since_excludes_older_rows(self, tmp_path):
         path = _db(tmp_path)
-        request_log.record(path, '+15550000001', 'old', None, 'no_gps',
-                           retention_days=90)
+        request_log.record(path, '+15550000001', 'old', None, 'no_gps')
 
         rows = request_log.requests_since(
             path, datetime.now(timezone.utc) + timedelta(minutes=1))
 
         assert rows == []
 
-
-class TestRetention:
-    def test_write_prunes_rows_past_the_cap(self, tmp_path):
-        path = _db(tmp_path)
-        request_log.record(path, '+15550000001', 'ancient', None, 'no_gps',
-                           retention_days=90)
-        # Age the row past the cap by rewriting its timestamp.
-        import sqlite3
-        old = (datetime.now(timezone.utc) - timedelta(days=91)).isoformat()
-        conn = sqlite3.connect(path)
-        with conn:
-            conn.execute("UPDATE requests SET received_at = ?", (old,))
-        conn.close()
-
-        request_log.record(path, '+15550000002', 'fresh', None, 'no_gps',
-                           retention_days=90)
-
-        rows = request_log.requests_since(
-            path, datetime.now(timezone.utc) - timedelta(days=365))
-        assert [r['message'] for r in rows] == ['fresh']

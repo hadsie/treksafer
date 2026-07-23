@@ -26,7 +26,7 @@ class TestRun:
 
     def _seed(self, settings, sender, message, coords, response_type):
         request_log.record(settings.request_database, sender, message,
-                           coords, response_type, retention_days=90)
+                           coords, response_type)
 
     def test_emails_the_parse_failures(self, env):
         self._seed(env['settings'], '+15550000001', 'fires broken', None, 'no_gps')

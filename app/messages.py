@@ -197,8 +197,7 @@ def _record_request(sender: str, message: str,
     settings = get_config()
     try:
         request_log.record(settings.request_database, sender, message,
-                           coords, response_type,
-                           settings.request_log_retention_days)
+                           coords, response_type)
     except (sqlite3.Error, OSError) as e:
         logging.error(f"Request log unavailable: {e}")
 
@@ -206,9 +205,7 @@ def _record_request(sender: str, message: str,
 def safe_handle_message(message: str, sender: str = 'unknown',
                         record: bool = True) -> list[str]:
     """Transport boundary: the segmented reply, or a single error message
-    so the user always gets a reply. Requests are recorded to the request
-    log, including ones that crash the handler, unless the transport's
-    log_requests setting opts out."""
+    so the user always gets a reply."""
     coords, response_type = None, 'system_error'
     try:
         parsed = parse_message(message)

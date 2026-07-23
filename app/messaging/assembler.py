@@ -21,15 +21,13 @@ _GSM_EXTENSION = set("^{}\\[~]|€")
 
 @dataclass
 class Block:
-    """One self-contained unit of a reply, with renderings largest first.
-
-    An optional block never gets a message to itself: unless something
-    required shares its message, it is dropped. kind names the reply
-    outcome the block represents ('fires', 'no_fires', ...), set where
-    the block is built; blocks that only accompany the answer (the
-    conditions header, freshness markers) carry None."""
+    """One self-contained unit of a reply."""
+    # List of all output formats of the message, largest to smallest.
     ladder: list[str]
+    # An optional block never gets a message to itself. Prepended / appended to
+    # an already outgoing block if it fits in the SMS size.
     optional: bool = False
+    # The reply type this block represents ('fires', 'no_fires', etc.).
     kind: str = None
 
 

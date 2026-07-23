@@ -2,16 +2,14 @@
 what kind of reply they got.
 
 Rows feed the daily digest (re-request pairs, volume and outcome counts).
-The data is PII (sender identity plus location), so it lives in its own
-database that stays on the server, and every write prunes rows past the
-retention cap. All functions raise sqlite3.Error (or OSError creating the
-directory) to the caller: the transport boundary decides that a logging
-failure never blocks a reply.
+The data is PII (sender identity plus location) and lives in its own
+database that stays on the server. All functions raise sqlite3.Error (or
+OSError creating the directory) to the caller.
 """
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -40,10 +38,8 @@ def _connect(path: str) -> sqlite3.Connection:
 
 
 def record(path: str, sender: str, message: str,
-           coords: Optional[tuple[float, float]], response_type: str,
-           retention_days: int) -> None:
-    """Insert one request row and prune rows past the retention cap."""
-    now = datetime.now(timezone.utc)
+           coords: Optional[tuple[float, float]], response_type: str) -> None:
+    """Insert one request row."""
     lat, lon = coords if coords else (None, None)
     conn = _connect(path)
     try:
@@ -52,10 +48,9 @@ def record(path: str, sender: str, message: str,
                 "INSERT INTO requests "
                 "(received_at, sender, message, lat, lon, response_type) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (now.isoformat(), sender, message, lat, lon, response_type),
+                (datetime.now(timezone.utc).isoformat(), sender, message,
+                 lat, lon, response_type),
             )
-            cutoff = (now - timedelta(days=retention_days)).isoformat()
-            conn.execute("DELETE FROM requests WHERE received_at < ?", (cutoff,))
     finally:
         conn.close()
 
