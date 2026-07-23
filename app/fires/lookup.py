@@ -53,6 +53,22 @@ def _enrichment_session():
     )
 
 
+def _field_path(payload, path: str):
+    """Walk a dotted path of dict keys and list indices ('features.0.
+    properties.status_date'); None as soon as anything is missing."""
+    value = payload
+    for part in path.split('.'):
+        if isinstance(value, dict):
+            value = value.get(part)
+        elif isinstance(value, list) and part.isdigit() and int(part) < len(value):
+            value = value[int(part)]
+        else:
+            return None
+        if value is None:
+            return None
+    return value
+
+
 def _enriched_updated(enrichment, values: Dict[str, str]):
     """The fire's last-update time from a source's enrichment API, or None.
 
@@ -67,7 +83,7 @@ def _enriched_updated(enrichment, values: Dict[str, str]):
     try:
         resp = _enrichment_session().get(url, timeout=10)
         resp.raise_for_status()
-        return _parse_source_timestamp(resp.json().get(enrichment.updated_field), None)
+        return _parse_source_timestamp(_field_path(resp.json(), enrichment.updated_field), None)
     except (RequestException, ValueError, KeyError) as e:
         logging.warning(f"Enrichment lookup {url} failed: {e}")
         return None

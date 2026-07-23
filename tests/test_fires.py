@@ -264,6 +264,16 @@ class TestParseSourceTimestamp:
         from app.fires.find import _parse_source_timestamp
         assert _parse_source_timestamp(float('nan'), None) is None
 
+    def test_aware_iso_string_parses(self):
+        from app.fires.find import _parse_source_timestamp
+        parsed = _parse_source_timestamp('2026-07-22T19:30:00Z', None)
+        assert parsed == datetime(2026, 7, 22, 19, 30, tzinfo=timezone.utc)
+
+    def test_zoneless_iso_string_still_fails_loudly(self):
+        from app.fires.find import _parse_source_timestamp
+        with pytest.raises(ValueError):
+            _parse_source_timestamp('2026-07-22T19:30:00', None)
+
 
 class TestFireKeys:
     """Key derivation trusts the frame schema and fails loudly without it."""

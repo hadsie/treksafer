@@ -630,6 +630,20 @@ class TestLiveEndpoint:
         assert str(gdf.crs) == 'EPSG:3857'
         assert 'FIRE_NUMBER' in gdf.columns
 
+    def test_cwfif_enrichment_endpoint_responds(self):
+        """The CWFIF WFS answers the CA enrichment query shape: filtering
+        by national_fire_id with a current-record predicate."""
+        import requests
+        from app.config import get_config
+        ca = next(d for d in get_config().data if d.location == 'CA')
+        # Any syntactically valid id proves the query executes; a real
+        # fire id is not stable enough to pin in a test.
+        url = ca.realtime.enrichment.url.format(Fire_Name='2026_SK_TEST-0001')
+        payload = requests.get(url, timeout=30).json()
+
+        assert payload.get('type') == 'FeatureCollection'
+        assert 'features' in payload
+
     def test_alberta_layers_respond(self):
         """The real Alberta Wildfire layers answer a point-radius query near Edmonton."""
         from app.config import get_config
