@@ -136,6 +136,13 @@ class TestMultiSegmentSending:
 class TestSegmentBackstop:
     """A runaway reply is cut at the backstop, never sent in full."""
 
+    @pytest.fixture(autouse=True)
+    def backstop(self, monkeypatch):
+        """Pin the backstop so the tests hold whatever the operator tunes
+        thresholds.yaml to."""
+        from app.config import get_config
+        monkeypatch.setattr(get_config().thresholds, 'sms_segment_backstop', 10)
+
     @pytest.mark.asyncio
     async def test_runaway_reply_truncated_and_logged(self, transport, caplog):
         runaway = [f"segment {n}" for n in range(25)]

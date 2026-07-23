@@ -88,8 +88,11 @@ class TestThresholds:
     """Thresholds load from thresholds.yaml and reject missing values."""
 
     def test_loaded_from_thresholds_yaml(self):
-        assert get_config().thresholds.wind_peak_gust_margin == 15
-        assert get_config().thresholds.sms_segment_backstop == 10
+        """The file loads and validates; the values themselves are
+        operator-tunable and deliberately not pinned."""
+        thresholds = get_config().thresholds
+        assert thresholds.wind_peak_gust_margin > 0
+        assert thresholds.sms_segment_backstop > 0
 
     def test_missing_value_rejected(self):
         with pytest.raises(ValidationError):

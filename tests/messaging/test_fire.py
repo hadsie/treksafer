@@ -282,6 +282,13 @@ class TestLookupEnrichmentRendering:
 class TestWindLine:
     """Test the wind conditions line."""
 
+    @pytest.fixture(autouse=True)
+    def margin(self, monkeypatch):
+        """Pin the peak-gust margin so the tests hold whatever the operator
+        tunes thresholds.yaml to."""
+        from app.config import get_config
+        monkeypatch.setattr(get_config().thresholds, 'wind_peak_gust_margin', 15)
+
     def test_current_conditions_when_peak_is_similar(self):
         report = WindReport(speed=20, gusts=40, direction="SW", peak_gust=50)
         assert FireMessages.wind(report) == "Wind: 20km/h from SW, gusts 40"
