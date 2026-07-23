@@ -147,6 +147,17 @@ class SignalWireTransport(BaseTransport):
             self.sms_log.info("Reply: (suppressed: recipient opted out)")
             return
 
+        # A reply far past any legitimate size means the assembler produced
+        # a runaway; send the leading messages and alarm rather than spend
+        # the account. This guard is a bug detector, not content policy.
+        backstop = get_config().thresholds.sms_segment_backstop
+        if len(segments) > backstop:
+            self.log.error(
+                "Reply to %s is %d messages, over the %d backstop; "
+                "sending the first %d only.",
+                message.from_number, len(segments), backstop, backstop)
+            segments = segments[:backstop]
+
         # Each segment is a self-contained message, so a failed send does
         # not stop the rest: deliver whatever can be delivered.
         for i, segment in enumerate(segments, 1):

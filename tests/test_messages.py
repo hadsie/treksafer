@@ -100,14 +100,14 @@ class TestConditionsHeader:
     @patch("app.messages.get_wind")
     @patch("app.messages.get_aqi", return_value=42)
     def test_fire_response_leads_with_conditions_header(self, mock_aqi, mock_wind):
-        mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=32)
+        mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=30)
         message = handle_message("fires all (49.06, -120.79)")
         assert message.startswith("AQI: 42\nWind: 15km/h from NW, gusts 30\n\n")
 
     @patch("app.messages.get_wind")
     @patch("app.messages.get_aqi", return_value=None)
     def test_wind_line_stands_alone_without_aqi(self, mock_aqi, mock_wind):
-        mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=32)
+        mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=30)
         message = handle_message("fires all (49.06, -120.79)")
         assert message.startswith("Wind: 15km/h from NW, gusts 30\n\n")
 

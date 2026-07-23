@@ -6,4 +6,10 @@
 # 12-hour peak gust exceeds current gusts by this margin (km/h). Small
 # enough to catch an evening blow-up while the afternoon is calm, large
 # enough that ordinary forecast noise doesn't lengthen every reply.
-wind_peak_gust_margin: 15
+wind_peak_gust_margin: ${TREKSAFER_WIND_PEAK_GUST_MARGIN:-15}
+
+# Hard ceiling on messages sent for one reply: a bug detector, never
+# policy. Any legitimate reply is far below it; if it ever fires, the
+# assembler produced a runaway reply and the error log says so. Set it
+# well above the content budget so the two never compete.
+sms_segment_backstop: ${TREKSAFER_SMS_SEGMENT_BACKSTOP:-15}
