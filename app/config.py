@@ -99,8 +99,9 @@ class EnrichmentConfig(BaseModel):
 
     Used only by single-fire lookups (one call per looked-up fire, cached).
     The url is a template whose placeholders name the source's key_fields
-    (e.g. {FIRE_YEAR}, {FIRE_NUMBER}); updated_field is the JSON field
-    carrying the fire's last-update time (epoch milliseconds).
+    (e.g. {FIRE_YEAR}, {FIRE_NUMBER}); updated_field is a dotted path of
+    JSON keys and list indices ('features.0.properties.status_date') to
+    the fire's last-update time (epoch milliseconds or zone-aware ISO).
     """
     url: str
     updated_field: str

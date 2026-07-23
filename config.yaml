@@ -204,6 +204,13 @@ data:
         managed: ['BH']
         controlled: ['UC']
         out: []
+      # The Esri layer has no per-fire update time; the upstream CWFIF
+      # geoserver publishes it. The filter pins the fire's current record
+      # in the temporal table (record_end still in the future). Used by
+      # single-fire (fireid) lookups.
+      enrichment:
+        url: https://geoserver.cwfif.nrcan.gc.ca/geoserver/ows?service=WFS&version=2.0.0&request=GetFeature&typeNames=public:cwfif_national_activefires&outputFormat=application/json&propertyName=status_date&CQL_FILTER=national_fire_id%3D%27{Fire_Name}%27%20AND%20record_end%20%3E%20now()
+        updated_field: features.0.properties.status_date
   - location: US
     # NIFC WFIGS layers. IrwinID (a GUID) is the stable join and identity
     # key; IncidentName is the displayed identifier. Status derives from

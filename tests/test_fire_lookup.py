@@ -267,6 +267,53 @@ class TestAsOf:
         assert lookup.as_of == datetime.fromtimestamp(1783960569.140, tz=timezone.utc)
 
     @responses.activate
+    def test_enrichment_reads_nested_field_paths(self, tmp_path, monkeypatch):
+        """CWFIF-style: the update time sits inside a WFS FeatureCollection
+        and arrives as a zone-aware ISO string."""
+        import requests as requests_lib
+        from app.fires import lookup as lookup_mod
+        monkeypatch.setattr(lookup_mod, '_enrichment_session',
+                            lambda: requests_lib.Session())
+        responses.get(
+            'https://enrich.test/wfs',
+            json={'features': [{'properties': {'status_date': '2026-07-22T19:30:00Z'}}]})
+
+        db = str(tmp_path / 'fires.db')
+        record_stored(db, now() - timedelta(minutes=5))
+        settings = lookup_settings(db)
+        settings.data[0].realtime = settings.data[0].realtime.model_copy(update={
+            'enrichment': EnrichmentConfig(
+                url='https://enrich.test/wfs?id={FIRE_NUMBER}&year={FIRE_YEAR}',
+                updated_field='features.0.properties.status_date')})
+
+        lookup = self._lookup(settings)
+
+        assert lookup.as_of == datetime(2026, 7, 22, 19, 30, tzinfo=timezone.utc)
+
+    @responses.activate
+    def test_enrichment_empty_feature_list_falls_back(self, tmp_path, monkeypatch):
+        """A WFS answer with no matching record degrades to the stored
+        timestamp precedence instead of crashing."""
+        import requests as requests_lib
+        from app.fires import lookup as lookup_mod
+        monkeypatch.setattr(lookup_mod, '_enrichment_session',
+                            lambda: requests_lib.Session())
+        responses.get('https://enrich.test/wfs', json={'features': []})
+
+        db = str(tmp_path / 'fires.db')
+        fetched = now() - timedelta(minutes=5)
+        record_stored(db, fetched)
+        settings = lookup_settings(db)
+        settings.data[0].realtime = settings.data[0].realtime.model_copy(update={
+            'enrichment': EnrichmentConfig(
+                url='https://enrich.test/wfs?id={FIRE_NUMBER}&year={FIRE_YEAR}',
+                updated_field='features.0.properties.status_date')})
+
+        lookup = self._lookup(settings)
+
+        assert lookup.as_of == fetched
+
+    @responses.activate
     def test_enrichment_failure_falls_back_to_fetch_time(self, tmp_path, monkeypatch):
         import requests as requests_lib
         from app.fires import lookup as lookup_mod

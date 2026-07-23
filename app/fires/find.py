@@ -227,14 +227,21 @@ _DB_DATA_FILE = DataFile(
 def _parse_source_timestamp(value, tz):
     """Parse a source's per-fire update timestamp to an aware UTC datetime.
 
-    ArcGIS date fields arrive as epoch milliseconds; some sources publish
-    zoneless local strings instead, parsed in the source's configured IANA
-    zone (a zoneless string without a configured zone fails loudly).
+    ArcGIS date fields arrive as epoch milliseconds; enrichment APIs may
+    publish zone-aware ISO strings; some sources publish zoneless local
+    strings instead, parsed in the source's configured IANA zone (a
+    zoneless string without a configured zone fails loudly).
     """
     if value is None:
         return None
     if isinstance(value, numbers.Number):
         return epoch_ms_to_datetime(float(value))
+    try:
+        aware = datetime.fromisoformat(str(value).strip().replace('Z', '+00:00'))
+    except ValueError:
+        aware = None
+    if aware is not None and aware.tzinfo is not None:
+        return aware.astimezone(timezone.utc)
     if tz is None:
         raise ValueError(f"Zoneless timestamp {value!r} needs a configured source timezone")
     naive = datetime.strptime(str(value).strip(), '%Y/%m/%d %H:%M:%S')
