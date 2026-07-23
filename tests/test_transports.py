@@ -56,7 +56,7 @@ class TestCLITransport:
 
         # Mock safe_handle_message to return a response
         with patch("app.transport.cli.safe_handle_message") as mock_handle:
-            mock_handle.return_value = "No fires reported within 100km"
+            mock_handle.return_value = ["No fires reported within 100km"]
 
             # Process the message
             await transport._handle_client(mock_reader, mock_writer)
@@ -90,7 +90,7 @@ class TestCLITransport:
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
         with patch("app.transport.cli.safe_handle_message") as mock_handle:
-            mock_handle.return_value = "Test response"
+            mock_handle.return_value = ["Test response"]
 
             await transport._handle_client(mock_reader, mock_writer)
 
@@ -115,7 +115,7 @@ class TestCLITransport:
         with patch("app.transport.cli.safe_handle_message") as mock_handle:
             # Simulate multiple fires found
             fire_response = "Fire: Test Fire (K12345)\n12km NW\nSize: 100 ha\n\nFire: Another Fire (K67890)\n15km SE\nSize: 50 ha"
-            mock_handle.return_value = fire_response
+            mock_handle.return_value = fire_response.split("\n\n")
 
             await transport._handle_client(mock_reader, mock_writer)
 
@@ -139,7 +139,7 @@ class TestCLITransport:
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
         with patch("app.transport.cli.safe_handle_message") as mock_handle:
-            mock_handle.return_value = "No valid GPS coordinates found."
+            mock_handle.return_value = ["No valid GPS coordinates found."]
 
             await transport._handle_client(mock_reader, mock_writer)
 
@@ -188,7 +188,7 @@ class TestCLITransport:
         mock_reader.read = AsyncMock(return_value=test_message.encode("utf-8"))
 
         with patch("app.transport.cli.safe_handle_message") as mock_handle:
-            mock_handle.return_value = "Résultat: Aucun feu"
+            mock_handle.return_value = ["Résultat: Aucun feu"]
 
             await transport._handle_client(mock_reader, mock_writer)
 
@@ -218,7 +218,7 @@ class TestSignalWireOptOut:
 
         response = sw_transport._route(self.NUMBER, 'STOP')
 
-        assert response == Messages().opt_out_confirmed()
+        assert response == [Messages().opt_out_confirmed()]
         assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') is None
 
     @pytest.mark.parametrize('body', ['stop', ' Unsubscribe ', 'QUIT',
@@ -234,7 +234,7 @@ class TestSignalWireOptOut:
 
         response = sw_transport._route(self.NUMBER, 'START')
 
-        assert response == Messages().opt_in_confirmed()
+        assert response == [Messages().opt_in_confirmed()]
         with patch('app.transport.signalwire.safe_handle_message',
                    return_value='OK'):
             assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == 'OK'
@@ -262,7 +262,7 @@ class TestSignalWireOptOut:
 
         response = sw_transport._route(self.NUMBER, 'STOP')
 
-        assert response == Messages().system_error()
+        assert response == [Messages().system_error()]
 
     def test_failed_check_does_not_block_information(self, sw_transport, monkeypatch, caplog):
         import logging
@@ -319,11 +319,39 @@ class TestSmsLogFraming:
 
         try:
             with patch('app.transport.signalwire.safe_handle_message',
-                       return_value='line1\nline2'):
+                       return_value=['line1\nline2']):
                 await sw_transport._on_message(event)
         finally:
             sms_logger.removeHandler(caplog.handler)
 
         messages = [r.getMessage() for r in caplog.records if r.name == 'sms']
         assert 'From: +15551230002\n> Fires\n> (50.5, -121.0)' in messages
-        assert 'Reply:\n> line1\n> line2' in messages
+        assert ('Reply:\n'
+                '> ----- SMS 1/1 (11/160 GSM-7) -----\n'
+                '> line1\n'
+                '> line2') in messages
+
+    @pytest.mark.asyncio
+    async def test_split_reply_marks_each_message_with_cost(self, sw_transport, caplog):
+        import logging
+        sms_logger = logging.getLogger('sms')
+        sms_logger.addHandler(caplog.handler)
+        sw_transport._client = AsyncMock()
+        event = Mock(from_number='+15551230002', body='Fires\n(50.5, -121.0)')
+
+        try:
+            with patch('app.transport.signalwire.safe_handle_message',
+                       return_value=['first fire', 'second\n\nfire']):
+                await sw_transport._on_message(event)
+        finally:
+            sms_logger.removeHandler(caplog.handler)
+
+        messages = [r.getMessage() for r in caplog.records if r.name == 'sms']
+        assert ('Reply:\n'
+                '> ----- SMS 1/2 (10/160 GSM-7) -----\n'
+                '> first fire\n'
+                '> \n'
+                '> ----- SMS 2/2 (12/160 GSM-7) -----\n'
+                '> second\n'
+                '> \n'
+                '> fire') in messages

@@ -46,7 +46,7 @@ class TestOnMessage:
     async def test_processes_and_replies(self, transport, signalwire_config):
         """An incoming message is processed and the response is sent back."""
         with patch("app.transport.signalwire.safe_handle_message") as mock_handle:
-            mock_handle.return_value = "No fires reported within 100km"
+            mock_handle.return_value = ["No fires reported within 100km"]
 
             await transport._on_message(_incoming())
 
@@ -64,7 +64,7 @@ class TestOnMessage:
         transport._client.send_message = AsyncMock(side_effect=RelayError(500, "boom"))
 
         with patch("app.transport.signalwire.safe_handle_message") as mock_handle:
-            mock_handle.return_value = "Test response"
+            mock_handle.return_value = ["Test response"]
 
             # Should not raise even though the reply fails.
             await transport._on_message(_incoming())
@@ -79,7 +79,7 @@ class TestOnMessage:
         transport._client = Mock()
         transport._client.send_message = AsyncMock(return_value=Mock(message_id="m1"))
 
-        with patch("app.transport.signalwire.safe_handle_message", return_value="ok"):
+        with patch("app.transport.signalwire.safe_handle_message", return_value=["ok"]):
             await transport._on_message(_incoming())
 
         assert transport._client.send_message.call_args.kwargs["context"] == "custom-ctx"
@@ -88,12 +88,38 @@ class TestOnMessage:
     async def test_replies_with_fire_data(self, transport):
         """A fire-check request is routed through safe_handle_message and replied to."""
         with patch("app.transport.signalwire.safe_handle_message") as mock_handle:
-            mock_handle.return_value = "Fire: Test Fire (K12345)\n12km NW\nSize: 100 ha"
+            mock_handle.return_value = ["Fire: Test Fire (K12345)\n12km NW\nSize: 100 ha"]
 
             await transport._on_message(_incoming(body="FIRECHECK: (51.398720, -116.491640)"))
 
             mock_handle.assert_called_once_with("FIRECHECK: (51.398720, -116.491640)")
             assert transport._client.send_message.call_count == 1
+
+
+class TestMultiSegmentSending:
+    """Each segment of a reply goes out as its own SMS."""
+
+    @pytest.mark.asyncio
+    async def test_each_segment_sent_separately(self, transport):
+        with patch("app.transport.signalwire.safe_handle_message") as mock_handle:
+            mock_handle.return_value = ["first", "second", "third"]
+
+            await transport._on_message(_incoming())
+
+            bodies = [c.kwargs["body"] for c in transport._client.send_message.call_args_list]
+            assert bodies == ["first", "second", "third"]
+
+    @pytest.mark.asyncio
+    async def test_failed_segment_does_not_stop_the_rest(self, transport):
+        transport._client.send_message = AsyncMock(
+            side_effect=[RelayError(500, "boom"), Mock(message_id="m2")])
+
+        with patch("app.transport.signalwire.safe_handle_message") as mock_handle:
+            mock_handle.return_value = ["first", "second"]
+
+            await transport._on_message(_incoming())
+
+            assert transport._client.send_message.call_count == 2
 
 
 class TestSignalWireTransport:

@@ -135,30 +135,38 @@ class AvalancheReport(AvalancheMessages):
         Returns:
             Formatted forecast string or None
         """
+        if format == 'abbrev':
+            return '\n\n'.join(self.get_forecast_paragraphs(avalanche_filters))
+
+        result = self._filtered_forecast(avalanche_filters)
+        if isinstance(result, str):
+            return result
+        return self._format_forecast_full(*result)
+
+    def get_forecast_paragraphs(self, avalanche_filters: Optional[Dict] = None) -> list[str]:
+        """The abbreviated forecast as self-contained paragraphs (header,
+        then one per problem); a user-facing error is a single paragraph."""
+        result = self._filtered_forecast(avalanche_filters)
+        if isinstance(result, str):
+            return [result]
+        return self._forecast_paragraphs_abbrev(*result)
+
+    def _filtered_forecast(self, avalanche_filters: Optional[Dict]):
+        """(forecast_data, dates) ready for rendering, or the user-facing
+        error string when there is no forecast to render."""
         if not self.provider:
             return self.no_provider_msg()
 
-        # Fetch all forecast data
         forecast_data = self.provider.get_forecast(self.coords)
-
         if not forecast_data:
             return self.no_forecast_msg()
 
-        # Apply filters
-        filters = avalanche_filters or {}
-        forecast_filter = filters.get('forecast', 'all')
-
-        # Get filtered dates
+        forecast_filter = (avalanche_filters or {}).get('forecast', 'all')
         try:
             dates = self._apply_filter(forecast_data, forecast_filter)
         except ValueError:
             return self.broken_forecast_msg('date')
-
-        # Format based on requested style
-        if format == 'abbrev':
-            return self._format_forecast_abbrev(forecast_data, dates)
-        else:
-            return self._format_forecast_full(forecast_data, dates)
+        return forecast_data, dates
 
     def _apply_filter(self, forecast_data: Dict[str, Any], forecast_filter: str) -> list:
         """Apply forecast filter to select day names.
