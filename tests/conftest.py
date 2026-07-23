@@ -116,3 +116,8 @@ def pytest_configure(config):
         db_path = Path(tempfile.mkdtemp(prefix="treksafer-tests-")) / "fires.db"
         build_fixture_db(db_path)
         os.environ["TREKSAFER_DATABASE"] = str(db_path)
+    # The request log records on every handled message; keep it out of the
+    # working tree.
+    os.environ.setdefault(
+        "TREKSAFER_REQUEST_DATABASE",
+        str(Path(tempfile.mkdtemp(prefix="treksafer-tests-")) / "requests.db"))

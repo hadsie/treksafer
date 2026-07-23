@@ -23,6 +23,7 @@ TREKSAFER_SW_NUMBER=[REPLACE WITH YOUR SIGNALWIRE PHONE NUMBER]
 
 # SMS opt-out list (numbers that texted STOP).
 # TREKSAFER_OPTOUT_DATABASE=data/optouts.db
+# TREKSAFER_REQUEST_DATABASE=data/requests.db
 
 # Directory for runtime logs (app log, sms.log).
 # TREKSAFER_LOG_DIR=logs

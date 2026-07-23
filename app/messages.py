@@ -2,9 +2,11 @@
 
 import logging
 import re
+import sqlite3
 from datetime import date, datetime
 from typing import Dict, Optional
 
+from . import request_log
 from .config import get_config
 from .health import health_report
 from .helpers import parse_message, local_time, quoted
@@ -184,14 +186,61 @@ def handle_message_segments(message: str) -> list[str]:
     return assemble(handle_message_blocks(message))
 
 
-def safe_handle_message(message: str) -> list[str]:
-    """Transport boundary: the segmented reply, or a single error message
-    so the user always gets a reply."""
+def _response_type(blocks: list[Block]) -> str:
+    """Classify a reply for the request log by the copy it is built from."""
+    m = Messages()
+    exact = {
+        m.no_gps(): 'no_gps',
+        m.data_unavailable(): 'data_unavailable',
+        m.help(): 'help',
+        m.usage(): 'usage',
+    }
+    for text in (block.ladder[0] for block in blocks):
+        if text in exact:
+            return exact[text]
+        if text.startswith(('TrekSafer OK', 'TrekSafer health ERROR')):
+            return 'health'
+        if text.startswith('No fire matching'):
+            return 'fire_not_found'
+        if text.startswith('No fires reported'):
+            return 'no_fires'
+        if text.startswith('GPS coordinates outside'):
+            return 'outside_of_area'
+        if text.startswith('Unknown data type'):
+            return 'system_error'
+        if text.startswith('Fire:'):
+            return 'fires'
+    return 'avalanche'
+
+
+def _record_request(sender: str, message: str,
+                    coords, response_type: str) -> None:
+    """Record the request; a logging failure never reaches the user."""
+    settings = get_config()
     try:
-        return handle_message_segments(message)
+        request_log.record(settings.request_database, sender, message,
+                           coords, response_type,
+                           settings.request_log_retention_days)
+    except (sqlite3.Error, OSError) as e:
+        logging.error(f"Request log unavailable: {e}")
+
+
+def safe_handle_message(message: str, sender: str = 'unknown') -> list[str]:
+    """Transport boundary: the segmented reply, or a single error message
+    so the user always gets a reply. Every request is recorded to the
+    request log, including ones that crash the handler."""
+    coords, response_type = None, 'system_error'
+    try:
+        parsed = parse_message(message)
+        coords = parsed['coords'] if parsed else None
+        blocks = handle_message_blocks(message)
+        segments = assemble(blocks)
+        response_type = _response_type(blocks)
     except Exception:
         logging.exception(f"handle_message crashed on message: {message!r}")
-        return [Messages().system_error()]
+        segments = [Messages().system_error()]
+    _record_request(sender, message, coords, response_type)
+    return segments
 
 
 def in_fire_season(today: Optional[date] = None) -> bool:

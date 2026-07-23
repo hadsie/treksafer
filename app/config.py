@@ -233,6 +233,8 @@ class Settings(BaseSettings):
     database: str = "data/fires.db"
     # Numbers that opted out of SMS replies (STOP).
     optout_database: str
+    request_database: str
+    request_log_retention_days: int
     # Stored fallback data older than this (hours) carries a freshness marker.
     stale_data_hours: int
     # Fires discovered within this many days bypass the minimum size filter.

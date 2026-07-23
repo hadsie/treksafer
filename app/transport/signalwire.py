@@ -134,7 +134,7 @@ class SignalWireTransport(BaseTransport):
             # A missed notice must not block safety information; the error
             # above alerts the operator.
             self.log.error("Compliance store unavailable: %s", e)
-        replies.extend(safe_handle_message(body))
+        replies.extend(safe_handle_message(body, number))
         return replies
 
     async def _on_message(self, message: MessageReceiveEvent) -> None:

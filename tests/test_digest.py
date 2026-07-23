@@ -128,6 +128,9 @@ class TestRun:
         monkeypatch.setattr(settings.monitoring, 'sms_log_file', str(log))
         monkeypatch.setattr(settings.monitoring, 'digest_state_file',
                             str(tmp_path / 'digest_state.json'))
+        # Requests recorded by other tests must not leak into this run.
+        monkeypatch.setattr(settings, 'request_database',
+                            str(tmp_path / 'requests.db'))
         emails = []
         monkeypatch.setattr(digest, 'notify_email',
                             lambda subject, body: emails.append((subject, body)) or True)
@@ -191,3 +194,64 @@ class TestRun:
 
         assert digest.run(env['settings']) == 0
         assert env['emails'] == []
+
+
+class TestReRequestPairs:
+    """Quick follow-up requests from one sender pair up for the digest."""
+
+    def _row(self, sender, at, response_type='fires', message='fires (49.1, -120.2)',
+             lat=49.1, lon=-120.2):
+        return {'received_at': at, 'sender': sender, 'message': message,
+                'lat': lat, 'lon': lon, 'response_type': response_type}
+
+    def test_pairs_within_window(self):
+        from scripts.digest import re_request_pairs
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:02:30+00:00')]
+        assert len(re_request_pairs(rows)) == 1
+
+    def test_no_pair_outside_window(self):
+        from scripts.digest import re_request_pairs
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:05:00+00:00')]
+        assert re_request_pairs(rows) == []
+
+    def test_different_senders_never_pair(self):
+        from scripts.digest import re_request_pairs
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000002', '2026-07-22T18:01:00+00:00')]
+        assert re_request_pairs(rows) == []
+
+    def test_service_keywords_do_not_pair(self):
+        from scripts.digest import re_request_pairs
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:01:00+00:00',
+                          response_type='usage', lat=None, lon=None)]
+        assert re_request_pairs(rows) == []
+
+    def test_three_quick_requests_make_two_pairs(self):
+        from scripts.digest import re_request_pairs
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:01:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:02:00+00:00')]
+        assert len(re_request_pairs(rows)) == 2
+
+    def test_pair_formatting_shows_both_coordinate_sets(self):
+        from scripts.digest import format_pairs
+        pair = (self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:02:00+00:00',
+                          message='fires (49.5, -120.9)', lat=49.5, lon=-120.9))
+        text = format_pairs([pair])
+        assert '(49.10000, -120.20000)' in text
+        assert '(49.50000, -120.90000)' in text
+        assert 'fires (49.5, -120.9)' in text
+
+
+class TestVolumeSection:
+    def test_counts_by_outcome(self):
+        from datetime import datetime, timezone
+        from scripts.digest import format_volume
+        rows = [{'response_type': t} for t in ('fires', 'fires', 'no_gps')]
+        text = format_volume(rows, datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc))
+        assert '3 request(s) since Jul 21 12:00 UTC' in text
+        assert 'fires 2' in text and 'no_gps 1' in text
