@@ -338,3 +338,31 @@ class TestNonStringFieldValues:
     def test_whitespace_stripped_from_strings(self):
         message = FireMessages().fire(mock_fire(Name='  Padded Name  '))
         assert 'Padded Name (' in message
+
+
+class TestStatusTerms:
+    """Feed status codes display as words; everything else passes through."""
+
+    @pytest.mark.parametrize('code,word', [
+        ('OC', 'Out of Control'),
+        ('BH', 'Being Held'),
+        ('UC', 'Under Control'),
+    ])
+    def test_codes_expand_to_words(self, code, word):
+        message = FireMessages().fire(mock_fire(Status=code))
+        assert f'Status: {word}' in message
+
+    def test_words_pass_through_unchanged(self):
+        message = FireMessages().fire(mock_fire(Status='Being Held'))
+        assert 'Status: Being Held' in message
+
+    def test_unlisted_status_passes_through(self):
+        message = FireMessages().fire(mock_fire(Status='45% contained'))
+        assert 'Status: 45% contained' in message
+
+    def test_table_round_trips(self):
+        """Every abbreviation maps back to exactly one wording."""
+        import yaml
+        with open('data/fire_terms.yaml') as f:
+            table = yaml.safe_load(f)['status']
+        assert len(set(table.values())) == len(table)

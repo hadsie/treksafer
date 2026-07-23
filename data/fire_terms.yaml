@@ -1,0 +1,13 @@
+# Fire status terms: the full wording and its SMS abbreviation.
+# The full message format expands feed codes (CA publishes OC/BH/UC) to
+# the wording on the left; the compact format abbreviates to the codes on
+# the right. Statuses not listed here (e.g. "45% contained") display as
+# the feed sent them.
+status:
+  "Out of Control": "OC"
+  "Fire of Note": "FN"
+  "Not Under Control": "NUC"
+  "Being Observed": "BO"
+  "Being Held": "BH"
+  "Under Control": "UC"
+  "Out": "Out"
