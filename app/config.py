@@ -40,6 +40,8 @@ class SignalWireConfig(BaseModel):
     phone_number: str | None = None
     context: str = "treksafer"
     enabled: bool = False
+    # Whether requests on this transport are recorded to the request log.
+    log_requests: bool = True
 
     # require secrets only if enabled
     @model_validator(mode="after")
@@ -60,6 +62,8 @@ class CLIConfig(BaseModel):
     host: str = "localhost"
     port: int = 8888
     enabled: bool
+    # Whether requests on this transport are recorded to the request log.
+    log_requests: bool = True
 
 
 class EmailConfig(BaseModel):

@@ -24,9 +24,13 @@ class Block:
     """One self-contained unit of a reply, with renderings largest first.
 
     An optional block never gets a message to itself: unless something
-    required shares its message, it is dropped."""
+    required shares its message, it is dropped. kind names the reply
+    outcome the block represents ('fires', 'no_fires', ...), set where
+    the block is built; blocks that only accompany the answer (the
+    conditions header, freshness markers) carry None."""
     ladder: list[str]
     optional: bool = False
+    kind: str = None
 
 
 def _gsm_septets(text: str):

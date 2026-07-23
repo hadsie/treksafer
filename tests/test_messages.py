@@ -436,7 +436,7 @@ class TestInFireSeason:
 
 
 class TestResponseType:
-    """Replies classify by the copy they are built from."""
+    """Every reply's blocks carry its outcome tag."""
 
     @pytest.mark.parametrize('message,expected', [
         ('help', 'help'),
@@ -450,10 +450,10 @@ class TestResponseType:
         ('health', 'health'),
     ])
     def test_classification(self, message, expected):
-        from app.messages import _response_type, handle_message_blocks
+        from app.messages import _reply_kind, handle_message_blocks
         with patch('app.messages.get_aqi', return_value=42), \
              patch('app.messages.get_wind', return_value=None):
-            assert _response_type(handle_message_blocks(message)) == expected
+            assert _reply_kind(handle_message_blocks(message)) == expected
 
 
 class TestRequestRecording:
@@ -493,6 +493,13 @@ class TestRequestRecording:
         rows = self._rows(request_db)
         assert rows[0]['response_type'] == 'system_error'
         assert rows[0]['lat'] == 50.1
+
+    def test_record_false_skips_the_log(self, request_db):
+        """A transport with log_requests off leaves no row."""
+        from app.messages import safe_handle_message
+        safe_handle_message('help', 'cli', record=False)
+
+        assert self._rows(request_db) == []
 
     def test_logging_failure_never_blocks_the_reply(self, request_db, caplog):
         import logging as _logging

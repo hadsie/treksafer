@@ -81,8 +81,12 @@ transports:
     api_token : ${TREKSAFER_SW_TOKEN}
     phone_number: "${TREKSAFER_SW_NUMBER}"
     context: ${TREKSAFER_SW_CONTEXT:-treksafer}
+    log_requests: true
   - type: "cli"
     enabled: ${TREKSAFER_CLI_ENABLED:-true}
+    # CLI traffic is operator testing and the website demo; keep it out
+    # of the request log so digest signals reflect real senders.
+    log_requests: false
     host: ${TREKSAFER_CLI_HOST:-localhost}
     port: "${TREKSAFER_CLI_PORT:-8888}"
 

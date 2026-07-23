@@ -109,27 +109,27 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> list
         wind = get_wind(coords)
         if wind:
             conditions.append(responses.wind(wind))
-    # The conditions header was not explicitly requested and is a optional.
-    # If it can't fit an SMS with the content that follows, it's dropped.
+    # The conditions header was not explicitly requested and is optional:
+    # if it can't fit an SMS with the content that follows, it's dropped.
     if conditions:
         blocks.append(Block(['\n'.join(conditions)], optional=True))
 
     # Find fires
     findfires = FindFires(coords, fire_filters)
     if findfires.out_of_range():
-        return blocks + [Block([responses.outside_of_area(coords)])]
+        return blocks + [Block([responses.outside_of_area(coords)], kind='outside_of_area')]
 
     fires = findfires.nearby()
     # A source that produced no data at all must not read as "no fires".
     if not fires and findfires.unavailable_sources:
-        return blocks + [Block([responses.data_unavailable()])]
+        return blocks + [Block([responses.data_unavailable()], kind='data_unavailable')]
 
     if not fires:
         distance = min(findfires.filters['distance'], settings.max_radius)
         status_filter = fire_filters.get('status')
-        blocks.append(Block([responses.no_fires(distance, coords, status_filter)]))
+        blocks.append(Block([responses.no_fires(distance, coords, status_filter)], kind='no_fires'))
     else:
-        blocks.extend(Block(responses.fire_ladder(fire)) for fire in fires)
+        blocks.extend(Block(responses.fire_ladder(fire), kind='fires') for fire in fires)
 
     # When a realtime source failed and stored data was used instead, a
     # freshness marker goes last so old data is never presented as current.
@@ -151,14 +151,14 @@ def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,
     lookup = FireLookup(term, coords)
     fire = lookup.result()
     if fire is None:
-        return Block([responses.fire_not_found(term)])
+        return Block([responses.fire_not_found(term)], kind='fire_not_found')
     lines = [responses.fire(fire)]
     if lookup.perimeter:
         lines.append(responses.fire_perimeter(lookup.perimeter))
     if lookup.edge:
         lines.append(responses.fire_edge(lookup.edge))
     lines.append(responses.as_of(lookup.as_of))
-    return Block(["\n".join(lines)])
+    return Block(["\n".join(lines)], kind='fires')
 
 
 def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> list[Block]:
@@ -175,9 +175,9 @@ def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dic
     avalanche = AvalancheReport(coords)
 
     if avalanche.out_of_range():
-        return [Block([avalanche.outside_of_area_msg()])]
+        return [Block([avalanche.outside_of_area_msg()], kind='outside_of_area')]
 
-    return [Block([paragraph])
+    return [Block([paragraph], kind='avalanche')
             for paragraph in avalanche.get_forecast_paragraphs(avalanche_filters)]
 
 
@@ -186,31 +186,9 @@ def handle_message_segments(message: str) -> list[str]:
     return assemble(handle_message_blocks(message))
 
 
-def _response_type(blocks: list[Block]) -> str:
-    """Classify a reply for the request log by the copy it is built from."""
-    m = Messages()
-    exact = {
-        m.no_gps(): 'no_gps',
-        m.data_unavailable(): 'data_unavailable',
-        m.help(): 'help',
-        m.usage(): 'usage',
-    }
-    for text in (block.ladder[0] for block in blocks):
-        if text in exact:
-            return exact[text]
-        if text.startswith(('TrekSafer OK', 'TrekSafer health ERROR')):
-            return 'health'
-        if text.startswith('No fire matching'):
-            return 'fire_not_found'
-        if text.startswith('No fires reported'):
-            return 'no_fires'
-        if text.startswith('GPS coordinates outside'):
-            return 'outside_of_area'
-        if text.startswith('Unknown data type'):
-            return 'system_error'
-        if text.startswith('Fire:'):
-            return 'fires'
-    return 'avalanche'
+def _reply_kind(blocks: list[Block]) -> str:
+    """The reply's outcome: the first tagged block names it."""
+    return next((block.kind for block in blocks if block.kind), 'unknown')
 
 
 def _record_request(sender: str, message: str,
@@ -225,21 +203,24 @@ def _record_request(sender: str, message: str,
         logging.error(f"Request log unavailable: {e}")
 
 
-def safe_handle_message(message: str, sender: str = 'unknown') -> list[str]:
+def safe_handle_message(message: str, sender: str = 'unknown',
+                        record: bool = True) -> list[str]:
     """Transport boundary: the segmented reply, or a single error message
-    so the user always gets a reply. Every request is recorded to the
-    request log, including ones that crash the handler."""
+    so the user always gets a reply. Requests are recorded to the request
+    log, including ones that crash the handler, unless the transport's
+    log_requests setting opts out."""
     coords, response_type = None, 'system_error'
     try:
         parsed = parse_message(message)
         coords = parsed['coords'] if parsed else None
         blocks = handle_message_blocks(message)
         segments = assemble(blocks)
-        response_type = _response_type(blocks)
+        response_type = _reply_kind(blocks)
     except Exception:
         logging.exception(f"handle_message crashed on message: {message!r}")
         segments = [Messages().system_error()]
-    _record_request(sender, message, coords, response_type)
+    if record:
+        _record_request(sender, message, coords, response_type)
     return segments
 
 
@@ -274,16 +255,16 @@ def handle_message_blocks(message: str) -> list[Block]:
     """
     responses = Messages()
     if _HEALTH_PATTERN.fullmatch(message):
-        return [Block([responses.health(health_report())])]
+        return [Block([responses.health(health_report())], kind='health')]
     if _HELP_PATTERN.fullmatch(message):
-        return [Block([responses.help()])]
+        return [Block([responses.help()], kind='help')]
     if _USAGE_PATTERN.match(message):
-        return [Block([responses.usage()])]
+        return [Block([responses.usage()], kind='usage')]
 
     parsed_data = parse_message(message)
     if not parsed_data:
         logging.warning('No GPS coords found in message:\n%s', quoted(message))
-        return [Block([responses.no_gps()])]
+        return [Block([responses.no_gps()], kind='no_gps')]
 
     coords = parsed_data["coords"]
     fire_filters = parsed_data["fire_filters"]
@@ -315,7 +296,7 @@ def handle_message_blocks(message: str) -> list[Block]:
     elif data_type == "fire":
         return handle_fire_request(coords, fire_filters)
     else:
-        return [Block([f"Unknown data type: {data_type}"])]
+        return [Block([f"Unknown data type: {data_type}"], kind='system_error')]
 
 
 def handle_message(message: str) -> str:

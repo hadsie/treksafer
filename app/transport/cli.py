@@ -23,6 +23,7 @@ class CLITransport(BaseTransport):
     def __init__(self, params: dict):
         self.host = params.host
         self.port = params.port
+        self.log_requests = params.log_requests
         self._server: Optional[asyncio.AbstractServer] = None
 
     def send(self, recipient, content):
@@ -53,7 +54,8 @@ class CLITransport(BaseTransport):
             response = json.dumps(health_report())
         else:
             # Rejoining the per-SMS segments to build the full reply.
-            response = "\n\n".join(safe_handle_message(message, "cli"))
+            response = "\n\n".join(
+                safe_handle_message(message, "cli", record=self.log_requests))
         writer.write((response + "\n").encode("utf-8"))
         await writer.drain()
 

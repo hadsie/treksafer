@@ -62,7 +62,7 @@ class TestCLITransport:
             await transport._handle_client(mock_reader, mock_writer)
 
             # Verify safe_handle_message was called with correct input
-            mock_handle.assert_called_once_with(test_message, "cli")
+            mock_handle.assert_called_once_with(test_message, "cli", record=True)
 
             # Verify response was written
             expected_response = "No fires reported within 100km\n"
@@ -95,7 +95,7 @@ class TestCLITransport:
             await transport._handle_client(mock_reader, mock_writer)
 
             # Verify whitespace was stripped
-            mock_handle.assert_called_once_with("FIRECHECK: (49.25,-123.10)", "cli")
+            mock_handle.assert_called_once_with("FIRECHECK: (49.25,-123.10)", "cli", record=True)
 
     @pytest.mark.asyncio
     async def test_handle_client_with_fire_found_response(self, cli_config):
