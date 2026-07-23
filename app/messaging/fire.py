@@ -23,10 +23,13 @@ class FireMessages:
     def data_unavailable(self) -> str:
         return 'Fire data is temporarily unavailable for your area. Try again later.'
 
-    def fire_not_found(self, term: str) -> str:
-        """A fireid lookup matched nothing. Informational, so it carries no
-        TrekSafer branding."""
-        return (f'No fire matching "{term}" was found. Check the fire number, '
+    def fire_not_found(self, terms) -> str:
+        """A fireid lookup matched nothing. Accepts a single id or a list of
+        misses, naming each. Informational, so it carries no TrekSafer branding."""
+        if isinstance(terms, str):
+            terms = [terms]
+        named = ', '.join(f'"{term}"' for term in terms)
+        return (f'No fire matching {named} was found. Check the fire number, '
                 'or send "fires" with your location for nearby fires.')
 
     def fire_perimeter(self, perimeter: Dict) -> str:

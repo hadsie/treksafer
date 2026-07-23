@@ -55,6 +55,8 @@ SCENARIOS = [
     ('fires_no_coordinates', 'fires please'),
     ('fireid_found', 'fireid C10784 (49.06, -120.79)'),
     ('fireid_not_found', 'fireid NOPE999'),
+    ('fireid_multi', 'fireid C10784 NIP991'),
+    ('fireid_mixed_found_and_not_found', 'fireid C10784 NOPE999'),
     ('keyword_help', 'help'),
     ('keyword_usage', 'usage'),
     ('keyword_usage_with_location', 'usage (49.2, -123.1)'),

@@ -119,6 +119,26 @@ class TestFireLookupResponse:
         assert message == ('No fire matching "NOPE999" was found. Check the fire '
                            'number, or send "fires" with your location for nearby fires.')
 
+    def test_multiple_ids_return_a_block_each(self):
+        message = handle_message('fireid C10784 NIP991')
+
+        assert 'C10784' in message
+        assert 'Fire: NIP991' in message
+
+    def test_mixed_found_and_not_found(self):
+        """Found ids get their blocks; the misses share one not-found line."""
+        message = handle_message('fireid C10784 NOPE999')
+
+        assert 'C10784' in message
+        assert 'No fire matching "NOPE999" was found' in message
+
+    def test_all_missing_ids_named_in_one_line(self):
+        message = handle_message('fireid NOPE1 NOPE2')
+
+        assert message == ('No fire matching "NOPE1", "NOPE2" was found. Check the '
+                           'fire number, or send "fires" with your location for '
+                           'nearby fires.')
+
     def test_miss_with_coords_never_falls_back_to_radius_search(self):
         """An explicit lookup gets a direct answer; coordinates in the
         message do not turn a miss into a nearby-fires report."""
@@ -216,6 +236,21 @@ class TestServiceKeywords:
             response = handle_message('fires usage (50.5, -121.0)')
 
         assert response != Messages().usage()
+
+    @pytest.mark.parametrize('message', [
+        '!usage', 'fires !usage (50.5, -121.0)', '!usage inreachlink.com/FAKE123'])
+    def test_usage_command_recognized_anywhere(self, message):
+        """Unlike the bare "usage" keyword, the "!usage" command answers
+        wherever it appears in the message."""
+        assert handle_message(message) == Messages().usage()
+
+    def test_full_command_does_not_hijack_a_fire_request(self):
+        """"!full" is a modifier, not a standalone reply: the request still
+        routes to a fire report."""
+        with patch('app.messages.get_aqi', return_value=None):
+            response = handle_message('fires !full (50.5, -121.0)')
+
+        assert response not in (Messages().usage(), Messages().help())
 
     def test_keyword_replies_fit_one_sms_segment(self):
         for text in (Messages().help(), Messages().usage(),

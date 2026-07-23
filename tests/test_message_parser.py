@@ -515,22 +515,22 @@ class TestFilterExtraction:
 
 
 class TestFireIdParsing:
-    """A "fireid <token>" message yields a fire_id lookup, with or without
-    coordinates. The id is the next run of non-whitespace characters after
-    the keyword; nothing else in the message is touched."""
+    """A "fireid <id> [<id> ...]" message yields a list of fire ids, with or
+    without coordinates. The ids are the contiguous run of id-like tokens
+    after the keyword; nothing else in the message is touched."""
 
     def test_id_only_message(self):
         result = parse_message('fireid K70597')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
         assert result['coords'] is None
 
     def test_keyword_is_case_insensitive(self):
         result = parse_message('FireID K70597')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
 
     def test_id_with_appended_device_coords(self):
         result = parse_message('fireid K70597 (52.5092, -115.6182)')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
         assert result['coords'] == (52.5092, -115.6182)
 
     @responses.activate
@@ -539,26 +539,36 @@ class TestFireIdParsing:
                       body='{"messages":[{"Latitude":44.1,"Longitude":-73.2}]}')
 
         result = parse_message('fireid K70597 inreachlink.com/ABC1234')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
         assert result['coords'] == (44.1, -73.2)
 
     def test_hyphenated_id_survives(self):
         result = parse_message('fireid HWF-096-2026')
-        assert result['fire_id'] == 'HWF-096-2026'
+        assert result['fire_ids'] == ['HWF-096-2026']
 
     def test_id_containing_the_word_fire_survives(self):
         """CA identifiers embed the word "fire"; the token is never re-scanned."""
         result = parse_message('fireid 2026_XX_DRY_FIRE_999')
-        assert result['fire_id'] == '2026_XX_DRY_FIRE_999'
+        assert result['fire_ids'] == ['2026_XX_DRY_FIRE_999']
 
-    def test_id_is_a_single_token(self):
-        """The id ends at whitespace; multi-word names are not supported."""
-        result = parse_message('fireid Kullagh Creek')
-        assert result['fire_id'] == 'Kullagh'
+    def test_multiple_ids_parsed_as_a_list(self):
+        result = parse_message('fireid K1 K2 K3')
+        assert result['fire_ids'] == ['K1', 'K2', 'K3']
+
+    def test_multiple_ids_with_appended_device_coords(self):
+        result = parse_message('fireid K1 K2 (52.5092, -115.6182)')
+        assert result['fire_ids'] == ['K1', 'K2']
+        assert result['coords'] == (52.5092, -115.6182)
+
+    def test_id_list_stops_at_filter_words(self):
+        result = parse_message('fireid K1 K2 active 25km')
+        assert result['fire_ids'] == ['K1', 'K2']
+        assert result['fire_filters']['status'] == 'active'
+        assert result['fire_filters']['distance'] == 25
 
     def test_trailing_punctuation_trimmed(self):
         result = parse_message('fireid K70597.')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
 
     def test_punctuation_only_token_is_no_lookup(self):
         assert parse_message('fireid !!!') is None
@@ -568,7 +578,7 @@ class TestFireIdParsing:
 
     def test_plain_fire_message_is_not_a_lookup(self):
         result = parse_message('fire (52.5092, -115.6182)')
-        assert result['fire_id'] is None
+        assert result['fire_ids'] == []
         assert result['coords'] == (52.5092, -115.6182)
 
     def test_neither_coords_nor_id_returns_none(self):
@@ -576,9 +586,38 @@ class TestFireIdParsing:
 
     def test_filters_parsed_alongside_id(self):
         result = parse_message('fireid K70597 active 25km')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
         assert result['fire_filters']['status'] == 'active'
         assert result['fire_filters']['distance'] == 25
+
+
+class TestCommandChannel:
+    """The "!" command channel: !usage and !full, recognized anywhere in the
+    message. An unknown !token is inert and left as plain text."""
+
+    def test_full_command_sets_flag(self):
+        result = parse_message('fireid K70597 !full')
+        assert result['full'] is True
+        assert result['fire_ids'] == ['K70597']
+
+    def test_full_command_recognized_anywhere(self):
+        result = parse_message('fires !full (52.5092, -115.6182)')
+        assert result['full'] is True
+
+    def test_full_absent_by_default(self):
+        result = parse_message('fires (52.5092, -115.6182)')
+        assert result['full'] is False
+
+    def test_unknown_command_is_inert_and_coords_still_parse(self):
+        """"help !50.027,-120.44" still yields its coordinates."""
+        result = parse_message('help !50.027,-120.44')
+        assert result['coords'] == (50.027, -120.44)
+        assert result['full'] is False
+
+    def test_command_does_not_terminate_at_a_word_boundary_glue(self):
+        """A "!" glued to the end of a word is not a command token."""
+        result = parse_message('fires!full (52.5092, -115.6182)')
+        assert result['full'] is False
 
 
 class TestReturnValueStructure:

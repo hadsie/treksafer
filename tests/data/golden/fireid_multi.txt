@@ -1,0 +1,13 @@
+Fire: Kamloops_Base (C10784)
+Location: Kamloops
+Size: 50 ha
+Status: Being Held
+Perim: 50.50-50.50N 120.50-120.50W
+As of T ago
+
+Fire: NIP991
+Location: Nipigon
+Size: 850 ha
+Status: Not Under Control
+Perim: 49.98-50.00N 91.32-91.28W
+As of T ago
