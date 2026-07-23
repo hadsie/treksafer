@@ -2,12 +2,24 @@
 and the no-result replies (no fires, out of coverage, data unavailable)."""
 
 from datetime import datetime, timezone
+from functools import cache
 from typing import Dict
+
+import yaml
 
 from ..config import get_config
 from ..filters import STATUS_LEVELS
 from ..weather import WindReport
 from .assembler import fits_segment
+
+
+@cache
+def _status_words() -> Dict[str, str]:
+    """Feed status code -> full wording, inverted from the status table
+    in data/fire_terms.yaml."""
+    with open('data/fire_terms.yaml') as f:
+        terms = yaml.safe_load(f)
+    return {abbreviation: word for word, abbreviation in terms['status'].items()}
 
 
 class FireMessages:
@@ -183,6 +195,10 @@ class FireMessages:
         # Strip all strings
         fire = {k: v.strip() if isinstance(v, str) else v
                 for k, v in fire.items()}
+
+        # Feeds that publish status codes (CA: OC/BH/UC) display as words.
+        if 'Status' in fire:
+            fire['Status'] = _status_words().get(fire['Status'], fire['Status'])
 
         fire['FullName'] = fire['Fire']
         if 'Name' in fire and fire['Name'] != fire['Fire']:
