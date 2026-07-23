@@ -78,7 +78,9 @@ class TestGoldenResponses:
             segments = handle_message_segments('fires all (49.064646, -120.7919022)')
         _check('fires_manning_all_segments', '\n\n-- next SMS --\n\n'.join(segments))
 
-    def test_conditions_header_with_wind(self):
+    def test_conditions_header_with_wind(self, monkeypatch):
+        from app.config import get_config
+        monkeypatch.setattr(get_config().thresholds, 'wind_peak_gust_margin', 15)
         report = WindReport(speed=25, gusts=45, direction='SW', peak_gust=60)
         with patch('app.messages.get_aqi', return_value=42), \
              patch('app.messages.get_wind', return_value=report):

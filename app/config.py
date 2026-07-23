@@ -31,6 +31,8 @@ class Thresholds(BaseModel):
     # Margin (km/h) over current gusts before the wind line shows the
     # 12-hour peak gust; the trade-off is documented in thresholds.yaml.
     wind_peak_gust_margin: int
+    # Most messages one reply may send; documented in thresholds.yaml.
+    sms_segment_backstop: int
 
 
 class SignalWireConfig(BaseModel):
