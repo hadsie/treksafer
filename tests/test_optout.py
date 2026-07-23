@@ -1,4 +1,4 @@
-"""Tests for the SMS opt-out store (app/optout.py)."""
+"""Tests for the SMS compliance store (app/optout.py)."""
 
 from app import optout
 
@@ -35,3 +35,27 @@ class TestOptOutStore:
         optout.opt_out(db, '+15551230001')
 
         assert optout.is_opted_out(db, '+15551230001')
+
+
+class TestFirstContact:
+    def test_true_only_on_first_message(self, tmp_path):
+        db = str(tmp_path / 'optouts.db')
+
+        assert optout.first_contact(db, '+15551230001')
+        assert not optout.first_contact(db, '+15551230001')
+
+    def test_numbers_are_tracked_independently(self, tmp_path):
+        db = str(tmp_path / 'optouts.db')
+        optout.first_contact(db, '+15551230001')
+
+        assert optout.first_contact(db, '+15551230002')
+
+    def test_independent_of_opt_out_state(self, tmp_path):
+        """Opting out and back in does not reset the first-contact record."""
+        db = str(tmp_path / 'optouts.db')
+        optout.first_contact(db, '+15551230001')
+
+        optout.opt_out(db, '+15551230001')
+        optout.opt_in(db, '+15551230001')
+
+        assert not optout.first_contact(db, '+15551230001')

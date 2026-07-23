@@ -213,20 +213,30 @@ class TestSignalWireOptOut:
 
     NUMBER = '+15551230001'
 
+    def _request(self, sw_transport, body='fires (50.5, -121.0)'):
+        """Route a request with the pipeline stubbed and the sender already
+        known, so replies carry no opt-in notice."""
+        from app import optout
+        from app.config import get_config
+        optout.first_contact(get_config().optout_database, self.NUMBER)
+        with patch('app.transport.signalwire.safe_handle_message',
+                   return_value=['OK']):
+            return sw_transport._route(self.NUMBER, body)
+
     def test_stop_records_and_returns_only_the_confirmation(self, sw_transport):
         from app.messages import Messages
 
         response = sw_transport._route(self.NUMBER, 'STOP')
 
         assert response == [Messages().opt_out_confirmed()]
-        assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') is None
+        assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == []
 
     @pytest.mark.parametrize('body', ['stop', ' Unsubscribe ', 'QUIT',
                                       'stopall', 'End', 'cancel'])
     def test_every_opt_out_variant_suppresses(self, sw_transport, body):
         sw_transport._route(self.NUMBER, body)
 
-        assert sw_transport._route(self.NUMBER, 'anything at all') is None
+        assert sw_transport._route(self.NUMBER, 'anything at all') == []
 
     def test_start_clears_the_opt_out(self, sw_transport):
         from app.messages import Messages
@@ -235,22 +245,18 @@ class TestSignalWireOptOut:
         response = sw_transport._route(self.NUMBER, 'START')
 
         assert response == [Messages().opt_in_confirmed()]
-        with patch('app.transport.signalwire.safe_handle_message',
-                   return_value='OK'):
-            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == 'OK'
+        assert self._request(sw_transport) == ['OK']
 
     def test_stop_inside_a_request_is_not_an_opt_out(self, sw_transport):
-        with patch('app.transport.signalwire.safe_handle_message',
-                   return_value='OK'):
-            assert sw_transport._route(
-                self.NUMBER, 'please stop the fires (50.5, -121.0)') == 'OK'
-            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == 'OK'
+        assert self._request(
+            sw_transport, 'please stop the fires (50.5, -121.0)') == ['OK']
+        assert self._request(sw_transport) == ['OK']
 
     def test_suppression_bypasses_the_pipeline_entirely(self, sw_transport):
         sw_transport._route(self.NUMBER, 'STOP')
 
         with patch('app.transport.signalwire.safe_handle_message') as pipeline:
-            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') is None
+            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == []
 
         pipeline.assert_not_called()
 
@@ -270,9 +276,8 @@ class TestSignalWireOptOut:
         monkeypatch.setattr('app.transport.signalwire.optout.is_opted_out',
                             Mock(side_effect=sqlite3.Error('locked')))
 
-        with patch('app.transport.signalwire.safe_handle_message',
-                   return_value='OK'), caplog.at_level(logging.ERROR):
-            assert sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)') == 'OK'
+        with caplog.at_level(logging.ERROR):
+            assert self._request(sw_transport) == ['OK']
 
         assert 'Opt-out store unavailable' in caplog.text
 
@@ -299,6 +304,64 @@ class TestSignalWireOptOut:
         assert kwargs['to_number'] == self.NUMBER
 
 
+class TestSignalWireOptInNotice:
+    """A number's first message earns the one-time opt-in confirmation,
+    sent ahead of the reply itself."""
+
+    NUMBER = '+15551230001'
+
+    def test_first_message_gets_notice_then_reply(self, sw_transport):
+        from app.messages import Messages
+
+        with patch('app.transport.signalwire.safe_handle_message',
+                   return_value=['OK']):
+            response = sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)')
+
+        assert response == [Messages().opt_in_notice(), 'OK']
+
+    def test_second_message_gets_only_the_reply(self, sw_transport):
+        with patch('app.transport.signalwire.safe_handle_message',
+                   return_value=['OK']):
+            sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)')
+            response = sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)')
+
+        assert response == ['OK']
+
+    def test_stop_as_first_message_gets_no_notice(self, sw_transport):
+        from app.messages import Messages
+
+        response = sw_transport._route(self.NUMBER, 'STOP')
+
+        assert response == [Messages().opt_out_confirmed()]
+
+    def test_failed_record_does_not_block_information(self, sw_transport, monkeypatch, caplog):
+        import logging
+        import sqlite3
+        monkeypatch.setattr('app.transport.signalwire.optout.first_contact',
+                            Mock(side_effect=sqlite3.Error('locked')))
+
+        with patch('app.transport.signalwire.safe_handle_message',
+                   return_value=['OK']), caplog.at_level(logging.ERROR):
+            response = sw_transport._route(self.NUMBER, 'fires (50.5, -121.0)')
+
+        assert response == ['OK']
+        assert 'Compliance store unavailable' in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_both_messages_are_sent_in_order(self, sw_transport):
+        from app.messages import Messages
+        sw_transport._client = AsyncMock()
+        event = Mock(from_number=self.NUMBER, body='fires (50.5, -121.0)')
+
+        with patch('app.transport.signalwire.safe_handle_message',
+                   return_value=['OK']):
+            await sw_transport._on_message(event)
+
+        bodies = [c.kwargs['body']
+                  for c in sw_transport._client.send_message.call_args_list]
+        assert bodies == [Messages().opt_in_notice(), 'OK']
+
+
 class TestSmsLogFraming:
     """Message content in sms.log is '> '-quoted line by line, so a sender
     can never forge a log record."""
@@ -316,6 +379,11 @@ class TestSmsLogFraming:
         sms_logger.addHandler(caplog.handler)
         sw_transport._client = AsyncMock()
         event = Mock(from_number='+15551230002', body='Fires\n(50.5, -121.0)')
+        # Register the sender so the first-contact notice stays out of the
+        # framing under test.
+        from app import optout
+        from app.config import get_config
+        optout.first_contact(get_config().optout_database, '+15551230002')
 
         try:
             with patch('app.transport.signalwire.safe_handle_message',
@@ -338,6 +406,11 @@ class TestSmsLogFraming:
         sms_logger.addHandler(caplog.handler)
         sw_transport._client = AsyncMock()
         event = Mock(from_number='+15551230002', body='Fires\n(50.5, -121.0)')
+        # Register the sender so the first-contact notice stays out of the
+        # framing under test.
+        from app import optout
+        from app.config import get_config
+        optout.first_contact(get_config().optout_database, '+15551230002')
 
         try:
             with patch('app.transport.signalwire.safe_handle_message',

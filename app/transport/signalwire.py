@@ -90,14 +90,16 @@ class SignalWireTransport(BaseTransport):
         except asyncio.CancelledError:
             pass
 
-    def _route(self, number: str, body: str) -> Optional[list[str]]:
-        """Resolve the reply as a list of single-SMS messages, applying
-        opt-out compliance around the message pipeline.
+    def _route(self, number: str, body: str) -> list[str]:
+        """Resolve the replies as single-SMS messages, applying opt-out
+        compliance around the message pipeline.
 
         STOP records the number and gets only the confirmation; START
         clears it. An opted-out number gets no reply at all -- the check
         sits here, the last place before a send, so suppression holds no
-        matter what the pipeline produces. Returns None for no reply.
+        matter what the pipeline produces. A number's first message earns
+        the one-time opt-in notice ahead of its reply. Returns the replies
+        to send in order, empty for none.
         """
         db = get_config().optout_database
         opting_out = _OPT_OUT_PATTERN.fullmatch(body or '') is not None
@@ -122,15 +124,25 @@ class SignalWireTransport(BaseTransport):
             suppressed = False
         if suppressed:
             self.log.info("No reply to %s: recipient opted out.", number)
-            return None
-        return safe_handle_message(body)
+            return []
+        replies = []
+        try:
+            if optout.first_contact(db, number):
+                self.log.info("First contact from %s: sending opt-in notice.", number)
+                replies.append(Messages().opt_in_notice())
+        except (sqlite3.Error, OSError) as e:
+            # A missed notice must not block safety information; the error
+            # above alerts the operator.
+            self.log.error("Compliance store unavailable: %s", e)
+        replies.extend(safe_handle_message(body))
+        return replies
 
     async def _on_message(self, message: MessageReceiveEvent) -> None:
         self.log.info("SignalWire SMS received incoming message from %s.", message.from_number)
         self.sms_log.info("From: %s\n%s", message.from_number, quoted(message.body))
 
         segments = self._route(message.from_number, message.body)
-        if segments is None:
+        if not segments:
             self.sms_log.info("Reply: (suppressed: recipient opted out)")
             return
 

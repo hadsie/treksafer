@@ -271,11 +271,21 @@ class TestServiceKeywords:
         assert handle_message(message) == Messages().help()
 
     def test_help_copy_matches_campaign_registration(self):
-        """The declared help copy and the app's must never drift apart."""
+        """The declared help copy and the app's must never drift apart.
+        Carriers require an alternate contact method in the HELP reply."""
         assert Messages().help() == (
             'TrekSafer: Wildfire & avalanche info. Text GPS coordinates '
             '(e.g. fires (49.2, -123.1)) to get a report. '
-            'https://treksafer.com. Reply STOP to opt out.')
+            'Contact info@treksafer.com. Reply STOP to opt out.')
+
+    def test_opt_in_notice_matches_campaign_registration(self):
+        """The declared opt-in copy and the app's must never drift apart.
+        Carriers require company name, message frequency, Msg&Data rates,
+        and HELP/STOP language in the opt-in confirmation."""
+        assert Messages().opt_in_notice() == (
+            'Welcome to TrekSafer wildfire & avalanche reports. '
+            'Message frequency varies. Msg&Data rates may apply. '
+            'Reply HELP for help or STOP to opt out.')
 
     def test_help_fits_one_sms_segment(self):
         assert fits_segment(Messages().help())
@@ -303,7 +313,8 @@ class TestServiceKeywords:
 
     def test_keyword_replies_fit_one_sms_segment(self):
         for text in (Messages().help(), Messages().usage(),
-                     Messages().opt_out_confirmed(), Messages().opt_in_confirmed()):
+                     Messages().opt_out_confirmed(), Messages().opt_in_confirmed(),
+                     Messages().opt_in_notice()):
             assert fits_segment(text)
 
     def test_keyword_inside_request_is_not_hijacked(self):

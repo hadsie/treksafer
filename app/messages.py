@@ -41,7 +41,7 @@ class Messages(FireMessages):
         messaging campaign registration verbatim."""
         return ('TrekSafer: Wildfire & avalanche info. Text GPS coordinates '
                 '(e.g. fires (49.2, -123.1)) to get a report. '
-                'https://treksafer.com. Reply STOP to opt out.')
+                'Contact info@treksafer.com. Reply STOP to opt out.')
 
     def usage(self) -> str:
         """The USAGE/EXAMPLES reply: the advanced guide."""
@@ -49,6 +49,14 @@ class Messages(FireMessages):
                 'Filters: active|all|25km|10mi (max 150km)\n'
                 'fireid K70597 - single fire\n'
                 'Coords: (lat,lon) or map link')
+
+    def opt_in_notice(self) -> str:
+        """The one-time confirmation a number's first message triggers,
+        sent ahead of the reply itself. Must match the opt-in copy declared
+        in the SMS transport messaging campaign registration verbatim."""
+        return ('Welcome to TrekSafer wildfire & avalanche reports. '
+                'Message frequency varies. Msg&Data rates may apply. '
+                'Reply HELP for help or STOP to opt out.')
 
     def opt_out_confirmed(self) -> str:
         """The one reply a STOP still receives. Must match the opt-out copy

@@ -35,6 +35,14 @@ class TestAcresToHectares:
         """Test larger area conversion."""
         assert acres_to_hectares(100) == 40.47
 
+    def test_none_returns_none(self):
+        """A source with no size estimate publishes null acres."""
+        assert acres_to_hectares(None) is None
+
+    def test_nan_returns_none(self):
+        """Null acres arrive as NaN in numeric frame columns."""
+        assert acres_to_hectares(float('nan')) is None
+
 
 class TestEpochMsToDatetime:
     """Test epoch-milliseconds conversion."""
