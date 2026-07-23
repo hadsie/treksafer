@@ -1,0 +1,8 @@
+Fire: Kamloops_Base (C10784)
+Location: Kamloops
+Size: 50 ha
+Status: Being Held
+Perim: 50.50-50.50N 120.50-120.50W
+As of T ago
+
+No fire matching "NOPE999" was found. Check the fire number, or send "fires" with your location for nearby fires.

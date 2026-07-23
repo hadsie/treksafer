@@ -38,7 +38,9 @@ marker.
 3. Auto-detects data type: avalanche if provider covers the location, otherwise fire
 4. Routes to `handle_fire_request()` or `handle_avalanche_request()` in `messages.py`
 
-A `fireid <id>` message carries a `fire_id` lookup (the single token after the keyword) instead of (or alongside) coordinates. It outranks data-type routing: `handle_message` resolves it via `fires.FireLookup` -- a single fire matched exactly across all sources, database first, with one targeted live re-query only when the stored match is stale -- and a miss reports not-found, never a radius search.
+A `fireid <id> [<id> ...]` message carries one or more lookups (the `fire_ids` list, the contiguous run of id-like tokens after the keyword) instead of (or alongside) coordinates. It outranks data-type routing: `handle_message` resolves each id via `fires.FireLookup` -- a single fire matched exactly across all sources, database first, with one targeted live re-query only when the stored match is stale -- rendering a block per found fire and collecting the misses into one trailing not-found line; a lookup never falls back to a radius search.
+
+The `!` command channel (`helpers.commands()`) is recognized anywhere in the message: the command set is exactly `!usage` (answers the usage guide) and `!full` (sets the parsed `full` flag, an uncapped reply). An unknown `!token` is inert plain text, so it never blocks coordinate parsing. STOP/HELP/START stay bare and unprefixed per the 10DLC requirement.
 
 ### Key modules
 

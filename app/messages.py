@@ -7,7 +7,7 @@ from typing import Dict, Optional
 
 from .config import get_config
 from .health import health_report
-from .helpers import parse_message, get_aqi, local_time, quoted
+from .helpers import parse_message, get_aqi, local_time, quoted, commands
 from .fires import FindFires, FireLookup
 from .avalanche import AvalancheReport
 from .messaging import FireMessages
@@ -124,24 +124,32 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
     return aqi_message + "\n\n".join(fire_messages) + marker
 
 
-def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,
+def _handle_fire_lookup(coords: tuple[float, float] | None, terms: list[str],
                         responses: 'Messages') -> str:
-    """Resolve a "fireid <id>" lookup to its single fire, or not-found.
+    """Resolve a "fireid <id> [<id> ...]" lookup to a block per id.
 
-    The reply is enriched with the perimeter extent, recent edge movement, and the
-    time the served data was current.
+    Each found fire's block is enriched with the perimeter extent, recent edge
+    movement, and the time the served data was current. Ids that match nothing
+    are collected into a single trailing not-found line naming the misses.
     """
-    lookup = FireLookup(term, coords)
-    fire = lookup.result()
-    if fire is None:
-        return responses.fire_not_found(term)
-    lines = [responses.fire(fire)]
-    if lookup.perimeter:
-        lines.append(responses.fire_perimeter(lookup.perimeter))
-    if lookup.edge:
-        lines.append(responses.fire_edge(lookup.edge))
-    lines.append(responses.as_of(lookup.as_of))
-    return "\n".join(lines)
+    blocks = []
+    misses = []
+    for term in terms:
+        lookup = FireLookup(term, coords)
+        fire = lookup.result()
+        if fire is None:
+            misses.append(term)
+            continue
+        lines = [responses.fire(fire)]
+        if lookup.perimeter:
+            lines.append(responses.fire_perimeter(lookup.perimeter))
+        if lookup.edge:
+            lines.append(responses.fire_edge(lookup.edge))
+        lines.append(responses.as_of(lookup.as_of))
+        blocks.append("\n".join(lines))
+    if misses:
+        blocks.append(responses.fire_not_found(misses))
+    return "\n\n".join(blocks)
 
 
 def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:
@@ -208,7 +216,9 @@ def handle_message(message: str) -> str:
         return responses.health(health_report())
     if _HELP_PATTERN.fullmatch(message):
         return responses.help()
-    if _USAGE_PATTERN.match(message):
+    # "usage" as a bare keyword answers only at the start; the "!usage"
+    # command is recognized anywhere in the message.
+    if _USAGE_PATTERN.match(message) or 'usage' in commands(message):
         return responses.usage()
 
     parsed_data = parse_message(message)
@@ -218,14 +228,14 @@ def handle_message(message: str) -> str:
 
     coords = parsed_data["coords"]
     fire_filters = parsed_data["fire_filters"]
-    fire_id = parsed_data.get("fire_id")
+    fire_ids = parsed_data.get("fire_ids", [])
     data_type = parsed_data.get("data_type", "auto")
     avalanche_filters = parsed_data.get("avalanche_filters", {})
 
     # An explicit "fireid" lookup outranks data-type routing: the user asked
-    # about one specific fire.
-    if fire_id:
-        return _handle_fire_lookup(coords, fire_id, responses)
+    # about one or more specific fires.
+    if fire_ids:
+        return _handle_fire_lookup(coords, fire_ids, responses)
 
     # Auto-detect data type. During fire season, default straight to fire;
     # otherwise use avalanche when available, with out-of-season reports

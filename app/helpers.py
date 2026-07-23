@@ -212,19 +212,49 @@ def get_aqi(coords):
         logging.warning(f"Failed to parse AQI data: {e}")
         return None
 
-# An explicit fire lookup: "fireid <token>". The token is the next run of
-# non-whitespace characters, so identifiers with hyphens, underscores, or the
-# word "fire" inside them (HWF-096-2026, 2026_ON_DRY_FIRE_013) pass through
-# untouched. Common trailing punctuation is trimmed from the token.
-_FIREID_RE = re.compile(r'\bfireid\s+(\S+)', re.IGNORECASE)
+# An explicit fire lookup: "fireid <id> [<id> ...]". The keyword is followed
+# by a contiguous run of id-like tokens, so identifiers with hyphens,
+# underscores, or the word "fire" inside them (HWF-096-2026,
+# 2026_ON_DRY_FIRE_013) pass through untouched. The run stops at the first
+# token that is a filter word, distance, coordinate, link, or "!" command
+# (which belong to the rest of the request, and which a device appends after
+# the user's text). Common surrounding punctuation is trimmed from each token.
+_FIREID_RE = re.compile(r'\bfireid\b(.*)', re.IGNORECASE | re.DOTALL)
+_FIREID_STOP = {'active', 'all', 'current', 'tomorrow', 'fire', 'fires',
+                'avalanche', 'avalanches', 'usage', 'examples', 'help',
+                'info', 'health'}
+_ID_TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]+$')
+_DISTANCE_TOKEN_RE = re.compile(r'^\d+(km|mi)$', re.IGNORECASE)
 
 
-def _fire_id(message: str) -> str | None:
-    """The identifier following the "fireid" keyword, or None."""
+def _fire_ids(message: str) -> list[str]:
+    """The identifiers following the "fireid" keyword, in order."""
     match = _FIREID_RE.search(message)
     if not match:
-        return None
-    return match.group(1).strip('.,;:!?()[]{}"\'') or None
+        return []
+    ids = []
+    for token in match.group(1).split():
+        if token.startswith('!'):
+            break
+        token = token.strip('.,;:!?()[]{}"\'')
+        if (not token or token.lower() in _FIREID_STOP
+                or _DISTANCE_TOKEN_RE.match(token)
+                or not _ID_TOKEN_RE.match(token)):
+            break
+        ids.append(token)
+    return ids
+
+
+# The "!" command channel. The command set is exactly !usage and !full,
+# matched as standalone tokens anywhere in the message. An unknown !token
+# (e.g. "!50.027") is not a command and is left to the rest of the parser as
+# plain text, so "help !50.027,-120.44" still yields its coordinates.
+_COMMAND_RE = re.compile(r'(?<!\S)!(usage|full)\b', re.IGNORECASE)
+
+
+def commands(message: str) -> set[str]:
+    """The recognized "!" command tokens in the message, lowercased."""
+    return {m.group(1).lower() for m in _COMMAND_RE.finditer(message)}
 
 
 def parse_message(message):
@@ -232,15 +262,16 @@ def parse_message(message):
 
     Supports:
         - Various coordinate formats, see coords_from_message().
-        - A specific fire lookup: "fireid <id>", see _fire_id().
+        - A fire lookup, one or more ids: "fireid <id> [<id> ...]", see _fire_ids().
         - Filter keywords: "active", "all"
         - Distance filters: "25km", "10mi"
         - Data type keywords: "avalanche", "fire"
         - Forecast time keywords: "current", "tomorrow", "all"
+        - "!" commands: "!full" (uncapped reply), see commands().
 
-    Returns the parsed dict (with a "fire_id" key, None when absent) when the
-    message carries coordinates OR a fire lookup, and None only when it has
-    neither. Coordinates stay optional for lookups.
+    Returns the parsed dict (with a "fire_ids" list, empty when absent) when
+    the message carries coordinates OR a fire lookup, and None only when it
+    has neither. Coordinates stay optional for lookups.
     """
 
     # Extract filters from message (case insensitive, using word boundaries)
@@ -281,15 +312,16 @@ def parse_message(message):
         avalanche_filters['forecast'] = 'all'
 
     coords = coords_from_message(message)
-    fire_id = _fire_id(message)
+    fire_ids = _fire_ids(message)
 
-    if not coords and not fire_id:
+    if not coords and not fire_ids:
         return None
 
     return {
         "coords": coords,
         "fire_filters": filters,
-        "fire_id": fire_id,
+        "fire_ids": fire_ids,
+        "full": "full" in commands(message),
         "data_type": data_type,
         "avalanche_filters": avalanche_filters
     }
