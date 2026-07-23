@@ -133,17 +133,15 @@ class AvalancheMessages:
 
         return "\n".join(parts)
 
-    def _format_forecast_abbrev(self, forecast_data: Dict[str, Any], dates: list) -> str:
-        """Format forecast in abbreviated form for SMS.
+    def _forecast_paragraphs_abbrev(self, forecast_data: Dict[str, Any], dates: list) -> list[str]:
+        """The abbreviated SMS forecast as self-contained paragraphs: the
+        region-and-ratings header first, then one paragraph per problem.
 
         Args:
             forecast_data: Full forecast data
             dates: List of day name strings to include in forecast
-
-        Returns:
-            Abbreviated forecast string
         """
-        parts = [forecast_data['region']]
+        header = [forecast_data['region']]
 
         # Format each day
         for day_name in dates:
@@ -160,61 +158,63 @@ class AvalancheMessages:
             tl = self._get_abbreviation('danger_rating', day_forecast['treeline_rating'])
             btl = self._get_abbreviation('danger_rating', day_forecast['below_treeline_rating'])
 
-            parts.append(f"{day_abbrev}: ALP:{alp} TL:{tl} BTL:{btl}")
+            header.append(f"{day_abbrev}: ALP:{alp} TL:{tl} BTL:{btl}")
 
-        # Problems shown after danger ratings
-        if forecast_data.get('problems'):
-            parts.append("")  # Empty line before problems
-            parts.extend(self._format_problems_abbrev(forecast_data['problems']))
+        paragraphs = ['\n'.join(header)]
+        for problem in forecast_data.get('problems') or []:
+            paragraphs.append('\n'.join(self._problem_lines_abbrev(problem)))
+        return paragraphs
 
-        return "\n".join(parts)
+    def _format_forecast_abbrev(self, forecast_data: Dict[str, Any], dates: list) -> str:
+        """Format forecast in abbreviated form for SMS.
 
-    def _format_problems_abbrev(self, problems: list) -> list:
-        """Format avalanche problems in abbreviated form."""
-        if not problems:
-            return []
+        Args:
+            forecast_data: Full forecast data
+            dates: List of day name strings to include in forecast
 
-        parts = []
-        for i, problem in enumerate(problems, 1):
-            if i > 1:
-                parts.append("")  # Empty line between problems
+        Returns:
+            Abbreviated forecast string
+        """
+        return '\n\n'.join(self._forecast_paragraphs_abbrev(forecast_data, dates))
 
-            # Problem type (use modest abbreviations)
-            prob_type = self._get_abbreviation('problem_type', problem['type'])
-            parts.append(prob_type)
+    def _problem_lines_abbrev(self, problem: Dict) -> list[str]:
+        """One avalanche problem's lines, abbreviated."""
+        # Problem type (use modest abbreviations)
+        prob_type = self._get_abbreviation('problem_type', problem['type'])
+        lines = [prob_type]
 
-            # Elevations - abbreviate or use "All"
-            elevations = problem.get('elevations', [])
-            if len(elevations) == 3 or not elevations:
-                elev_str = "AllElev"
-            else:
-                elev_str = self._abbrev_elevations(elevations)
+        # Elevations - abbreviate or use "All"
+        elevations = problem.get('elevations', [])
+        if len(elevations) == 3 or not elevations:
+            elev_str = "AllElev"
+        else:
+            elev_str = self._abbrev_elevations(elevations)
 
-            # Aspects - explicit list or "All"
-            aspects = problem.get('aspects', [])
-            if len(aspects) >= 7 or not aspects:
-                aspect_str = "All"
-            else:
-                aspect_str = self._abbrev_aspects(aspects)
+        # Aspects - explicit list or "All"
+        aspects = problem.get('aspects', [])
+        if len(aspects) >= 7 or not aspects:
+            aspect_str = "All"
+        else:
+            aspect_str = self._abbrev_aspects(aspects)
 
-            parts.append(f"{elev_str} Slp:{aspect_str}")
+        lines.append(f"{elev_str} Slp:{aspect_str}")
 
-            # Likelihood and size
-            likelihood = problem.get('likelihood', '')
-            likelihood = self._get_abbreviation('likelihood', likelihood)
-            line = likelihood
-            size_min = problem.get('size_min', '')
-            size_max = problem.get('size_max', '')
-            if size_min and size_max:
-                # Format size range, removing trailing .0
-                size_min_fmt = size_min.rstrip('0').rstrip('.') if '.' in size_min else size_min
-                size_max_fmt = size_max.rstrip('0').rstrip('.') if '.' in size_max else size_max
-                size_str = f"{size_min_fmt}-{size_max_fmt}"
-                line = f"{line}, Sz:{size_str}"
-            if line:
-                parts.append(line)
+        # Likelihood and size
+        likelihood = problem.get('likelihood', '')
+        likelihood = self._get_abbreviation('likelihood', likelihood)
+        line = likelihood
+        size_min = problem.get('size_min', '')
+        size_max = problem.get('size_max', '')
+        if size_min and size_max:
+            # Format size range, removing trailing .0
+            size_min_fmt = size_min.rstrip('0').rstrip('.') if '.' in size_min else size_min
+            size_max_fmt = size_max.rstrip('0').rstrip('.') if '.' in size_max else size_max
+            size_str = f"{size_min_fmt}-{size_max_fmt}"
+            line = f"{line}, Sz:{size_str}"
+        if line:
+            lines.append(line)
 
-        return parts
+        return lines
 
     def _abbrev_danger_rating(self, rating: str) -> str:
         """Abbreviate danger rating to single letter."""

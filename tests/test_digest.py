@@ -15,21 +15,25 @@ LOG = (
     "2026-07-12 08:00:01 sms INFO From: +15550000001\n"
     "> Fires (49.2, -123.1)\n"
     "2026-07-12 08:00:03 sms INFO Reply:\n"
+    "> ----- SMS 1/1 (45/160 GSM-7) -----\n"
     "> Fire: Test Fire (K10001)\n"
     "> 12km NW\n"
     "> Size: 100 ha\n"
     "2026-07-12 09:10:11 sms INFO From: +15550000002\n"
     "> fires near the lake\n"
     "2026-07-12 09:10:12 sms INFO Reply:\n"
+    "> ----- SMS 1/1 (52/160 GSM-7) -----\n"
     f"> {NO_GPS}\n"
     "2026-07-12 10:30:00 sms INFO From: +15550000003\n"
     "> health\n"
     "2026-07-12 10:30:01 sms INFO Reply:\n"
+    "> ----- SMS 1/1 (49/160 GSM-7) -----\n"
     "> TrekSafer OK. Data fetched (UTC):\n"
     "> BC Jul 12 06:00\n"
     "2026-07-12 11:45:59 sms INFO From: +15550000004\n"
     "> inreachlink.com/FAKE123\n"
     "2026-07-12 11:46:02 sms INFO Reply:\n"
+    "> ----- SMS 1/1 (52/160 GSM-7) -----\n"
     f"> {NO_GPS}\n"
 )
 
@@ -60,6 +64,7 @@ class TestParseRequests:
             "> 2026-07-12 08:00:02 sms INFO From: +19995550000\n"
             f"> 2026-07-12 08:00:03 sms INFO Reply: {NO_GPS}\n"
             "2026-07-12 08:00:04 sms INFO Reply:\n"
+            "> ----- SMS 1/1 (30/160 GSM-7) -----\n"
             "> No fires reported within 50km\n"
         )
 
@@ -69,6 +74,38 @@ class TestParseRequests:
         assert requests_[0]['sender'] == '+15550000007'
         assert '+19995550000' in requests_[0]['body']
         assert requests_[0]['reply'] == 'No fires reported within 50km'
+
+    def test_split_reply_markers_are_stripped(self):
+        """Stripping the markers reconstructs the blank-line-joined reply."""
+        log = (
+            "2026-07-12 08:00:01 sms INFO From: +15550000005\n"
+            "> fires (49.2, -123.1)\n"
+            "2026-07-12 08:00:03 sms INFO Reply:\n"
+            "> ----- SMS 1/2 (150/160 GSM-7) -----\n"
+            "> Fire: Test Fire (K10001)\n"
+            "> \n"
+            "> ----- SMS 2/2 (28/160 GSM-7) -----\n"
+            "> Fire: Other Fire (K10002)\n"
+        )
+
+        requests_ = digest.parse_requests(log.splitlines())
+
+        assert requests_[0]['reply'] == ('Fire: Test Fire (K10001)\n\n'
+                                         'Fire: Other Fire (K10002)')
+
+    def test_marker_lookalike_in_a_body_stays_content(self):
+        log = (
+            "2026-07-12 08:00:01 sms INFO From: +15550000006\n"
+            "> ----- SMS 1/1 (5/160 GSM-7) -----\n"
+            "2026-07-12 08:00:02 sms INFO Reply:\n"
+            "> ----- SMS 1/1 (52/160 GSM-7) -----\n"
+            f"> {NO_GPS}\n"
+        )
+
+        requests_ = digest.parse_requests(log.splitlines())
+
+        assert requests_[0]['body'] == '----- SMS 1/1 (5/160 GSM-7) -----'
+        assert requests_[0]['reply'] == NO_GPS
 
     def test_suppressed_send_note_is_the_reply(self):
         log = (
@@ -118,6 +155,7 @@ class TestRun:
             "2026-07-12 08:00:01 sms INFO From: +15550000001\n"
             "> (49.2, -123.1)\n"
             "2026-07-12 08:00:03 sms INFO Reply:\n"
+            "> ----- SMS 1/1 (30/160 GSM-7) -----\n"
             "> No fires reported within 50km\n")
 
         assert digest.run(env['settings']) == 0
@@ -140,6 +178,7 @@ class TestRun:
             "2026-07-13 08:00:00 sms INFO From: +15550000009\n"
             "> garbled\n"
             "2026-07-13 08:00:01 sms INFO Reply:\n"
+            "> ----- SMS 1/1 (52/160 GSM-7) -----\n"
             f"> {NO_GPS}\n")
 
         digest.run(env['settings'])

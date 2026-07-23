@@ -32,6 +32,9 @@ _HEADER = re.compile(
     r'^(?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \S+ \w+ '
     r'(?P<kind>From|Reply):\s*(?P<rest>.*)$')
 _CONTENT = re.compile(r'^> (?P<text>.*)$')
+# Marker line the SignalWire transport writes above each reply message,
+# e.g. "----- SMS 1/2 (148/160 GSM-7) -----": log metadata, not content.
+_MARKER = re.compile(r'^----- SMS \d+/\d+ \([^)]*\) -----$')
 
 
 def read_new_lines(log_path: str, state: dict) -> list[str]:
@@ -74,6 +77,10 @@ def parse_requests(lines: list[str]) -> list[dict]:
             continue
         content = _CONTENT.match(line)
         if content and record is not None and field:
+            # Markers are stripped from replies only; a body line that
+            # mimics one is sender content and stays.
+            if field == "reply" and _MARKER.match(content["text"]):
+                continue
             record[field] += ("\n" if record[field] else "") + content["text"]
     return requests_
 

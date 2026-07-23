@@ -52,7 +52,8 @@ class CLITransport(BaseTransport):
             # human-readable output responses.
             response = json.dumps(health_report())
         else:
-            response = safe_handle_message(message)
+            # Rejoining the per-SMS segments to build the full reply.
+            response = "\n\n".join(safe_handle_message(message))
         writer.write((response + "\n").encode("utf-8"))
         await writer.drain()
 

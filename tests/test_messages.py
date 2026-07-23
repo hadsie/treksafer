@@ -6,6 +6,7 @@ import requests
 
 from app.messages import Messages, handle_fire_request, handle_message, in_fire_season
 from app.weather import WindReport
+from app.messaging.assembler import Block, as_text, fits_segment
 
 
 class TestOutsideCoverage:
@@ -19,7 +20,7 @@ class TestOutsideCoverage:
         ff.out_of_range.return_value = True
 
         from app.messages import handle_fire_request
-        message = handle_fire_request((48.8566, 2.3522), {})
+        message = as_text(handle_fire_request((48.8566, 2.3522), {}))
 
         assert 'outside of supported' in message
         assert '(48.85660, 2.35220)' in message
@@ -39,7 +40,7 @@ class TestDataUnavailable:
         ff.unavailable_sources = ['BC']
 
         from app.messages import handle_fire_request
-        message = handle_fire_request((50.0, -122.0), {})
+        message = as_text(handle_fire_request((50.0, -122.0), {}))
 
         assert 'temporarily unavailable' in message
         assert 'No fires reported' not in message
@@ -56,9 +57,41 @@ class TestDataUnavailable:
         ff.filters = {'distance': 50}
 
         from app.messages import handle_fire_request
-        message = handle_fire_request((50.0, -122.0), {})
+        message = as_text(handle_fire_request((50.0, -122.0), {}))
 
         assert 'No fires reported' in message
+
+
+class TestMessageSegments:
+    """Replies split into single-SMS messages on paragraph boundaries."""
+
+    @patch("app.messages.get_wind", return_value=None)
+    @patch("app.messages.get_aqi", return_value=42)
+    def test_segments_fit_and_carry_whole_paragraphs(self, mock_aqi, mock_wind):
+        from app.messages import handle_message_segments
+        from app.messaging.assembler import fits_segment
+
+        reply = handle_message("fires all (49.064646, -120.7919022)")
+        segments = handle_message_segments("fires all (49.064646, -120.7919022)")
+
+        assert len(segments) > 1
+        paragraphs = reply.split("\n\n")
+        for segment in segments:
+            assert fits_segment(segment)
+            for paragraph in segment.split("\n\n"):
+                assert paragraph in paragraphs
+
+    @patch("app.messages.get_wind", return_value=None)
+    @patch("app.messages.get_aqi", return_value=42)
+    def test_joined_segments_reconstruct_the_reply(self, mock_aqi, mock_wind):
+        from app.messages import handle_message_segments
+
+        message = "fires all (49.064646, -120.7919022)"
+        assert "\n\n".join(handle_message_segments(message)) == handle_message(message)
+
+    def test_short_reply_is_a_single_segment(self):
+        from app.messages import handle_message_segments
+        assert handle_message_segments("help") == [Messages().help()]
 
 
 class TestConditionsHeader:
@@ -77,6 +110,35 @@ class TestConditionsHeader:
         mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=32)
         message = handle_message("fires all (49.06, -120.79)")
         assert message.startswith("Wind: 15km/h from NW, gusts 30\n\n")
+
+    @patch("app.messages.get_wind")
+    @patch("app.messages.get_aqi", return_value=152)
+    @patch("app.messages.FindFires")
+    def test_header_dropped_when_it_cannot_share_the_first_sms(
+            self, mock_ff_cls, mock_aqi, mock_wind):
+        """The conditions header is a bonus: when it will not fit alongside
+        the first fire, the reply proceeds without it rather than spending
+        an SMS on conditions alone."""
+        from app.messages import handle_message_segments
+        mock_wind.return_value = WindReport(speed=25, gusts=45, direction="SW", peak_gust=60)
+        ff = mock_ff_cls.return_value
+        ff.out_of_range.return_value = False
+        ff.unavailable_sources = []
+        ff.fallback_fetched = None
+        ff.nearby.return_value = [{
+            'Fire': 'K50911', 'Name': 'Very Long Fire Name For The Test',
+            'Location': 'Distant Valley Behind The Long Ridge, Northern Sector',
+            'Distance': 25000, 'Direction': 'E', 'Size': 6641,
+            'Status': 'Out of Control',
+        }]
+
+        with patch('app.messages.parse_message', return_value={
+                'coords': (50.0, -122.0), 'fire_filters': {}}):
+            segments = handle_message_segments('fires (50.0, -122.0)')
+
+        assert len(segments) == 1
+        assert segments[0].startswith('Fire:')
+        assert 'AQI' not in segments[0] and 'Wind' not in segments[0]
 
     @patch("app.messages.get_wind", return_value=None)
     @patch("app.messages.get_aqi", return_value=None)
@@ -108,21 +170,21 @@ class TestFallbackMarker:
 
     def test_marker_appended_after_realtime_failure(self, bc_realtime_failing):
         from app.messages import handle_fire_request
-        message = handle_fire_request(self.COORDS, {'status': 'all'})
+        message = as_text(handle_fire_request(self.COORDS, {'status': 'all'}))
 
         assert message.endswith(self.MARKER)
 
     def test_marker_on_no_fires_response(self, bc_realtime_failing):
         from app.messages import handle_fire_request
         # (49.5, -120.9) is 40+ km from the nearest fixture fire.
-        message = handle_fire_request((49.5, -120.9), {'status': 'all', 'distance': 1})
+        message = as_text(handle_fire_request((49.5, -120.9), {'status': 'all', 'distance': 1}))
 
         assert 'No fires reported' in message
         assert message.endswith(self.MARKER)
 
     def test_no_marker_when_realtime_disabled_by_config(self):
         from app.messages import handle_fire_request
-        message = handle_fire_request(self.COORDS, {'status': 'all'})
+        message = as_text(handle_fire_request(self.COORDS, {'status': 'all'}))
 
         assert 'Data from' not in message
 
@@ -216,7 +278,7 @@ class TestServiceKeywords:
             'https://treksafer.com. Reply STOP to opt out.')
 
     def test_help_fits_one_sms_segment(self):
-        assert Messages()._message_length(Messages().help()) <= 160
+        assert fits_segment(Messages().help())
 
     @pytest.mark.parametrize('message', ['usage', 'EXAMPLES', ' Usage '])
     def test_usage_keyword_returns_guide(self, message):
@@ -242,7 +304,7 @@ class TestServiceKeywords:
     def test_keyword_replies_fit_one_sms_segment(self):
         for text in (Messages().help(), Messages().usage(),
                      Messages().opt_out_confirmed(), Messages().opt_in_confirmed()):
-            assert Messages()._message_length(text) <= 160
+            assert fits_segment(text)
 
     def test_keyword_inside_request_is_not_hijacked(self):
         with patch('app.messages.get_aqi', return_value=None), \
@@ -279,7 +341,7 @@ class TestHealthMessage:
         assert 'TrekSafer OK' not in response
 
     def test_summary_fits_one_sms(self):
-        assert Messages()._message_length(handle_message('health')) <= 160
+        assert fits_segment(handle_message('health'))
 
     def test_unreadable_database_reports_error(self, tmp_path, monkeypatch):
         from app.config import get_config
@@ -294,8 +356,8 @@ class TestAutoDetectRouting:
     """Bare coordinates auto-detect between avalanche and fire."""
 
     @patch("app.messages.in_fire_season", return_value=False)
-    @patch("app.messages.handle_fire_request", return_value="FIRE")
-    @patch("app.messages.handle_avalanche_request", return_value="AVY")
+    @patch("app.messages.handle_fire_request", return_value=[Block(["FIRE"])])
+    @patch("app.messages.handle_avalanche_request", return_value=[Block(["AVY"])])
     @patch("app.messages.AvalancheReport")
     def test_out_of_season_routes_to_fire(self, mock_report_cls, mock_avy, mock_fire, mock_season):
         report = mock_report_cls.return_value
@@ -306,8 +368,8 @@ class TestAutoDetectRouting:
         mock_avy.assert_not_called()
 
     @patch("app.messages.in_fire_season", return_value=False)
-    @patch("app.messages.handle_fire_request", return_value="FIRE")
-    @patch("app.messages.handle_avalanche_request", return_value="AVY")
+    @patch("app.messages.handle_fire_request", return_value=[Block(["FIRE"])])
+    @patch("app.messages.handle_avalanche_request", return_value=[Block(["AVY"])])
     @patch("app.messages.AvalancheReport")
     def test_in_season_routes_to_avalanche(self, mock_report_cls, mock_avy, mock_fire, mock_season):
         report = mock_report_cls.return_value
@@ -318,8 +380,8 @@ class TestAutoDetectRouting:
         mock_fire.assert_not_called()
 
     @patch("app.messages.in_fire_season", return_value=True)
-    @patch("app.messages.handle_fire_request", return_value="FIRE")
-    @patch("app.messages.handle_avalanche_request", return_value="AVY")
+    @patch("app.messages.handle_fire_request", return_value=[Block(["FIRE"])])
+    @patch("app.messages.handle_avalanche_request", return_value=[Block(["AVY"])])
     @patch("app.messages.AvalancheReport")
     def test_fire_season_routes_to_fire_without_avalanche_lookup(
         self, mock_report_cls, mock_avy, mock_fire, mock_season
@@ -329,8 +391,8 @@ class TestAutoDetectRouting:
         mock_avy.assert_not_called()
 
     @patch("app.messages.in_fire_season", return_value=True)
-    @patch("app.messages.handle_fire_request", return_value="FIRE")
-    @patch("app.messages.handle_avalanche_request", return_value="AVY")
+    @patch("app.messages.handle_fire_request", return_value=[Block(["FIRE"])])
+    @patch("app.messages.handle_avalanche_request", return_value=[Block(["AVY"])])
     @patch("app.messages.AvalancheReport")
     def test_explicit_avalanche_request_bypasses_fire_season(
         self, mock_report_cls, mock_avy, mock_fire, mock_season
@@ -365,12 +427,12 @@ class TestInFireSeason:
 class TestSafeHandleMessage:
     """The transport boundary: a crash anywhere must still produce a reply."""
 
-    @patch("app.messages.handle_message", return_value="normal reply")
+    @patch("app.messages.handle_message_blocks", return_value=[Block(["normal reply"])])
     def test_passes_through_normally(self, mock_handle):
         from app.messages import safe_handle_message
-        assert safe_handle_message("(50.1, -122.1)") == "normal reply"
+        assert safe_handle_message("(50.1, -122.1)") == ["normal reply"]
 
-    @patch("app.messages.handle_message", side_effect=KeyError("Fire"))
+    @patch("app.messages.handle_message_blocks", side_effect=KeyError("Fire"))
     def test_crash_produces_error_reply_and_loud_log(self, mock_handle, caplog):
         from app.messages import safe_handle_message
         import logging as _logging
@@ -378,8 +440,8 @@ class TestSafeHandleMessage:
         with caplog.at_level(_logging.ERROR):
             reply = safe_handle_message("(50.1, -122.1) crash bait")
 
-        assert 'Something went wrong' in reply
-        assert 'logged and reported' in reply
+        assert len(reply) == 1 and 'Something went wrong' in reply[0]
+        assert 'logged and reported' in reply[0]
         record = next(r for r in caplog.records if 'handle_message crashed' in r.message)
         assert record.levelname == 'ERROR'
         assert record.exc_info is not None          # full traceback captured

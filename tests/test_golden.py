@@ -21,7 +21,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from app.avalanche.avcan import AvalancheCanadaProvider
-from app.messages import handle_message
+from app.messages import handle_message, handle_message_segments
 from app.weather import WindReport
 
 GOLDEN_DIR = Path(__file__).parent / 'data' / 'golden'
@@ -70,6 +70,13 @@ class TestGoldenResponses:
         with patch('app.messages.get_aqi', return_value=42), \
              patch('app.messages.get_wind', return_value=None):
             _check(name, handle_message(message))
+
+    def test_segment_view_of_a_multi_sms_reply(self):
+        """The multi-fire scenario as delivered: one chunk per SMS."""
+        with patch('app.messages.get_aqi', return_value=42), \
+             patch('app.messages.get_wind', return_value=None):
+            segments = handle_message_segments('fires all (49.064646, -120.7919022)')
+        _check('fires_manning_all_segments', '\n\n-- next SMS --\n\n'.join(segments))
 
     def test_conditions_header_with_wind(self):
         report = WindReport(speed=25, gusts=45, direction='SW', peak_gust=60)

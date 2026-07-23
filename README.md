@@ -15,6 +15,8 @@ See https://treksafer.com for more information.
 1. Ensure your device is set to **include location** with outgoing messages (most inReach presets add “(lat, lon)” automatically).
 1. Hit *Send*. Within a few seconds you’ll get a reply.
 
+**Note:** Reports with several fires can arrive as several messages, typically one fire per SMS. This is to prevent confusion with fires spanning messages and out-of-order SMSes.
+
 **Fire response example:**
 ```
 AQI: 42

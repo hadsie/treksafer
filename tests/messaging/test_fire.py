@@ -296,3 +296,38 @@ class TestWindLine:
         below = WindReport(speed=10, gusts=20, direction="N", peak_gust=34)
         assert "rising to 35" in FireMessages.wind(at)
         assert "rising" not in FireMessages.wind(below)
+
+
+class TestDownsizeUsesRealSmsMath:
+    """Downsizing and packing judge fit with the same segment math."""
+
+    def test_non_gsm_character_triggers_downsizing(self):
+        """One character outside the GSM alphabet caps an SMS at 70 units,
+        so a fire block that passes the old 160-character check must still
+        step down until it fits."""
+        from app.messaging.assembler import fits_segment
+        fire = mock_fire(Name="Tsile’os Park Fire")
+        message = FireMessages().fire(fire)
+        assert fits_segment(message)
+        # The full format is under 160 characters, so only the segment
+        # math can have forced the step down that dropped Location.
+        assert "Location" not in message
+
+
+class TestNonStringFieldValues:
+    """The value cleanup strips strings only; other types pass through."""
+
+    def test_none_field_renders_no_line(self):
+        """A None value is falsy, so its line is skipped -- never printed
+        as the text 'None'."""
+        message = FireMessages().fire(mock_fire(Location=None))
+        assert 'None' not in message
+        assert 'Location' not in message
+
+    def test_numeric_size_still_formats(self):
+        message = FireMessages().fire(mock_fire(Size=66.0))
+        assert 'Size: 66 ha' in message
+
+    def test_whitespace_stripped_from_strings(self):
+        message = FireMessages().fire(mock_fire(Name='  Padded Name  '))
+        assert 'Padded Name (' in message

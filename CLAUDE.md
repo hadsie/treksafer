@@ -49,7 +49,7 @@ A `fireid <id>` message carries a `fire_id` lookup (the single token after the k
 - `app/helpers.py` -- Coord parsing (decimal, hemisphere, DMS/DDM, labelled, map URLs), compass bearing
 - `app/weather.py` -- Conditions for fire responses (AQI, wind) behind a provider-agnostic interface; Open-Meteo today, swappable without touching consumers
 - `app/messages.py` -- Request routing, keyword handling, and service copy (help/usage/opt-out text)
-- `app/messaging/` -- Transport-blind rendering package: `fire.py` (fire blocks with auto-downsize for SMS), `avalanche.py` (forecast formatting), `assembler.py` (segment math, 160 char limit)
+- `app/messaging/` -- Transport-blind rendering package: `fire.py` (fire blocks with auto-downsize for SMS), `avalanche.py` (forecast formatting), `assembler.py` (GSM/UCS-2 segment math; packs replies into single-SMS messages on whole-block boundaries, sent individually so out-of-order arrival stays readable)
 - `app/transport/` -- Pluggable transports (CLI TCP, SignalWire SMS). Abstract base in `base.py`. The SignalWire transport honors STOP/START (persistent opt-out list, `optout_database` in config; suppression checked last before every send); HELP/INFO and USAGE keywords are answered in `messages.py` on all transports
 - `app/avalanche/` -- Provider pattern: `base.py` ABC, implementations for Avalanche Canada (`avcan.py`), US NAC (`us_nac.py`), Quebec (`quebec.py`). `report.py` aggregates/formats
 

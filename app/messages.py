@@ -11,6 +11,7 @@ from .helpers import parse_message, local_time, quoted
 from .fires import FindFires, FireLookup
 from .avalanche import AvalancheReport
 from .messaging import FireMessages
+from .messaging.assembler import Block, as_text, assemble
 from .weather import get_aqi, get_wind
 
 # The message "health" (any case, surrounding whitespace allowed, nothing
@@ -71,7 +72,7 @@ class Messages(FireMessages):
         return '\n'.join(lines)
 
 
-def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
+def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> list[Block]:
     """Handle fire information requests.
 
     Args:
@@ -79,71 +80,78 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> str:
         fire_filters: Dictionary of fire-specific filters
 
     Returns:
-        str: Formatted fire report with AQI
+        The fire report as blocks: a conditions header (AQI, wind), one
+        block per fire carrying its full/medium/short renderings, and a
+        data freshness marker when stored data was served.
     """
     responses = Messages()
+    blocks = []
 
     # Current conditions header. Each line is dropped when its lookup
     # fails or is disabled; fire data must never be blocked on weather.
-    conditions = ""
+    conditions = []
     settings = get_config()
     if settings.include_aqi:
         aqi = get_aqi(coords)
-        conditions += f"AQI: {aqi}\n" if aqi else ''
+        if aqi:
+            conditions.append(f"AQI: {aqi}")
     if settings.include_wind:
         wind = get_wind(coords)
-        conditions += responses.wind(wind) + "\n" if wind else ''
+        if wind:
+            conditions.append(responses.wind(wind))
+    # The conditions header was not explicitly requested and is a optional.
+    # If it can't fit an SMS with the content that follows, it's dropped.
     if conditions:
-        conditions += "\n"
+        blocks.append(Block(['\n'.join(conditions)], optional=True))
 
     # Find fires
     findfires = FindFires(coords, fire_filters)
     if findfires.out_of_range():
-        return conditions + responses.outside_of_area(coords)
+        return blocks + [Block([responses.outside_of_area(coords)])]
 
     fires = findfires.nearby()
     # A source that produced no data at all must not read as "no fires".
     if not fires and findfires.unavailable_sources:
-        return conditions + responses.data_unavailable()
-
-    # When a realtime source failed and stored data was used instead, add
-    # a freshness marker so old data is never presented as current. It goes
-    # after the per-fire formatting, where SMS downsizing can't drop it.
-    marker = ''
-    if findfires.fallback_fetched:
-        marker = "\n\n" + responses.data_age(
-            local_time(findfires.fallback_fetched, coords))
+        return blocks + [Block([responses.data_unavailable()])]
 
     if not fires:
         distance = min(findfires.filters['distance'], settings.max_radius)
         status_filter = fire_filters.get('status')
-        return conditions + responses.no_fires(distance, coords, status_filter) + marker
+        blocks.append(Block([responses.no_fires(distance, coords, status_filter)]))
+    else:
+        blocks.extend(Block(responses.fire_ladder(fire)) for fire in fires)
 
-    fire_messages = [responses.fire(fire) for fire in fires]
-    return conditions + "\n\n".join(fire_messages) + marker
+    # When a realtime source failed and stored data was used instead, a
+    # freshness marker goes last so old data is never presented as current.
+    if findfires.fallback_fetched:
+        blocks.append(Block([responses.data_age(
+            local_time(findfires.fallback_fetched, coords))]))
+
+    return blocks
 
 
 def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,
-                        responses: 'Messages') -> str:
+                        responses: 'Messages') -> Block:
     """Resolve a "fireid <id>" lookup to its single fire, or not-found.
 
-    The reply is enriched with the perimeter extent, recent edge movement, and the
-    time the served data was current.
+    The reply is enriched with the perimeter extent, recent edge movement,
+    and the time the served data was current -- one block, so the
+    enrichment lines can never arrive separated from their fire.
     """
     lookup = FireLookup(term, coords)
     fire = lookup.result()
     if fire is None:
-        return responses.fire_not_found(term)
+        return Block([responses.fire_not_found(term)])
     lines = [responses.fire(fire)]
     if lookup.perimeter:
         lines.append(responses.fire_perimeter(lookup.perimeter))
     if lookup.edge:
         lines.append(responses.fire_edge(lookup.edge))
     lines.append(responses.as_of(lookup.as_of))
-    return "\n".join(lines)
+    return Block(["\n".join(lines)])
 
 
-def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> str:
+def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dict) -> list[Block]:
     """Handle avalanche forecast requests.
 
     Args:
@@ -151,24 +159,31 @@ def handle_avalanche_request(coords: tuple[float, float], avalanche_filters: Dic
         avalanche_filters: Dict with 'forecast' key: 'current'|'today'|'tomorrow'|'all'
 
     Returns:
-        str: Formatted avalanche forecast
+        The forecast as blocks: the region-and-ratings header, then one
+        block per avalanche problem.
     """
     avalanche = AvalancheReport(coords)
 
     if avalanche.out_of_range():
-        return avalanche.outside_of_area_msg()
+        return [Block([avalanche.outside_of_area_msg()])]
 
-    forecast = avalanche.get_forecast(avalanche_filters)
-    return forecast
+    return [Block([paragraph])
+            for paragraph in avalanche.get_forecast_paragraphs(avalanche_filters)]
 
 
-def safe_handle_message(message: str) -> str:
-    """Transport boundary for handle_message to ensure the user always gets a reply."""
+def handle_message_segments(message: str) -> list[str]:
+    """The reply as a list of single-SMS messages, whole blocks only."""
+    return assemble(handle_message_blocks(message))
+
+
+def safe_handle_message(message: str) -> list[str]:
+    """Transport boundary: the segmented reply, or a single error message
+    so the user always gets a reply."""
     try:
-        return handle_message(message)
+        return handle_message_segments(message)
     except Exception:
         logging.exception(f"handle_message crashed on message: {message!r}")
-        return Messages().system_error()
+        return [Messages().system_error()]
 
 
 def in_fire_season(today: Optional[date] = None) -> bool:
@@ -191,29 +206,27 @@ def in_fire_season(today: Optional[date] = None) -> bool:
     return month_day >= start or month_day <= end
 
 
-def handle_message(message: str) -> str:
-    """Route message to appropriate data handler.
+def handle_message_blocks(message: str) -> list[Block]:
+    """Route message to the appropriate data handler.
 
-    This function parses the incoming message to extract GPS coordinates,
-    determines the data type (fire/avalanche), and routes to the appropriate
-    handler function.
+    Parses the incoming message to extract GPS coordinates, determines the
+    data type (fire/avalanche), and routes to the appropriate handler.
 
     :param str message: The inbound message containing location information
-    :return: Formatted response message(s) or error messages
-    :rtype: str
+    :return: The reply as blocks, each a self-contained unit
     """
     responses = Messages()
     if _HEALTH_PATTERN.fullmatch(message):
-        return responses.health(health_report())
+        return [Block([responses.health(health_report())])]
     if _HELP_PATTERN.fullmatch(message):
-        return responses.help()
+        return [Block([responses.help()])]
     if _USAGE_PATTERN.match(message):
-        return responses.usage()
+        return [Block([responses.usage()])]
 
     parsed_data = parse_message(message)
     if not parsed_data:
         logging.warning('No GPS coords found in message:\n%s', quoted(message))
-        return responses.no_gps()
+        return [Block([responses.no_gps()])]
 
     coords = parsed_data["coords"]
     fire_filters = parsed_data["fire_filters"]
@@ -224,7 +237,7 @@ def handle_message(message: str) -> str:
     # An explicit "fireid" lookup outranks data-type routing: the user asked
     # about one specific fire.
     if fire_id:
-        return _handle_fire_lookup(coords, fire_id, responses)
+        return [_handle_fire_lookup(coords, fire_id, responses)]
 
     # Auto-detect data type. During fire season, default straight to fire;
     # otherwise use avalanche when available, with out-of-season reports
@@ -245,4 +258,10 @@ def handle_message(message: str) -> str:
     elif data_type == "fire":
         return handle_fire_request(coords, fire_filters)
     else:
-        return f"Unknown data type: {data_type}"
+        return [Block([f"Unknown data type: {data_type}"])]
+
+
+def handle_message(message: str) -> str:
+    """The reply flattened to a single string: exactly what joining the
+    segmented form back together reconstructs."""
+    return as_text(handle_message_blocks(message))

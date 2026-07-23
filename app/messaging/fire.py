@@ -7,7 +7,7 @@ from typing import Dict
 from ..config import get_config
 from ..filters import STATUS_LEVELS
 from ..weather import WindReport
-from .assembler import SMS_LIMIT, message_length
+from .assembler import fits_segment
 
 
 class FireMessages:
@@ -137,7 +137,20 @@ class FireMessages:
         message = self._fire(fire, size)
         return message
 
+    def fire_ladder(self, fire: Dict) -> list[str]:
+        """Every size of this fire's message, largest first."""
+        return [self._render(fire, size) for size in ('full', 'medium', 'short')]
+
     def _fire(self, fire, size = "full"):
+        """Render at size, stepping full -> medium -> short until the
+        message fits one SMS. Each retry re-renders from the same fire
+        dict, so _render must leave it unmodified."""
+        message = self._render(fire, size)
+        if not fits_segment(message) and size != "short":
+            return self._fire(fire, "medium" if size == "full" else "short")
+        return message
+
+    def _render(self, fire, size):
         """
         Format the message for this specific fire.
 
@@ -167,18 +180,9 @@ class FireMessages:
         }
         fields = level_fields[size]
 
-        # History annotations (growth.enrich) render as line suffixes and
-        # must survive stringification and the downsizing recursion.
-        change = fire.get('SizeChange')
-        is_new = bool(fire.get('New'))
-
         # Strip all strings
-        fire = {k: str(v).strip() for k, v in fire.items()
-                if k not in ('SizeChange', 'New')}
-        if change:
-            fire['SizeChange'] = change
-        if is_new:
-            fire['New'] = True
+        fire = {k: v.strip() if isinstance(v, str) else v
+                for k, v in fire.items()}
 
         fire['FullName'] = fire['Fire']
         if 'Name' in fire and fire['Name'] != fire['Fire']:
@@ -197,6 +201,8 @@ class FireMessages:
             fire['Size'] = self._format_size(fire['Size'])
         message = []
 
+        change = fire.get('SizeChange')
+        is_new = bool(fire.get('New'))
         for key, template in fields:
             value = fire.get(key)
             if not value:
@@ -210,23 +216,12 @@ class FireMessages:
                 line += f" ({self._size_change(change)})"
             message.append(line)
 
-        message = "\n".join(message)
-        msg_length = message_length(message)
-        if msg_length > SMS_LIMIT and size != "short":
-            new_size = "medium" if size == "full" else "short"
-            message = self._fire(fire, new_size)
-
-        return message
+        return "\n".join(message)
 
     @staticmethod
     def _size_change(change: Dict) -> str:
         """Render a growth.enrich size change, e.g. '+500 since 26h ago'."""
         return f"{change['delta']:+d} since {FireMessages._span(change['hours'])} ago"
-
-    @staticmethod
-    def _message_length(message: str) -> float:
-        """Computes the byte length of a string including emojis."""
-        return message_length(message)
 
     @staticmethod
     def _format_size(hectares: float | str) -> str:
