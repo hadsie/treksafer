@@ -133,6 +133,28 @@ class TestMultiSegmentSending:
             assert transport._client.send_message.call_count == 2
 
 
+class TestSegmentBackstop:
+    """A runaway reply is cut at the backstop, never sent in full."""
+
+    @pytest.mark.asyncio
+    async def test_runaway_reply_truncated_and_logged(self, transport, caplog):
+        runaway = [f"segment {n}" for n in range(25)]
+        with patch("app.transport.signalwire.safe_handle_message", return_value=runaway):
+            with caplog.at_level(logging.ERROR):
+                await transport._on_message(_incoming())
+
+        assert transport._client.send_message.call_count == 10
+        assert any("over the 10 backstop" in r.getMessage() for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_reply_at_the_backstop_sends_in_full(self, transport):
+        segments = [f"segment {n}" for n in range(10)]
+        with patch("app.transport.signalwire.safe_handle_message", return_value=segments):
+            await transport._on_message(_incoming())
+
+        assert transport._client.send_message.call_count == 10
+
+
 class TestSignalWireTransport:
     """Test suite for SignalWireTransport lifecycle."""
 
