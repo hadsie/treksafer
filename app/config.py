@@ -35,13 +35,19 @@ class Thresholds(BaseModel):
     sms_segment_backstop: int
 
 
-class SignalWireConfig(BaseModel):
+class BaseTransportConfig(BaseModel):
+    """Settings shared by every transport."""
+    enabled: bool
+    # Whether requests on this transport are recorded to the request log.
+    log_requests: bool = True
+
+
+class SignalWireConfig(BaseTransportConfig):
     type: Literal["signalwire"]
     project_id: SecretStr | None = None
     api_token: SecretStr | None = None
     phone_number: str | None = None
     context: str = "treksafer"
-    enabled: bool = False
 
     # require secrets only if enabled
     @model_validator(mode="after")
@@ -57,11 +63,10 @@ class SignalWireConfig(BaseModel):
                 )
         return self
 
-class CLIConfig(BaseModel):
+class CLIConfig(BaseTransportConfig):
     type: Literal["cli"]
     host: str = "localhost"
     port: int = 8888
-    enabled: bool
 
 
 class EmailConfig(BaseModel):
@@ -235,6 +240,7 @@ class Settings(BaseSettings):
     database: str = "data/fires.db"
     # Numbers that opted out of SMS replies (STOP).
     optout_database: str
+    request_database: str
     # Stored fallback data older than this (hours) carries a freshness marker.
     stale_data_hours: int
     # Fires discovered within this many days bypass the minimum size filter.

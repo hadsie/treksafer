@@ -10,7 +10,9 @@ class TestFireSeasonValidation:
     def test_valid_dates_accepted(self):
         settings = Settings(fire_season_start="05-15", fire_season_end="08-15",
                             stale_data_hours=6, optout_database="data/optouts.db",
-                            thresholds=Thresholds(wind_peak_gust_margin=15, sms_segment_backstop=10))
+                            request_database="data/requests.db",
+                            thresholds=Thresholds(wind_peak_gust_margin=15,
+                                                  sms_segment_backstop=10))
         assert settings.fire_season_start == "05-15"
         assert settings.fire_season_end == "08-15"
 

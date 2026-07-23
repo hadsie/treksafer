@@ -23,6 +23,7 @@ TREKSAFER_SW_NUMBER=[REPLACE WITH YOUR SIGNALWIRE PHONE NUMBER]
 
 # SMS opt-out list (numbers that texted STOP).
 # TREKSAFER_OPTOUT_DATABASE=data/optouts.db
+# TREKSAFER_REQUEST_DATABASE=data/requests.db
 
 # Messaging thresholds (defaults in thresholds.yaml)
 # TREKSAFER_WIND_PEAK_GUST_MARGIN=15

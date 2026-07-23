@@ -21,12 +21,14 @@ _GSM_EXTENSION = set("^{}\\[~]|€")
 
 @dataclass
 class Block:
-    """One self-contained unit of a reply, with renderings largest first.
-
-    An optional block never gets a message to itself: unless something
-    required shares its message, it is dropped."""
+    """One self-contained unit of a reply."""
+    # List of all output formats of the message, largest to smallest.
     ladder: list[str]
+    # An optional block never gets a message to itself. Prepended / appended to
+    # an already outgoing block if it fits in the SMS size.
     optional: bool = False
+    # The reply type this block represents ('fires', 'no_fires', etc.).
+    kind: str = None
 
 
 def _gsm_septets(text: str):

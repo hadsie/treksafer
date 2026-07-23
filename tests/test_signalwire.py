@@ -61,7 +61,7 @@ class TestOnMessage:
 
             await transport._on_message(_incoming())
 
-            mock_handle.assert_called_once_with("FIRECHECK: (49.25, -123.10)")
+            mock_handle.assert_called_once_with("FIRECHECK: (49.25, -123.10)", "+15559876543", record=True)
             transport._client.send_message.assert_called_once_with(
                 context="treksafer",
                 from_number=signalwire_config.phone_number,
@@ -103,7 +103,7 @@ class TestOnMessage:
 
             await transport._on_message(_incoming(body="FIRECHECK: (51.398720, -116.491640)"))
 
-            mock_handle.assert_called_once_with("FIRECHECK: (51.398720, -116.491640)")
+            mock_handle.assert_called_once_with("FIRECHECK: (51.398720, -116.491640)", "+15559876543", record=True)
             assert transport._client.send_message.call_count == 1
 
 

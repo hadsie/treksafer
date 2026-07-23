@@ -38,6 +38,9 @@ database: "${TREKSAFER_DATABASE:-data/fires.db}"
 # fire database so resetting fire data never erases compliance state.
 optout_database: "${TREKSAFER_OPTOUT_DATABASE:-data/optouts.db}"
 
+# Inbound request log: who asked, what they asked, and the reply outcome.
+request_database: "${TREKSAFER_REQUEST_DATABASE:-data/requests.db}"
+
 # Responses built from stored data (realtime API down) carry a "Data from"
 # freshness marker only when the stored fetch is older than this (hours).
 stale_data_hours: 6
@@ -75,8 +78,12 @@ transports:
     api_token : ${TREKSAFER_SW_TOKEN}
     phone_number: "${TREKSAFER_SW_NUMBER}"
     context: ${TREKSAFER_SW_CONTEXT:-treksafer}
+    log_requests: true
   - type: "cli"
     enabled: ${TREKSAFER_CLI_ENABLED:-true}
+    # CLI traffic is operator testing and the website demo; keep it out
+    # of the request log so digest signals reflect real senders.
+    log_requests: false
     host: ${TREKSAFER_CLI_HOST:-localhost}
     port: "${TREKSAFER_CLI_PORT:-8888}"
 

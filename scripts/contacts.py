@@ -28,9 +28,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import optout
 from app.config import get_config
-from scripts.digest import parse_requests
 
 _NUMBER = re.compile(r'\+\d{7,15}')
+
+# "2026-07-11 14:02:11 sms INFO From: +16045551234" opens a record;
+# message content below it is '> '-quoted line by line, so a crafted
+# message can never counterfeit a From record.
+_FROM = re.compile(
+    r'^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \S+ \w+ From:\s*(?P<sender>.*)$')
 
 
 def import_logs(db: str, paths: list[str]) -> int:
@@ -41,7 +46,8 @@ def import_logs(db: str, paths: list[str]) -> int:
             print(f"Skipping {path}: no such file.", file=sys.stderr)
             continue
         with open(path, encoding="utf-8", errors="replace") as f:
-            senders = {r["sender"] for r in parse_requests(f.readlines())}
+            senders = {match['sender'].strip()
+                       for line in f if (match := _FROM.match(line))}
         valid = {s for s in senders if _NUMBER.fullmatch(s)}
         for skipped in sorted(senders - valid):
             print(f"Skipping unparseable sender {skipped!r} in {path}.",

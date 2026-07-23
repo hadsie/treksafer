@@ -1,193 +1,149 @@
-"""Tests for the parse-failure digest (scripts/digest.py).
+"""Tests for the daily digest (scripts/digest.py).
 
-All senders, share links, and message bodies are fabricated.
+All senders, coordinates, and message bodies are fabricated.
 """
-
 import pytest
 
+from app import request_log
 from app.config import get_config
-from app.messages import Messages
 from scripts import digest
-
-NO_GPS = Messages().no_gps()
-
-LOG = (
-    "2026-07-12 08:00:01 sms INFO From: +15550000001\n"
-    "> Fires (49.2, -123.1)\n"
-    "2026-07-12 08:00:03 sms INFO Reply:\n"
-    "> ----- SMS 1/1 (45/160 GSM-7) -----\n"
-    "> Fire: Test Fire (K10001)\n"
-    "> 12km NW\n"
-    "> Size: 100 ha\n"
-    "2026-07-12 09:10:11 sms INFO From: +15550000002\n"
-    "> fires near the lake\n"
-    "2026-07-12 09:10:12 sms INFO Reply:\n"
-    "> ----- SMS 1/1 (52/160 GSM-7) -----\n"
-    f"> {NO_GPS}\n"
-    "2026-07-12 10:30:00 sms INFO From: +15550000003\n"
-    "> health\n"
-    "2026-07-12 10:30:01 sms INFO Reply:\n"
-    "> ----- SMS 1/1 (49/160 GSM-7) -----\n"
-    "> TrekSafer OK. Data fetched (UTC):\n"
-    "> BC Jul 12 06:00\n"
-    "2026-07-12 11:45:59 sms INFO From: +15550000004\n"
-    "> inreachlink.com/FAKE123\n"
-    "2026-07-12 11:46:02 sms INFO Reply:\n"
-    "> ----- SMS 1/1 (52/160 GSM-7) -----\n"
-    f"> {NO_GPS}\n"
-)
-
-
-class TestParseRequests:
-    def test_pairs_messages_with_replies(self):
-        requests_ = digest.parse_requests(LOG.splitlines())
-
-        assert len(requests_) == 4
-        assert requests_[1] == {'time': '2026-07-12 09:10:11',
-                                'sender': '+15550000002',
-                                'body': 'fires near the lake',
-                                'reply': NO_GPS}
-
-    def test_multi_line_replies_are_collected(self):
-        requests_ = digest.parse_requests(LOG.splitlines())
-
-        assert requests_[0]['reply'] == ('Fire: Test Fire (K10001)\n'
-                                         '12km NW\nSize: 100 ha')
-        assert requests_[2]['sender'] == '+15550000003'
-
-    def test_injected_log_lines_in_a_body_stay_content(self):
-        """A message whose text mimics log records is quoted line by line
-        and can never mint a phantom request."""
-        log = (
-            "2026-07-12 08:00:01 sms INFO From: +15550000007\n"
-            "> Fires\n"
-            "> 2026-07-12 08:00:02 sms INFO From: +19995550000\n"
-            f"> 2026-07-12 08:00:03 sms INFO Reply: {NO_GPS}\n"
-            "2026-07-12 08:00:04 sms INFO Reply:\n"
-            "> ----- SMS 1/1 (30/160 GSM-7) -----\n"
-            "> No fires reported within 50km\n"
-        )
-
-        requests_ = digest.parse_requests(log.splitlines())
-
-        assert len(requests_) == 1
-        assert requests_[0]['sender'] == '+15550000007'
-        assert '+19995550000' in requests_[0]['body']
-        assert requests_[0]['reply'] == 'No fires reported within 50km'
-
-    def test_split_reply_markers_are_stripped(self):
-        """Stripping the markers reconstructs the blank-line-joined reply."""
-        log = (
-            "2026-07-12 08:00:01 sms INFO From: +15550000005\n"
-            "> fires (49.2, -123.1)\n"
-            "2026-07-12 08:00:03 sms INFO Reply:\n"
-            "> ----- SMS 1/2 (150/160 GSM-7) -----\n"
-            "> Fire: Test Fire (K10001)\n"
-            "> \n"
-            "> ----- SMS 2/2 (28/160 GSM-7) -----\n"
-            "> Fire: Other Fire (K10002)\n"
-        )
-
-        requests_ = digest.parse_requests(log.splitlines())
-
-        assert requests_[0]['reply'] == ('Fire: Test Fire (K10001)\n\n'
-                                         'Fire: Other Fire (K10002)')
-
-    def test_marker_lookalike_in_a_body_stays_content(self):
-        log = (
-            "2026-07-12 08:00:01 sms INFO From: +15550000006\n"
-            "> ----- SMS 1/1 (5/160 GSM-7) -----\n"
-            "2026-07-12 08:00:02 sms INFO Reply:\n"
-            "> ----- SMS 1/1 (52/160 GSM-7) -----\n"
-            f"> {NO_GPS}\n"
-        )
-
-        requests_ = digest.parse_requests(log.splitlines())
-
-        assert requests_[0]['body'] == '----- SMS 1/1 (5/160 GSM-7) -----'
-        assert requests_[0]['reply'] == NO_GPS
-
-    def test_suppressed_send_note_is_the_reply(self):
-        log = (
-            "2026-07-12 08:00:01 sms INFO From: +15550000008\n"
-            "> fires (49.2, -123.1)\n"
-            "2026-07-12 08:00:02 sms INFO Reply: (suppressed: recipient opted out)\n"
-        )
-
-        requests_ = digest.parse_requests(log.splitlines())
-
-        assert requests_[0]['reply'] == '(suppressed: recipient opted out)'
 
 
 class TestRun:
     @pytest.fixture
     def env(self, tmp_path, monkeypatch):
         settings = get_config()
-        log = tmp_path / 'sms.log'
-        log.write_text(LOG)
-        monkeypatch.setattr(settings.monitoring, 'sms_log_file', str(log))
         monkeypatch.setattr(settings.monitoring, 'digest_state_file',
                             str(tmp_path / 'digest_state.json'))
+        # Requests recorded by other tests must not leak into this run.
+        monkeypatch.setattr(settings, 'request_database',
+                            str(tmp_path / 'requests.db'))
         emails = []
         monkeypatch.setattr(digest, 'notify_email',
                             lambda subject, body: emails.append((subject, body)) or True)
-        return {'settings': settings, 'log': log, 'emails': emails,
+        return {'settings': settings, 'emails': emails,
                 'monkeypatch': monkeypatch}
 
-    def test_emails_only_the_parse_failures(self, env):
+    def _seed(self, settings, sender, message, coords, response_type):
+        request_log.record(settings.request_database, sender, message,
+                           coords, response_type)
+
+    def test_emails_the_parse_failures(self, env):
+        self._seed(env['settings'], '+15550000001', 'fires broken', None, 'no_gps')
+        self._seed(env['settings'], '+15550000002', 'fires (49.1, -120.2)',
+                   (49.1, -120.2), 'fires')
+
         assert digest.run(env['settings']) == 0
 
         (subject, body), = env['emails']
-        assert '2 request(s) with no usable coordinates' in subject
-        assert '2 of 4 request(s)' in body
-        assert '+15550000002' in body and 'fires near the lake' in body
-        assert '+15550000004' in body and 'inreachlink.com/FAKE123' in body
-        assert '+15550000001' not in body
+        assert '1 request(s) with no usable coordinates' in subject
+        assert '1 of 2 request(s)' in body
+        assert 'fires broken' in body
+        assert '+15550000001' in body
+
+    def test_volume_counts_ride_along(self, env):
+        self._seed(env['settings'], '+15550000001', 'fires broken', None, 'no_gps')
+
+        digest.run(env['settings'])
+
+        (_, body), = env['emails']
+        assert 'no_gps 1' in body
+
+    def test_re_request_pair_triggers_and_reports(self, env):
+        self._seed(env['settings'], '+15550000003', 'fires (49.1, -120.2)',
+                   (49.1, -120.2), 'fires')
+        self._seed(env['settings'], '+15550000003', 'fires (49.5, -120.9)',
+                   (49.5, -120.9), 'fires')
+
+        digest.run(env['settings'])
+
+        (subject, body), = env['emails']
+        assert 'possible wrong-coordinate re-request' in subject
+        assert '(49.10000, -120.20000)' in body
+        assert '(49.50000, -120.90000)' in body
 
     def test_second_run_does_not_rereport(self, env):
+        self._seed(env['settings'], '+15550000001', 'fires broken', None, 'no_gps')
+
         digest.run(env['settings'])
         digest.run(env['settings'])
 
         assert len(env['emails']) == 1
 
-    def test_no_failures_sends_nothing(self, env):
-        env['log'].write_text(
-            "2026-07-12 08:00:01 sms INFO From: +15550000001\n"
-            "> (49.2, -123.1)\n"
-            "2026-07-12 08:00:03 sms INFO Reply:\n"
-            "> ----- SMS 1/1 (30/160 GSM-7) -----\n"
-            "> No fires reported within 50km\n")
+    def test_no_problems_sends_nothing(self, env):
+        self._seed(env['settings'], '+15550000002', 'fires (49.1, -120.2)',
+                   (49.1, -120.2), 'fires')
 
         assert digest.run(env['settings']) == 0
         assert env['emails'] == []
 
+    def test_empty_log_is_healthy(self, env):
+        assert digest.run(env['settings']) == 0
+        assert env['emails'] == []
+
     def test_failed_email_retries_next_run(self, env):
-        env['monkeypatch'].setattr(digest, 'notify_email', lambda *a: False)
+        self._seed(env['settings'], '+15550000001', 'fires broken', None, 'no_gps')
+        env['monkeypatch'].setattr(digest, 'notify_email', lambda s, b: False)
 
         assert digest.run(env['settings']) == 1
 
         env['monkeypatch'].setattr(
             digest, 'notify_email',
-            lambda subject, body: env['emails'].append((subject, body)) or True)
-        digest.run(env['settings'])
+            lambda s, b: env['emails'].append((s, b)) or True)
+        assert digest.run(env['settings']) == 0
         assert len(env['emails']) == 1
 
-    def test_rotated_log_rescans_from_start(self, env):
-        digest.run(env['settings'])
-        env['log'].write_text(
-            "2026-07-13 08:00:00 sms INFO From: +15550000009\n"
-            "> garbled\n"
-            "2026-07-13 08:00:01 sms INFO Reply:\n"
-            "> ----- SMS 1/1 (52/160 GSM-7) -----\n"
-            f"> {NO_GPS}\n")
 
-        digest.run(env['settings'])
+class TestReRequestPairs:
+    """Quick follow-up requests from one sender pair up for the digest."""
 
-        assert len(env['emails']) == 2
-        assert '+15550000009' in env['emails'][1][1]
+    def _row(self, sender, at, response_type='fires', message='fires (49.1, -120.2)',
+             lat=49.1, lon=-120.2):
+        return {'received_at': at, 'sender': sender, 'message': message,
+                'lat': lat, 'lon': lon, 'response_type': response_type}
 
-    def test_missing_log_is_healthy(self, env):
-        env['log'].unlink()
+    def test_pairs_within_window(self):
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:02:30+00:00')]
+        assert len(digest.re_request_pairs(rows)) == 1
 
-        assert digest.run(env['settings']) == 0
-        assert env['emails'] == []
+    def test_no_pair_outside_window(self):
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:05:00+00:00')]
+        assert digest.re_request_pairs(rows) == []
+
+    def test_different_senders_never_pair(self):
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000002', '2026-07-22T18:01:00+00:00')]
+        assert digest.re_request_pairs(rows) == []
+
+    def test_service_keywords_do_not_pair(self):
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:01:00+00:00',
+                          response_type='usage', lat=None, lon=None)]
+        assert digest.re_request_pairs(rows) == []
+
+    def test_three_quick_requests_make_two_pairs(self):
+        rows = [self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:01:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:02:00+00:00')]
+        assert len(digest.re_request_pairs(rows)) == 2
+
+    def test_pair_formatting_shows_both_coordinate_sets(self):
+        pair = (self._row('+15550000001', '2026-07-22T18:00:00+00:00'),
+                self._row('+15550000001', '2026-07-22T18:02:00+00:00',
+                          message='fires (49.5, -120.9)', lat=49.5, lon=-120.9))
+        text = digest.format_pairs([pair])
+        assert '(49.10000, -120.20000)' in text
+        assert '(49.50000, -120.90000)' in text
+        assert 'fires (49.5, -120.9)' in text
+
+
+class TestVolumeSection:
+    def test_counts_by_outcome(self):
+        from datetime import datetime, timezone
+        rows = [{'response_type': t} for t in ('fires', 'fires', 'no_gps')]
+        text = digest.format_volume(
+            rows, datetime(2026, 7, 21, 12, 0, tzinfo=timezone.utc))
+        assert '3 request(s) since Jul 21 12:00 UTC' in text
+        assert 'fires 2' in text and 'no_gps 1' in text

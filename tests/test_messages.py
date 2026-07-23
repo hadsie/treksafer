@@ -435,6 +435,85 @@ class TestInFireSeason:
             assert in_fire_season(date(2026, 7, 5)) is False
 
 
+class TestResponseType:
+    """Every reply's blocks carry its outcome tag."""
+
+    @pytest.mark.parametrize('message,expected', [
+        ('help', 'help'),
+        ('usage', 'usage'),
+        ('fires please', 'no_gps'),
+        ('fires (64.9, -18.5)', 'outside_of_area'),
+        ('fires (54.5, -125.5)', 'no_fires'),
+        ('fires all (49.06, -120.79)', 'fires'),
+        ('fireid NOPE999', 'fire_not_found'),
+        ('fireid C10784', 'fires'),
+        ('health', 'health'),
+    ])
+    def test_classification(self, message, expected):
+        from app.messages import _reply_kind, handle_message_blocks
+        with patch('app.messages.get_aqi', return_value=42), \
+             patch('app.messages.get_wind', return_value=None):
+            assert _reply_kind(handle_message_blocks(message)) == expected
+
+
+class TestRequestRecording:
+    """Every request through the transport boundary lands in the log."""
+
+    @pytest.fixture
+    def request_db(self, tmp_path, monkeypatch):
+        from app.config import get_config
+        path = str(tmp_path / 'requests.db')
+        monkeypatch.setattr(get_config(), 'request_database', path)
+        return path
+
+    def _rows(self, path):
+        from datetime import datetime, timedelta, timezone
+        from app import request_log
+        return request_log.requests_since(
+            path, datetime.now(timezone.utc) - timedelta(minutes=1))
+
+    def test_request_recorded_with_sender_coords_and_type(self, request_db):
+        from app.messages import safe_handle_message
+        with patch('app.messages.get_aqi', return_value=None), \
+             patch('app.messages.get_wind', return_value=None):
+            safe_handle_message('fires all (49.06, -120.79)', '+15550001111')
+
+        rows = self._rows(request_db)
+        assert len(rows) == 1
+        assert rows[0]['sender'] == '+15550001111'
+        assert rows[0]['response_type'] == 'fires'
+        assert rows[0]['lat'] == 49.06 and rows[0]['lon'] == -120.79
+
+    @patch("app.messages.handle_message_blocks", side_effect=KeyError("Fire"))
+    def test_crash_recorded_as_system_error(self, mock_blocks, request_db):
+        from app.messages import safe_handle_message
+        reply = safe_handle_message('fires (50.1, -122.1)', '+15550001111')
+
+        assert 'Something went wrong' in reply[0]
+        rows = self._rows(request_db)
+        assert rows[0]['response_type'] == 'system_error'
+        assert rows[0]['lat'] == 50.1
+
+    def test_record_false_skips_the_log(self, request_db):
+        """A transport with log_requests off leaves no row."""
+        from app.messages import safe_handle_message
+        safe_handle_message('help', 'cli', record=False)
+
+        assert self._rows(request_db) == []
+
+    def test_logging_failure_never_blocks_the_reply(self, request_db, caplog):
+        import logging as _logging
+        import sqlite3
+        from app.messages import safe_handle_message
+        with patch('app.messages.request_log.record',
+                   side_effect=sqlite3.Error('locked')), \
+             caplog.at_level(_logging.ERROR):
+            reply = safe_handle_message('help', '+15550001111')
+
+        assert reply == [Messages().help()]
+        assert 'Request log unavailable' in caplog.text
+
+
 class TestSafeHandleMessage:
     """The transport boundary: a crash anywhere must still produce a reply."""
 
