@@ -1,5 +1,3 @@
-AQI: 42
-
 Fire: Lillooet_VeryFar (C20151)
 Location: Lillooet
 0km N

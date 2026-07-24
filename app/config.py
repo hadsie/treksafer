@@ -28,11 +28,15 @@ THRESHOLDS_YAML = Path.cwd() / "thresholds.yaml"
 
 class Thresholds(BaseModel):
     """Tunable messaging thresholds, loaded from thresholds.yaml."""
-    # Margin (km/h) over current gusts before the wind line shows the
-    # 12-hour peak gust; the trade-off is documented in thresholds.yaml.
-    wind_peak_gust_margin: int
-    # Most messages one reply may send; documented in thresholds.yaml.
+    # Most messages one reply may send.
     sms_segment_backstop: int
+    # Conditions-header floors and their forecast trend rules.
+    wind_floor: int
+    wind_trend_delta: int
+    wind_forecast_hours: int
+    aqi_floor: int
+    aqi_forecast_hours: int
+    aqi_trend_delta: int
 
 
 class BaseTransportConfig(BaseModel):

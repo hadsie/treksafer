@@ -1,5 +1,5 @@
-AQI: 42
-Wind: 25km/h from SW, gusts 45 rising to 60
+AQI: 152
+Wind: 25km/h from SW rising to 60
 
 Fire: Manning_West (C10801)
 Location: Manning Park

@@ -90,36 +90,40 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> list
         fire_filters: Dictionary of fire-specific filters
 
     Returns:
-        The fire report as blocks: a conditions header (AQI, wind), one
-        block per fire carrying its full/medium/short renderings, and a
-        data freshness marker when stored data was served.
+        The fire report as blocks: a conditions header (AQI and wind
+        lines), one block per fire carrying its full/medium/short
+        renderings, and a data freshness marker when stored data was served.
     """
     responses = Messages()
-    blocks = []
-
-    # Current conditions header. Each line is dropped when its lookup
-    # fails or is disabled; fire data must never be blocked on weather.
-    conditions = []
     settings = get_config()
+
+    findfires = FindFires(coords, fire_filters)
+    out_of_range = findfires.out_of_range()
+    fires = [] if out_of_range else findfires.nearby()
+
+    # Current conditions header.
+    conditions = []
     if settings.include_aqi:
-        aqi = get_aqi(coords)
-        if aqi:
-            conditions.append(f"AQI: {aqi}")
-    if settings.include_wind:
-        wind = get_wind(coords)
-        if wind:
-            conditions.append(responses.wind(wind))
+        aqi = get_aqi(coords, settings.thresholds.aqi_forecast_hours)
+        line = responses.aqi(aqi) if aqi else None
+        if line:
+            conditions.append(line)
+    # Wind is only shown alongside fire data.
+    if fires and settings.include_wind:
+        wind = get_wind(coords, settings.thresholds.wind_forecast_hours)
+        line = responses.wind(wind) if wind else None
+        if line:
+            conditions.append(line)
+
+    blocks = []
     # The conditions header was not explicitly requested and is optional:
     # if it can't fit an SMS with the content that follows, it's dropped.
     if conditions:
         blocks.append(Block(['\n'.join(conditions)], optional=True))
 
-    # Find fires
-    findfires = FindFires(coords, fire_filters)
-    if findfires.out_of_range():
+    if out_of_range:
         return blocks + [Block([responses.outside_of_area(coords)], kind='outside_of_area')]
 
-    fires = findfires.nearby()
     # A source that produced no data at all must not read as "no fires".
     if not fires and findfires.unavailable_sources:
         return blocks + [Block([responses.data_unavailable()], kind='data_unavailable')]

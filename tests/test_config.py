@@ -11,8 +11,10 @@ class TestFireSeasonValidation:
         settings = Settings(fire_season_start="05-15", fire_season_end="08-15",
                             stale_data_hours=6, optout_database="data/optouts.db",
                             request_database="data/requests.db",
-                            thresholds=Thresholds(wind_peak_gust_margin=15,
-                                                  sms_segment_backstop=10))
+                            thresholds=Thresholds(
+                                sms_segment_backstop=10, wind_floor=20,
+                                wind_trend_delta=10, wind_forecast_hours=12, aqi_floor=75,
+                                aqi_forecast_hours=4, aqi_trend_delta=50))
         assert settings.fire_season_start == "05-15"
         assert settings.fire_season_end == "08-15"
 
@@ -93,8 +95,13 @@ class TestThresholds:
         """The file loads and validates; the values themselves are
         operator-tunable and deliberately not pinned."""
         thresholds = get_config().thresholds
-        assert thresholds.wind_peak_gust_margin > 0
         assert thresholds.sms_segment_backstop > 0
+        assert thresholds.wind_floor > 0
+        assert thresholds.wind_trend_delta > 0
+        assert thresholds.wind_forecast_hours > 0
+        assert thresholds.aqi_floor > 0
+        assert thresholds.aqi_forecast_hours > 0
+        assert thresholds.aqi_trend_delta > 0
 
     def test_missing_value_rejected(self):
         with pytest.raises(ValidationError):
