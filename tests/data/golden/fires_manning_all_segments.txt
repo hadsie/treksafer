@@ -1,4 +1,4 @@
-AQI: 42
+AQI: 152
 
 Fire: Manning_West (C10801)
 Location: Manning Park

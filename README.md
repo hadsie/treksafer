@@ -19,8 +19,8 @@ See https://treksafer.com for more information.
 
 **Fire response example:**
 ```
-AQI: 42
-Wind: 20km/h from SW, gusts 40 rising to 65
+AQI: 95
+Wind: 12km/h from SW rising to 30
 
 Fire: Lower Young Creek (K50911)
 Location: 7 km NE of Lillooet
@@ -37,7 +37,7 @@ Status: Out of Control
 
 Fires that grew or shrank recently show the change next to their size, and fires that where discovered since the last full data sync are labelled `(NEW)`.
 
-Wind direction is where the wind blows *from* (a SW wind pushes fire toward the NE). The `rising to` figure is the strongest gust forecast in the next 12 hours, shown only when it's well above current gusts. Air quality and wind data by [Open-Meteo.com](https://open-meteo.com) (CC-BY 4.0).
+The AQI and wind lines appear only when useful. AQI when it crosses a threshold (default: 75) or is forecast to rise sharply within the next few hours (`AQI: 35 rising to 160`), wind when sustained speeds reach fire-driving strength and there are fires to drive. Wind direction is where the wind blows *from* (a SW wind pushes fire toward the NE), and its `rising to` figure is the strongest wind forecast in the next 12 hours. All thresholds are tunable in `thresholds.yaml`. Currently integrated with [Open-Meteo.com](https://open-meteo.com) for Air quality and wind data.
 
 **Avalanche response example:**
 ```

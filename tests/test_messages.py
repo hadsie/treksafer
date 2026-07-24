@@ -5,7 +5,7 @@ import pytest
 import requests
 
 from app.messages import Messages, handle_fire_request, handle_message, in_fire_season
-from app.weather import WindReport
+from app.weather import AqiReport, WindReport
 from app.messaging.assembler import Block, as_text, fits_segment
 
 
@@ -62,11 +62,94 @@ class TestDataUnavailable:
         assert 'No fires reported' in message
 
 
+class TestConditionsThresholds:
+    """Conditions lines appear only past their floors."""
+
+    COORDS_WITH_FIRES = "fires all (49.06, -120.79)"
+    COORDS_QUIET = "fires (54.5, -125.5)"
+
+    @pytest.fixture(autouse=True)
+    def thresholds(self, monkeypatch):
+        """Pin the floors so the tests hold whatever the operator tunes."""
+        from app.config import get_config
+        t = get_config().thresholds
+        monkeypatch.setattr(t, 'wind_floor', 20)
+        monkeypatch.setattr(t, 'wind_trend_delta', 10)
+        monkeypatch.setattr(t, 'aqi_floor', 75)
+        monkeypatch.setattr(t, 'aqi_forecast_hours', 4)
+        monkeypatch.setattr(t, 'aqi_trend_delta', 50)
+
+    def _reply(self, message, aqi=None, wind=None):
+        with patch('app.messages.get_aqi', return_value=aqi), \
+             patch('app.messages.get_wind', return_value=wind):
+            return handle_message(message)
+
+    def test_aqi_at_the_floor_shows(self):
+        reply = self._reply(self.COORDS_WITH_FIRES, aqi=AqiReport(75, 75))
+        assert reply.startswith("AQI: 75\n")
+
+    def test_aqi_below_the_floor_is_silent(self):
+        reply = self._reply(self.COORDS_WITH_FIRES, aqi=AqiReport(74, 74))
+        assert 'AQI' not in reply
+
+    def test_rising_aqi_shows_future_tense_before_the_floor(self):
+        reply = self._reply(self.COORDS_WITH_FIRES, aqi=AqiReport(30, 80))
+        assert reply.startswith("AQI: 30 rising to 80\n")
+
+    def test_rise_below_the_delta_stays_silent(self):
+        reply = self._reply(self.COORDS_WITH_FIRES, aqi=AqiReport(30, 79))
+        assert 'AQI' not in reply
+
+    def test_high_and_rising_uses_the_rising_form(self):
+        reply = self._reply(self.COORDS_WITH_FIRES, aqi=AqiReport(152, 210))
+        assert reply.startswith("AQI: 152 rising to 210\n")
+
+    def test_wind_at_the_floor_shows(self):
+        wind = WindReport(speed=20, direction='SW', peak=20)
+        reply = self._reply(self.COORDS_WITH_FIRES, wind=wind)
+        assert 'Wind: 20km/h from SW' in reply
+
+    def test_wind_below_the_floor_is_silent(self):
+        wind = WindReport(speed=19, direction='SW', peak=19)
+        reply = self._reply(self.COORDS_WITH_FIRES, wind=wind)
+        assert 'Wind' not in reply
+
+    def test_rising_wind_shows_future_tense_before_the_floor(self):
+        """Calm now, windy later: the pattern that matters most."""
+        wind = WindReport(speed=8, direction='SW', peak=30)
+        reply = self._reply(self.COORDS_WITH_FIRES, wind=wind)
+        assert 'Wind: 8km/h from SW rising to 30' in reply
+
+    def test_rise_that_stays_under_the_floor_is_silent(self):
+        wind = WindReport(speed=5, direction='SW', peak=17)
+        reply = self._reply(self.COORDS_WITH_FIRES, wind=wind)
+        assert 'Wind' not in reply
+
+    def test_no_fires_means_no_wind_report(self):
+        """Wind above every floor still stays out of a fireless reply."""
+        wind = WindReport(speed=40, direction='SW', peak=80)
+        reply = self._reply(self.COORDS_QUIET, wind=wind)
+        assert 'No fires reported' in reply
+        assert 'Wind' not in reply
+
+    def test_rising_aqi_that_stays_under_the_floor_is_silent(self):
+        """The rise rule is floor-anchored: a jump within clean air says
+        nothing."""
+        reply = self._reply(self.COORDS_WITH_FIRES, aqi=AqiReport(20, 70))
+        assert 'AQI' not in reply
+
+    def test_aqi_shows_without_fires(self):
+        """Smoke travels: AQI is independent of fire content."""
+        reply = self._reply(self.COORDS_QUIET, aqi=AqiReport(152, 152))
+        assert reply.startswith("AQI: 152\n")
+        assert 'No fires reported' in reply
+
+
 class TestMessageSegments:
     """Replies split into single-SMS messages on paragraph boundaries."""
 
     @patch("app.messages.get_wind", return_value=None)
-    @patch("app.messages.get_aqi", return_value=42)
+    @patch("app.messages.get_aqi", return_value=AqiReport(152, 152))
     def test_segments_fit_and_carry_whole_paragraphs(self, mock_aqi, mock_wind):
         from app.messages import handle_message_segments
         from app.messaging.assembler import fits_segment
@@ -82,7 +165,7 @@ class TestMessageSegments:
                 assert paragraph in paragraphs
 
     @patch("app.messages.get_wind", return_value=None)
-    @patch("app.messages.get_aqi", return_value=42)
+    @patch("app.messages.get_aqi", return_value=AqiReport(152, 152))
     def test_joined_segments_reconstruct_the_reply(self, mock_aqi, mock_wind):
         from app.messages import handle_message_segments
 
@@ -97,22 +180,33 @@ class TestMessageSegments:
 class TestConditionsHeader:
     """The AQI/wind conditions header on fire responses."""
 
+    @pytest.fixture(autouse=True)
+    def thresholds(self, monkeypatch):
+        """Pin the floors so the tests hold whatever the operator tunes."""
+        from app.config import get_config
+        t = get_config().thresholds
+        monkeypatch.setattr(t, 'wind_floor', 20)
+        monkeypatch.setattr(t, 'wind_trend_delta', 10)
+        monkeypatch.setattr(t, 'aqi_floor', 75)
+        monkeypatch.setattr(t, 'aqi_forecast_hours', 4)
+        monkeypatch.setattr(t, 'aqi_trend_delta', 50)
+
     @patch("app.messages.get_wind")
-    @patch("app.messages.get_aqi", return_value=42)
+    @patch("app.messages.get_aqi", return_value=AqiReport(152, 152))
     def test_fire_response_leads_with_conditions_header(self, mock_aqi, mock_wind):
-        mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=30)
+        mock_wind.return_value = WindReport(speed=30, direction="NW", peak=30)
         message = handle_message("fires all (49.06, -120.79)")
-        assert message.startswith("AQI: 42\nWind: 15km/h from NW, gusts 30\n\n")
+        assert message.startswith("AQI: 152\nWind: 30km/h from NW\n\n")
 
     @patch("app.messages.get_wind")
     @patch("app.messages.get_aqi", return_value=None)
     def test_wind_line_stands_alone_without_aqi(self, mock_aqi, mock_wind):
-        mock_wind.return_value = WindReport(speed=15, gusts=30, direction="NW", peak_gust=30)
+        mock_wind.return_value = WindReport(speed=30, direction="NW", peak=30)
         message = handle_message("fires all (49.06, -120.79)")
-        assert message.startswith("Wind: 15km/h from NW, gusts 30\n\n")
+        assert message.startswith("Wind: 30km/h from NW\n\n")
 
     @patch("app.messages.get_wind")
-    @patch("app.messages.get_aqi", return_value=152)
+    @patch("app.messages.get_aqi", return_value=AqiReport(152, 152))
     @patch("app.messages.FindFires")
     def test_header_dropped_when_it_cannot_share_the_first_sms(
             self, mock_ff_cls, mock_aqi, mock_wind):
@@ -120,7 +214,7 @@ class TestConditionsHeader:
         the first fire, the reply proceeds without it rather than spending
         an SMS on conditions alone."""
         from app.messages import handle_message_segments
-        mock_wind.return_value = WindReport(speed=25, gusts=45, direction="SW", peak_gust=60)
+        mock_wind.return_value = WindReport(speed=25, direction="SW", peak=60)
         ff = mock_ff_cls.return_value
         ff.out_of_range.return_value = False
         ff.unavailable_sources = []
@@ -451,7 +545,7 @@ class TestResponseType:
     ])
     def test_classification(self, message, expected):
         from app.messages import _reply_kind, handle_message_blocks
-        with patch('app.messages.get_aqi', return_value=42), \
+        with patch('app.messages.get_aqi', return_value=AqiReport(42, 42)), \
              patch('app.messages.get_wind', return_value=None):
             assert _reply_kind(handle_message_blocks(message)) == expected
 

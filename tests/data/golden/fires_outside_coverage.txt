@@ -1,3 +1,1 @@
-AQI: 42
-
 GPS coordinates outside of supported fire perimeter area. No data available for your location (64.90000, -18.50000).

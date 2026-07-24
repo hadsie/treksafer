@@ -22,7 +22,7 @@ import pytest
 
 from app.avalanche.avcan import AvalancheCanadaProvider
 from app.messages import handle_message, handle_message_segments
-from app.weather import WindReport
+from app.weather import AqiReport, WindReport
 
 GOLDEN_DIR = Path(__file__).parent / 'data' / 'golden'
 
@@ -67,24 +67,38 @@ class TestGoldenResponses:
 
     @pytest.mark.parametrize('name,message', SCENARIOS)
     def test_fire_and_service_responses(self, name, message):
-        with patch('app.messages.get_aqi', return_value=42), \
+        with patch('app.messages.get_aqi', return_value=AqiReport(42, 42)), \
              patch('app.messages.get_wind', return_value=None):
             _check(name, handle_message(message))
 
     def test_segment_view_of_a_multi_sms_reply(self):
         """The multi-fire scenario as delivered: one chunk per SMS."""
-        with patch('app.messages.get_aqi', return_value=42), \
+        with patch('app.messages.get_aqi', return_value=AqiReport(152, 152)), \
              patch('app.messages.get_wind', return_value=None):
             segments = handle_message_segments('fires all (49.064646, -120.7919022)')
         _check('fires_manning_all_segments', '\n\n-- next SMS --\n\n'.join(segments))
 
     def test_conditions_header_with_wind(self, monkeypatch):
         from app.config import get_config
-        monkeypatch.setattr(get_config().thresholds, 'wind_peak_gust_margin', 15)
-        report = WindReport(speed=25, gusts=45, direction='SW', peak_gust=60)
-        with patch('app.messages.get_aqi', return_value=42), \
+        t = get_config().thresholds
+        monkeypatch.setattr(t, 'wind_floor', 20)
+        monkeypatch.setattr(t, 'wind_trend_delta', 10)
+        monkeypatch.setattr(t, 'aqi_floor', 75)
+        monkeypatch.setattr(t, 'aqi_trend_delta', 50)
+        report = WindReport(speed=25, direction='SW', peak=60)
+        with patch('app.messages.get_aqi', return_value=AqiReport(152, 152)), \
              patch('app.messages.get_wind', return_value=report):
             _check('fires_manning_all_with_wind',
+                   handle_message('fires all (49.064646, -120.7919022)'))
+
+    def test_conditions_header_with_rising_aqi(self, monkeypatch):
+        from app.config import get_config
+        t = get_config().thresholds
+        monkeypatch.setattr(t, 'aqi_floor', 75)
+        monkeypatch.setattr(t, 'aqi_trend_delta', 50)
+        with patch('app.messages.get_aqi', return_value=AqiReport(35, 160)), \
+             patch('app.messages.get_wind', return_value=None):
+            _check('fires_manning_all_rising_aqi',
                    handle_message('fires all (49.064646, -120.7919022)'))
 
     def test_aqi_absent_when_unavailable(self):

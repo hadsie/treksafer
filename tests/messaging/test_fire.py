@@ -283,26 +283,40 @@ class TestWindLine:
     """Test the wind conditions line."""
 
     @pytest.fixture(autouse=True)
-    def margin(self, monkeypatch):
-        """Pin the peak-gust margin so the tests hold whatever the operator
-        tunes thresholds.yaml to."""
+    def thresholds(self, monkeypatch):
+        """Pin the floors so the tests hold whatever the operator tunes
+        thresholds.yaml to."""
         from app.config import get_config
-        monkeypatch.setattr(get_config().thresholds, 'wind_peak_gust_margin', 15)
+        monkeypatch.setattr(get_config().thresholds, 'wind_floor', 20)
+        monkeypatch.setattr(get_config().thresholds, 'wind_trend_delta', 10)
 
-    def test_current_conditions_when_peak_is_similar(self):
-        report = WindReport(speed=20, gusts=40, direction="SW", peak_gust=50)
-        assert FireMessages.wind(report) == "Wind: 20km/h from SW, gusts 40"
+    def test_steady_wind_over_the_floor(self):
+        report = WindReport(speed=25, direction="SW", peak=30)
+        assert FireMessages.wind(report) == "Wind: 25km/h from SW"
 
-    def test_peak_gust_appended_when_meaningfully_worse(self):
-        report = WindReport(speed=20, gusts=40, direction="SW", peak_gust=65)
-        assert FireMessages.wind(report) == "Wind: 20km/h from SW, gusts 40 rising to 65"
+    def test_below_every_floor_is_none(self):
+        report = WindReport(speed=15, direction="SW", peak=22)
+        assert FireMessages.wind(report) is None
 
-    def test_peak_threshold_boundary(self):
-        """The peak shows at 15km/h over current gusts, not below."""
-        at = WindReport(speed=10, gusts=20, direction="N", peak_gust=35)
-        below = WindReport(speed=10, gusts=20, direction="N", peak_gust=34)
-        assert "rising to 35" in FireMessages.wind(at)
-        assert "rising" not in FireMessages.wind(below)
+    def test_rising_form_when_the_peak_clears_the_floor(self):
+        report = WindReport(speed=12, direction="SW", peak=25)
+        assert FireMessages.wind(report) == "Wind: 12km/h from SW rising to 25"
+
+    def test_rise_that_stays_under_the_floor_is_none(self):
+        report = WindReport(speed=5, direction="SW", peak=17)
+        assert FireMessages.wind(report) is None
+
+    def test_rise_below_the_delta_is_plain_or_none(self):
+        """A peak within the delta of current is forecast noise: over the
+        floor the plain form shows, under it nothing does."""
+        steady_high = WindReport(speed=22, direction="SW", peak=28)
+        assert FireMessages.wind(steady_high) == "Wind: 22km/h from SW"
+        approaching = WindReport(speed=15, direction="SW", peak=22)
+        assert FireMessages.wind(approaching) is None
+
+    def test_no_forecast_degrades_to_the_plain_form(self):
+        report = WindReport(speed=30, direction="S", peak=None)
+        assert FireMessages.wind(report) == "Wind: 30km/h from S"
 
 
 class TestDownsizeUsesRealSmsMath:

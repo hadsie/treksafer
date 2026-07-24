@@ -9,7 +9,7 @@ import yaml
 
 from ..config import get_config
 from ..filters import STATUS_LEVELS
-from ..weather import WindReport
+from ..weather import AqiReport, WindReport
 from .assembler import fits_segment
 
 
@@ -129,15 +129,30 @@ class FireMessages:
         return f"Data from {FireMessages._timestamp(fetched)}"
 
     @staticmethod
+    def aqi(report: AqiReport) -> str:
+        """The AQI line, or None when the air quality is fine. If AQI is
+        forecast to increase past the trend delta in the forecast window
+        include its "rising to" form."""
+        thresholds = get_config().thresholds
+        if (report.peak >= thresholds.aqi_floor
+                and report.peak - report.current >= thresholds.aqi_trend_delta):
+            return f"AQI: {report.current} rising to {report.peak}"
+        if report.current >= thresholds.aqi_floor:
+            return f"AQI: {report.current}"
+        return None
+
+    @staticmethod
     def wind(report: WindReport) -> str:
-        """One line of current wind. The 12-hour peak gust is added only
-        when it clears the configured margin over the gusts blowing now,
-        so calm forecasts don't cost message budget."""
-        line = f"Wind: {report.speed}km/h from {report.direction}, gusts {report.gusts}"
-        margin = get_config().thresholds.wind_peak_gust_margin
-        if report.peak_gust >= report.gusts + margin:
-            line += f" rising to {report.peak_gust}"
-        return line
+        """The wind line, or None when the wind is mild enough. Mirrors
+        the AQI logic."""
+        thresholds = get_config().thresholds
+        if (report.peak is not None
+                and report.peak >= thresholds.wind_floor
+                and report.peak - report.speed >= thresholds.wind_trend_delta):
+            return f"Wind: {report.speed}km/h from {report.direction} rising to {report.peak}"
+        if report.speed >= thresholds.wind_floor:
+            return f"Wind: {report.speed}km/h from {report.direction}"
+        return None
 
     def fires(self, fires: list[Dict]) -> list[str]:
         messages = []
