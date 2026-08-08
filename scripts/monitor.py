@@ -12,7 +12,8 @@ Checks:
 
 Alerts go to every configured channel (ntfy + email, see MonitoringConfig)
 once when a condition trips and once when it recovers; state is kept in a
-JSON file. When no channel delivers, state is not advanced, so the alert
+JSON file. Layer checks (3) must fail two consecutive runs before
+alerting. When no channel delivers, state is not advanced, so the alert
 is retried on the next run. Each successful run pings the healthchecks
 URL so an external service notices if the monitor itself stops running.
 """
@@ -125,13 +126,37 @@ def scan_log_errors(log_path: str, state: dict) -> list[str]:
     return [line.rstrip() for line in lines if " ERROR " in line]
 
 
-def transitions(conditions: dict, previous: dict) -> tuple[list, list]:
+def transitions(conditions: dict, previous: dict,
+                pending: dict) -> tuple[list, list, dict]:
     """Compare against the last run's state: (new problems, recoveries)."""
-    trips = [problem for name, problem in conditions.items()
-             if problem and not previous.get(name)]
+    trips, held = [], {}
+    for name, problem in conditions.items():
+        if not problem or previous.get(name):
+            continue
+        if name.startswith("layer:") and name not in pending:
+            # Don't alert on the first problem report.
+            held[name] = problem
+        else:
+            trips.append(problem)
     recoveries = [f"{name} recovered" for name, problem in conditions.items()
                   if not problem and previous.get(name)]
-    return trips, recoveries
+    return trips, recoveries, held
+
+
+def layer_check_due(state: dict, interval_hours: int, now: datetime) -> bool:
+    """Whether this run should query the upstream layer metadata.
+
+    Run every interval_hours as well as _every_ run while any layer
+    condition is pending confirmation or tripped.
+    """
+    names = (*state.get("conditions", {}), *state.get("pending", {}))
+    if any(name.startswith("layer:") for name in names):
+        return True
+    last = state.get("last_layer_check")
+    if last is None:
+        return True
+    age_h = (now - datetime.fromisoformat(last)).total_seconds() / 3600
+    return age_h >= interval_hours
 
 
 def load_state(path: str) -> dict:
@@ -154,9 +179,12 @@ def run(settings, now: datetime) -> int:
     cli = next(t for t in settings.transports if t.type == "cli")
     report = probe_health(cli.host, cli.port)
     conditions = fetch_conditions(report, monitoring.fetch_stale_hours, now)
-    conditions.update(layer_conditions(settings.data, now))
+    if layer_check_due(state, monitoring.layer_check_hours, now):
+        conditions.update(layer_conditions(settings.data, now))
+        state["last_layer_check"] = now.isoformat()
 
-    trips, recoveries = transitions(conditions, previous)
+    trips, recoveries, pending = transitions(conditions, previous,
+                                             state.get("pending", {}))
     log_offset_before = state.get("log_offset", 0)
     errors = scan_log_errors(settings.log_file, state)
 
@@ -173,7 +201,9 @@ def run(settings, now: datetime) -> int:
 
     if delivered:
         state["conditions"] = {name: problem for name, problem in
-                               {**previous, **conditions}.items() if problem}
+                               {**previous, **conditions}.items()
+                               if problem and name not in pending}
+        state["pending"] = pending
     else:
         # Nothing was delivered; keep the old state and log offset so the
         # next run raises the same alerts again.

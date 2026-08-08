@@ -97,22 +97,87 @@ class TestLayerConditions:
 
 class TestTransitions:
     def test_new_problem_trips_once(self):
-        trips, recoveries = monitor.transitions({'app': 'down'}, {})
+        trips, recoveries, held = monitor.transitions({'app': 'down'}, {}, {})
 
         assert trips == ['down']
         assert recoveries == []
+        assert held == {}
 
     def test_persisting_problem_does_not_realert(self):
-        trips, recoveries = monitor.transitions({'app': 'down'}, {'app': 'down'})
+        trips, recoveries, held = monitor.transitions(
+            {'app': 'down'}, {'app': 'down'}, {})
 
         assert trips == []
         assert recoveries == []
 
     def test_recovery_alerts_once(self):
-        trips, recoveries = monitor.transitions({'app': None}, {'app': 'down'})
+        trips, recoveries, held = monitor.transitions(
+            {'app': None}, {'app': 'down'}, {})
 
         assert trips == []
         assert recoveries == ['app recovered']
+
+    def test_first_layer_problem_is_held_not_tripped(self):
+        trips, recoveries, held = monitor.transitions(
+            {'layer:BC:points': 'dns blip'}, {}, {})
+
+        assert trips == []
+        assert held == {'layer:BC:points': 'dns blip'}
+
+    def test_layer_problem_on_second_consecutive_run_trips(self):
+        trips, recoveries, held = monitor.transitions(
+            {'layer:BC:points': 'still down'}, {},
+            {'layer:BC:points': 'dns blip'})
+
+        assert trips == ['still down']
+        assert held == {}
+
+    def test_held_layer_problem_that_clears_is_dropped_silently(self):
+        trips, recoveries, held = monitor.transitions(
+            {'layer:BC:points': None}, {}, {'layer:BC:points': 'dns blip'})
+
+        assert trips == []
+        assert recoveries == []
+        assert held == {}
+
+    def test_alerted_layer_problem_still_recovers(self):
+        trips, recoveries, held = monitor.transitions(
+            {'layer:BC:points': None}, {'layer:BC:points': 'down'}, {})
+
+        assert recoveries == ['layer:BC:points recovered']
+
+
+class TestLayerCheckDue:
+    def test_due_when_never_checked(self):
+        assert monitor.layer_check_due({}, 12, NOW)
+
+    def test_not_due_within_interval(self):
+        state = {'last_layer_check': '2026-07-12T10:00:00+00:00'}   # 8h ago
+
+        assert not monitor.layer_check_due(state, 12, NOW)
+
+    def test_due_after_interval(self):
+        state = {'last_layer_check': '2026-07-12T05:00:00+00:00'}   # 13h ago
+
+        assert monitor.layer_check_due(state, 12, NOW)
+
+    def test_pending_layer_problem_forces_check(self):
+        state = {'last_layer_check': '2026-07-12T17:45:00+00:00',
+                 'pending': {'layer:BC:points': 'dns blip'}}
+
+        assert monitor.layer_check_due(state, 12, NOW)
+
+    def test_tripped_layer_problem_forces_check(self):
+        state = {'last_layer_check': '2026-07-12T17:45:00+00:00',
+                 'conditions': {'layer:BC:points': 'down'}}
+
+        assert monitor.layer_check_due(state, 12, NOW)
+
+    def test_non_layer_conditions_do_not_force_check(self):
+        state = {'last_layer_check': '2026-07-12T17:45:00+00:00',
+                 'conditions': {'fetch:BC': 'stale'}}
+
+        assert not monitor.layer_check_due(state, 12, NOW)
 
 
 class TestScanLogErrors:
@@ -205,6 +270,39 @@ class TestRun:
 
         assert len(failed) == 1
         assert [title for title, _ in env['sent']] == ['TrekSafer ALERT']
+
+    def test_layer_blip_for_one_run_stays_silent(self, env, monkeypatch):
+        monkeypatch.setattr(monitor, 'layer_conditions',
+                            lambda *a: {'layer:BC:points': 'dns blip'})
+        monitor.run(env['settings'], NOW)
+
+        monkeypatch.setattr(monitor, 'layer_conditions', lambda *a: {'layer:BC:points': None})
+        monitor.run(env['settings'], NOW)
+
+        assert env['sent'] == []
+
+    def test_healthy_layers_are_checked_on_the_interval_not_every_run(self, env, monkeypatch):
+        calls = []
+        monkeypatch.setattr(monitor, 'layer_conditions',
+                            lambda *a: calls.append(1) or {'layer:BC:points': None})
+        monitor.run(env['settings'], NOW)   # never checked: runs
+        monitor.run(env['settings'], NOW)   # within interval: skipped
+        monitor.run(env['settings'], NOW)
+
+        assert len(calls) == 1
+
+    def test_layer_problem_persisting_two_runs_alerts_then_recovers(self, env, monkeypatch):
+        monkeypatch.setattr(monitor, 'layer_conditions',
+                            lambda *a: {'layer:BC:points': 'metadata query failed'})
+        monitor.run(env['settings'], NOW)   # held, no alert
+        monitor.run(env['settings'], NOW)   # confirmed: alert
+        monitor.run(env['settings'], NOW)   # ongoing: no re-alert
+
+        monkeypatch.setattr(monitor, 'layer_conditions', lambda *a: {'layer:BC:points': None})
+        monitor.run(env['settings'], NOW)   # recovery
+
+        titles = [title for title, _ in env['sent']]
+        assert titles == ['TrekSafer ALERT', 'TrekSafer recovered']
 
     def test_new_log_errors_are_reported(self, env):
         with open(env['settings'].log_file, 'w') as f:

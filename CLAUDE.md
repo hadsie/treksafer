@@ -13,16 +13,20 @@ python -m app                # starts CLI transport on localhost:8888
 
 Connect via `python scripts/cli_connect.py` for local testing.
 
-Refresh the fire database: `python scripts/downloads.py` (runs daily via cron in production)
+Refresh the fire database: `python scripts/downloads.py` (runs twice daily via cron in production, 06:00 and 18:00)
 
 ## Operator monitoring
 
 The message `health` on any transport returns a data-freshness summary; the exact
 lowercase form over the CLI port returns JSON. `scripts/monitor.py` (cron,
-every 15-30 min) probes it and alerts via ntfy + email (`app/notify.py`,
+every 15 min) probes it and alerts via ntfy + email (`app/notify.py`,
 configured under `monitoring:` in config.yaml) on app-down, stale fetches,
 frozen upstream layers (ArcGIS metadata lastEditDate), and new ERROR log
-lines; alerts fire on state changes only. `scripts/digest.py` (cron, daily)
+lines; alerts fire on state changes only. The layer checks are the monitor's
+only direct upstream API calls and run every `layer_check_hours` (12h), not
+every cron run; a failing layer is rechecked every run and alerts only after
+two consecutive failures (a single failure can be network noise on the
+monitor's own host). `scripts/digest.py` (cron, daily)
 emails a summary of requests whose coordinates could not be parsed, scraped
 from sms.log. Both scripts ping healthchecks.io as a dead-man's switch
 (monitor directly, downloads.py after a successful refresh). Responses served
