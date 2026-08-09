@@ -2,13 +2,11 @@
 
 Unlike the radius search, a lookup targets one source at a time. Check the
 database first to determine the source, if found, search only that specific
-source, if not found, search all realtime APIs. Fire numbers that recycle
-annually use the current season's fire; a number with no current fire serves
-the most recent previous season when it is recent enough or still active
-(see db.load_fire).
+source, if not found, search all realtime APIs.
 
-A looked-up fire is served enriched: perimeter bounds, recent edge movement
-derived from snapshot geometry history, and the time the served data was current.
+A looked-up fire has additional fields including: perimeter bounds, recent edge
+movement derived from snapshot geometry history, and the time the served data
+was current.
 """
 from __future__ import annotations
 

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 import geopandas as gpd
+from dateutil.relativedelta import relativedelta
 from shapely import wkb
 
 from ..filters import STATUS_LEVELS
@@ -298,31 +299,20 @@ def load_fire(conn: sqlite3.Connection, source: str, fire: str,
               now: datetime, history_months: int) -> gpd.GeoDataFrame:
     """Load the most recently seen fire matching its displayed identifier.
 
-    Matches case-insensitively and exactly against the displayed fire field.
-    Fires no longer in the source's feed still match, newest last_seen
-    first, so a fire number that recycles annually resolves to the current
-    season's fire and falls back to the most recent previous season only
-    when no current fire carries the number. A match last seen within
-    history_months calendar months of now (inclusive) serves at any
-    status; an older match serves only while its last known status is
-    active, so a recycled number never resurfaces a long-dead fire while
-    a still-burning holdover stays findable. The frame's LastSeen column
-    tells the caller how current the data is. The identifier is a bound
-    parameter, so % and _ are matched literally rather than as LIKE
-    wildcards.
+    Matches case-insensitively, including fires no longer in the source's
+    feed, newest last_seen first. A match last seen more than history_months
+    ago is ignored unless status is active.
 
     Returns a one-row (or empty) GeoDataFrame in EPSG:3857.
     """
+    # last_seen and the cutoff are isoformat strings in the same UTC
+    # format, so string order matches time order.
+    cutoff = (now - relativedelta(months=history_months)).isoformat()
     rows = conn.execute(
-        # datetime() wraps both sides of the window check: stored last_seen
-        # values are Python isoformat strings ("T" separator plus offset)
-        # while the computed cutoff comes out as "YYYY-MM-DD HH:MM:SS", so
-        # the raw strings would not compare chronologically.
         _FIRES_SQL + " AND f.fire = ? COLLATE NOCASE"
-        " AND (datetime(f.last_seen) >= datetime(?, ?) OR s.status_level = ?)"
+        " AND (f.last_seen >= ? OR s.status_level = ?)"
         " ORDER BY f.last_seen DESC LIMIT 1",
-        (source, fire, now.isoformat(), f"-{history_months} months",
-         STATUS_LEVELS['active']),
+        (source, fire, cutoff, STATUS_LEVELS['active']),
     ).fetchall()
     return _fires_frame(rows)
 
