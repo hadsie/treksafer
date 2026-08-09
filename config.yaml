@@ -39,6 +39,10 @@ optout_database: "${TREKSAFER_OPTOUT_DATABASE:-data/optouts.db}"
 # freshness marker only when the stored fetch is older than this (hours).
 stale_data_hours: 6
 
+# A fireid lookup serves a stored fire last seen within this many calendar
+# months; an older match serves only while its last known status is active.
+lookup_history_months: 3
+
 # Logging. log_file defaults to <log_dir>/<env>.log.
 log_dir: "${TREKSAFER_LOG_DIR:-logs}"
 # logging.INFO

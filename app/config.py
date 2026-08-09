@@ -229,6 +229,9 @@ class Settings(BaseSettings):
     optout_database: str
     # Stored fallback data older than this (hours) carries a freshness marker.
     stale_data_hours: int
+    # Used for fireid lookup, unless the fire is still active don't return
+    # fireid's older than lookup_history_months.
+    lookup_history_months: int = Field(ge=1)
     # Fires discovered within this many days bypass the minimum size filter.
     new_fire_age_days: int = 7
     # Auto-detected requests default to fire data within this window (MM-DD, inclusive).
