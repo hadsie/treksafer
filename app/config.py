@@ -217,6 +217,8 @@ class MonitoringConfig(BaseModel):
     refresh_healthcheck_url: str = ""
     # Alert when a source's newest fetch is older than this.
     fetch_stale_hours: int = 12
+    # Hours between upstream layer metadata checks.
+    layer_check_hours: int = 12
     # Last-known condition state, for alerting on changes only.
     state_file: str = "data/monitor_state.json"
     # Daily digest of requests with unusable coordinates (scripts/digest.py).

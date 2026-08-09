@@ -66,6 +66,8 @@ monitoring:
   refresh_healthcheck_url: "${TREKSAFER_REFRESH_HEALTHCHECK_URL}"
   # Alert when a source's newest fetch is older than this (hours).
   fetch_stale_hours: 14
+  # How frequently to check the upstream APIs, in hours.
+  layer_check_hours: 12
   state_file: "data/monitor_state.json"
   # Daily digest of requests with unusable coordinates (scripts/digest.py).
   # sms_log_file defaults to <log_dir>/sms.log.
