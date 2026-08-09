@@ -9,14 +9,17 @@ class TestFireSeasonValidation:
 
     def test_valid_dates_accepted(self):
         settings = Settings(fire_season_start="05-15", fire_season_end="08-15",
-                            stale_data_hours=6, optout_database="data/optouts.db")
+                            stale_data_hours=6, optout_database="data/optouts.db",
+                            lookup_history_months=3)
         assert settings.fire_season_start == "05-15"
         assert settings.fire_season_end == "08-15"
 
     @pytest.mark.parametrize("value", ["15-05", "2026-05-15", "May 15", "", "13-01", "05-32"])
     def test_malformed_dates_rejected(self, value):
         with pytest.raises(ValidationError):
-            Settings(fire_season_start=value)
+            Settings(fire_season_start=value, fire_season_end="08-15",
+                     stale_data_hours=6, optout_database="data/optouts.db",
+                     lookup_history_months=3)
 
 
 class TestRealtimeFireConfig:

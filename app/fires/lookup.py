@@ -4,7 +4,8 @@ Unlike the radius search, a lookup targets one source at a time. Check the
 database first to determine the source, if found, search only that specific
 source, if not found, search all realtime APIs. Fire numbers that recycle
 annually use the current season's fire; a number with no current fire serves
-the most recent previous season.
+the most recent previous season when it is recent enough or still active
+(see db.load_fire).
 
 A looked-up fire is served enriched: perimeter bounds, recent edge movement
 derived from snapshot geometry history, and the time the served data was current.
@@ -155,7 +156,7 @@ class FireLookup:
         Staleness is per fire (its last_seen, not the source's newest
         fetch), so a match outside the latest fetch's coverage -- or from
         a prior season -- refreshes or is served honestly aged."""
-        stored = self._load_stored(data_file.location)
+        stored = self._load_stored(data_file.location, now)
         if stored is None or stored.empty:
             return None
 
@@ -173,12 +174,14 @@ class FireLookup:
             # the stored record, honestly timestamped.
         return self._normalize(stored, _DB_DATA_FILE, data_file, seen_at)
 
-    def _load_stored(self, location: str) -> Optional[gpd.GeoDataFrame]:
+    def _load_stored(self, location: str,
+                     now: datetime) -> Optional[gpd.GeoDataFrame]:
         """The database's match for the term (newest last_seen), or None."""
         try:
             conn = firedb.connect(self.settings.database)
             try:
-                return firedb.load_fire(conn, location, self.term)
+                return firedb.load_fire(conn, location, self.term, now,
+                                        self.settings.lookup_history_months)
             finally:
                 conn.close()
         except sqlite3.Error as e:
