@@ -12,7 +12,7 @@ pytz>=2024.1
 timezonefinder>=6.5
 requests>=2.3,<3
 requests_cache
-signalwire-sdk>=3.0
+signalwire-sdk>=3.0,<4
 shapely>=2.0,<3
 responses
 
