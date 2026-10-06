@@ -26,12 +26,42 @@ _OPT_OUT_PATTERN = re.compile(
 _OPT_IN_PATTERN = re.compile(r'\s*(start|unstop)\s*', re.IGNORECASE)
 
 
+_SUCCESS_CODE = re.compile(r'2\d{2}')
+
+log = logging.getLogger(__name__.split(".", 1)[0])
+
+
+def _is_error_frame(msg) -> bool:
+    """Whether a RELAY frame looks like an error response."""
+    if not isinstance(msg, dict):
+        return False
+    result = msg.get("result")
+    code = result.get("code") if isinstance(result, dict) else None
+    return "error" in msg or (code is not None and not _SUCCESS_CODE.fullmatch(str(code)))
+
+
+class LoggingRelayClient(RelayClient):
+    """RelayClient that logs error responses in full.
+
+    The SDK keeps only the code and message when it turns an error frame
+    into a RelayError, so the whole frame gets logged here first.
+    """
+
+    async def _handle_message(self, msg, *args, **kwargs):
+        """Log error frames, then hand every frame to the SDK's private handler."""
+        if _is_error_frame(msg):
+            # Stays at WARNING: the "Failed to reply" ERROR that follows in
+            # _on_message is the line the monitor alerts on.
+            log.warning("RELAY error response: %s", msg)
+        await super()._handle_message(msg, *args, **kwargs)
+
+
 class SignalWireTransport(BaseTransport):
     """Async transport adapter for SignalWire SMS via the RELAY realtime client."""
 
     def __init__(self, config: SignalWireConfig):
         self.config = config
-        self.log = logging.getLogger(__name__.split(".", 1)[0])
+        self.log = log
         self.sms_log = self._setup_sms_logger()
         self._client: Optional[RelayClient] = None
         self._stopping = False
@@ -56,7 +86,7 @@ class SignalWireTransport(BaseTransport):
     async def listen(self) -> None:
         # RELAY authenticates with project + token against the SDK's default
         # gateway (relay.signalwire.com); the space domain is REST-only.
-        self._client = RelayClient(
+        self._client = LoggingRelayClient(
             project=self.config.project_id.get_secret_value(),
             token=self.config.api_token.get_secret_value(),
             contexts=[self.config.context],

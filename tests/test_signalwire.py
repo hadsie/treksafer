@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -7,7 +8,7 @@ from signalwire.relay import RelayError
 
 from app import optout
 from app.config import SignalWireConfig, get_config
-from app.transport.signalwire import SignalWireTransport
+from app.transport.signalwire import LoggingRelayClient, SignalWireTransport
 
 
 @pytest.fixture(autouse=True)
@@ -131,7 +132,7 @@ class TestSignalWireTransport:
         transport = SignalWireTransport(signalwire_config)
         transport._stopping = True  # make listen() exit immediately
 
-        with patch("app.transport.signalwire.RelayClient") as mock_client:
+        with patch("app.transport.signalwire.LoggingRelayClient") as mock_client:
             await transport.listen()
 
         _, kwargs = mock_client.call_args
@@ -147,6 +148,55 @@ class TestSignalWireTransport:
 
         assert transport._stopping is True
         transport._client.disconnect.assert_awaited_once()
+
+
+class TestLoggingRelayClient:
+    """Tests for full logging of RELAY error responses."""
+
+    @staticmethod
+    async def _deliver(frame):
+        """Feed a response frame for a pending request through the client."""
+        client = LoggingRelayClient(project="p", token="t")
+        pending = asyncio.get_running_loop().create_future()
+        client._pending["req-1"] = pending
+        await client._handle_message({"id": "req-1", **frame})
+        return pending
+
+    @pytest.mark.asyncio
+    async def test_logs_full_failed_result(self, caplog):
+        """A non-2xx result is logged whole, including fields RelayError drops."""
+        frame = {"result": {"code": "400", "message": "Bad request",
+                            "detail": "From must belong to an active campaign"}}
+        with caplog.at_level(logging.WARNING):
+            await self._deliver(frame)
+
+        assert "From must belong to an active campaign" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_failed_result_still_raises_relay_error(self):
+        """Logging leaves the SDK's error handling intact."""
+        pending = await self._deliver({"result": {"code": "400", "message": "Bad request"}})
+
+        with pytest.raises(RelayError, match="400"):
+            pending.result()
+
+    @pytest.mark.asyncio
+    async def test_logs_jsonrpc_error(self, caplog):
+        """A JSON-RPC level error frame is logged whole."""
+        frame = {"error": {"code": -32601, "message": "Method not found", "data": "extra"}}
+        with caplog.at_level(logging.WARNING):
+            await self._deliver(frame)
+
+        assert "'data': 'extra'" in caplog.text
+
+    @pytest.mark.asyncio
+    async def test_success_not_logged(self, caplog):
+        """A 2xx result is passed through without logging."""
+        with caplog.at_level(logging.WARNING):
+            pending = await self._deliver({"result": {"code": "200", "message_id": "m1"}})
+
+        assert not [r for r in caplog.records if r.name == "app"]
+        assert pending.result()["message_id"] == "m1"
 
 
 class TestSignalWireConfig:
