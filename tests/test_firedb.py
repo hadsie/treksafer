@@ -160,25 +160,25 @@ class TestLoadFire:
     def test_exact_match_hits(self, conn):
         self._record(conn, 'K70597', 'K70598')
 
-        found = firedb.load_fire(conn, 'BC', 'K70597')
+        found = firedb.load_fire(conn, 'BC', 'K70597', T3, 3)
         assert list(found['Fire']) == ['K70597']
 
     def test_substring_does_not_match(self, conn):
         self._record(conn, 'K70597')
 
-        assert firedb.load_fire(conn, 'BC', 'K7059').empty
+        assert firedb.load_fire(conn, 'BC', 'K7059', T3, 3).empty
 
     def test_case_insensitive(self, conn):
         self._record(conn, 'HWF-096-2026')
 
-        found = firedb.load_fire(conn, 'BC', 'hwf-096-2026')
+        found = firedb.load_fire(conn, 'BC', 'hwf-096-2026', T3, 3)
         assert list(found['Fire']) == ['HWF-096-2026']
 
     def test_percent_is_literal_not_a_wildcard(self, conn):
         self._record(conn, 'K1')
 
         # A LIKE-style '%' would match K1; here it is matched literally.
-        assert firedb.load_fire(conn, 'BC', 'K%').empty
+        assert firedb.load_fire(conn, 'BC', 'K%', T3, 3).empty
 
     def test_dropped_fire_matches_with_its_age(self, conn):
         """A fire no longer in the feed still matches; LastSeen tells the
@@ -186,8 +186,8 @@ class TestLoadFire:
         self._record(conn, 'K1', 'K2')
         firedb.record_fires(conn, 'BC', fires_gdf([{'fire_key': 'K1', 'Fire': 'K1'}]), T2)
 
-        assert firedb.load_fire(conn, 'BC', 'K2').iloc[0]['LastSeen'] == T1.isoformat()
-        assert firedb.load_fire(conn, 'BC', 'K1').iloc[0]['LastSeen'] == T2.isoformat()
+        assert firedb.load_fire(conn, 'BC', 'K2', T3, 3).iloc[0]['LastSeen'] == T1.isoformat()
+        assert firedb.load_fire(conn, 'BC', 'K1', T3, 3).iloc[0]['LastSeen'] == T2.isoformat()
 
     def test_recycled_number_resolves_to_newest_season(self, conn):
         firedb.record_fires(conn, 'ON', fires_gdf(
@@ -195,7 +195,7 @@ class TestLoadFire:
         firedb.record_fires(conn, 'ON', fires_gdf(
             [{'fire_key': '2026-NIP991', 'Fire': 'NIP991'}]), T2)
 
-        found = firedb.load_fire(conn, 'ON', 'NIP991')
+        found = firedb.load_fire(conn, 'ON', 'NIP991', T3, 3)
         assert list(found['fire_key']) == ['2026-NIP991']
 
     def test_prior_season_serves_when_no_current_match(self, conn):
@@ -204,9 +204,59 @@ class TestLoadFire:
         firedb.record_fires(conn, 'ON', fires_gdf(
             [{'fire_key': '2026-DRY992', 'Fire': 'DRY992'}]), T2)
 
-        found = firedb.load_fire(conn, 'ON', 'NIP991')
+        found = firedb.load_fire(conn, 'ON', 'NIP991', T3, 3)
         assert list(found['fire_key']) == ['2025-NIP991']
         assert found.iloc[0]['LastSeen'] == T1.isoformat()
 
     def test_no_data_returns_empty(self, conn):
-        assert firedb.load_fire(conn, 'BC', 'K1').empty
+        assert firedb.load_fire(conn, 'BC', 'K1', T3, 3).empty
+
+
+class TestLoadFireHistoryWindow:
+    """load_fire serves a match last seen within history_months of now at
+    any status, and an older match only while its last known status is
+    active."""
+
+    NOW = datetime(2026, 8, 1, tzinfo=timezone.utc)
+
+    def _record_one(self, conn, fetched_at, status='Out', level=4, key='2025-K1'):
+        firedb.record_fires(conn, 'BC', fires_gdf(
+            [{'fire_key': key, 'Fire': 'K1', 'Status': status,
+              'StatusLevel': level}]), fetched_at)
+
+    def test_match_at_the_cutoff_serves(self, conn):
+        self._record_one(conn, datetime(2026, 5, 1, tzinfo=timezone.utc))
+
+        assert not firedb.load_fire(conn, 'BC', 'K1', self.NOW, 3).empty
+
+    def test_match_past_the_cutoff_is_dropped(self, conn):
+        self._record_one(conn, datetime(2026, 4, 30, 23, 59, tzinfo=timezone.utc))
+
+        assert firedb.load_fire(conn, 'BC', 'K1', self.NOW, 3).empty
+
+    def test_old_active_fire_still_serves(self, conn):
+        fetched = datetime(2025, 7, 1, tzinfo=timezone.utc)
+        self._record_one(conn, fetched, status='Out of Control', level=1)
+
+        found = firedb.load_fire(conn, 'BC', 'K1', self.NOW, 3)
+        assert found.iloc[0]['LastSeen'] == fetched.isoformat()
+
+    def test_in_window_match_outranks_old_active(self, conn):
+        self._record_one(conn, datetime(2025, 7, 1, tzinfo=timezone.utc),
+                         status='Out of Control', level=1, key='2025-K1')
+        self._record_one(conn, datetime(2026, 7, 1, tzinfo=timezone.utc),
+                         key='2026-K1')
+
+        found = firedb.load_fire(conn, 'BC', 'K1', self.NOW, 3)
+        assert list(found['fire_key']) == ['2026-K1']
+
+    def test_recycled_number_with_only_dead_history_is_dropped(self, conn):
+        self._record_one(conn, datetime(2024, 7, 1, tzinfo=timezone.utc))
+
+        assert firedb.load_fire(conn, 'BC', 'K1', self.NOW, 3).empty
+
+    def test_january_lookup_finds_november_fire(self, conn):
+        self._record_one(conn, datetime(2026, 11, 20, tzinfo=timezone.utc))
+
+        january = datetime(2027, 1, 15, tzinfo=timezone.utc)
+        assert not firedb.load_fire(conn, 'BC', 'K1', january, 3).empty

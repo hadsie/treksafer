@@ -1,17 +1,21 @@
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import geopandas as gpd
 import pytest
+from shapely.geometry import box
 
+from app.config import get_config
 from app.filters import STATUS_LEVELS
 
-# A fixed fetch time so tests are deterministic; fixture Discovered dates
-# are old relative to any real "now", keeping the new-fire exemption inert.
-FIXTURE_FETCHED_AT = datetime(2026, 7, 1, 12, 0, tzinfo=timezone.utc)
+# Relative to the run, so the fixture database never ages out of time windows.
+FIXTURE_FETCHED_AT = (datetime.now(timezone.utc).replace(microsecond=0)
+                      - timedelta(days=30))
+
+LOOKUP_FETCHED_DAYS_AGO = 3
 
 _STAGE_LEVELS = {
     'OUT_CNTRL': ('Out of Control', 'active'), 'OC': ('OC', 'active'),
@@ -99,6 +103,31 @@ def build_fixture_db(path, fetched_at=FIXTURE_FETCHED_AT):
             firedb.record_fires(conn, location, fires, fetched_at)
     finally:
         conn.close()
+
+
+@pytest.fixture
+def lookup_fire_db(tmp_path, monkeypatch):
+    """Serve fire data from a database holding only BC fire C10784, last
+    fetched LOOKUP_FETCHED_DAYS_AGO days ago.
+
+    fireid lookups ignore inactive fires last seen more than
+    lookup_history_months ago, so the fetch date is set relative to now.
+    """
+    from app.fires import db as firedb
+
+    fire = gpd.GeoDataFrame(
+        {'Fire': ['C10784'], 'Name': ['Kamloops_Base'], 'Location': ['Kamloops'],
+         'Type': [None], 'Size': [50.0], 'Status': ['Being Held'],
+         'StatusLevel': [STATUS_LEVELS['managed']], 'fire_key': ['2026-C10784']},
+        geometry=[box(-120.505, 50.4968, -120.495, 50.5032)], crs='EPSG:4326')
+    path = str(tmp_path / 'fires.db')
+    conn = firedb.connect(path)
+    try:
+        firedb.record_fires(conn, 'BC', fire, datetime.now(timezone.utc)
+                            - timedelta(days=LOOKUP_FETCHED_DAYS_AGO))
+    finally:
+        conn.close()
+    monkeypatch.setattr(get_config(), 'database', path)
 
 
 @pytest.hookimpl(tryfirst=True)

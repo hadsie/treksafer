@@ -35,13 +35,14 @@ def lookup_settings(db, enabled=True):
     return settings
 
 
-def record_stored(db, fetched_at, fire='K1', updated=None, key=None, size=10.0):
+def record_stored(db, fetched_at, fire='K1', updated=None, key=None, size=10.0,
+                  status='Under Control', status_level=3):
     """Record one stored BC fire fetched at fetched_at."""
     frame = gpd.GeoDataFrame(
         {
             'Fire': [fire], 'Name': ['Stored Name'], 'Location': ['Stored Creek'],
             'Type': [None], 'Discovered': [None], 'Updated': [updated],
-            'Size': [size], 'Status': ['Under Control'], 'StatusLevel': [3],
+            'Size': [size], 'Status': [status], 'StatusLevel': [status_level],
             'latitude': [FIRE_COORDS[0]], 'longitude': [FIRE_COORDS[1]],
             'fire_key': [key or f'2026-{fire}'],
         },
@@ -169,7 +170,8 @@ class TestSeasonPreference:
 
     def test_current_season_outranks_prior(self, tmp_path):
         db = str(tmp_path / 'fires.db')
-        record_stored(db, now() - timedelta(days=300), key='2025-K1', size=99.0)
+        record_stored(db, now() - timedelta(days=300), key='2025-K1', size=99.0,
+                      status='Out of Control', status_level=1)
         record_stored(db, now() - timedelta(minutes=5), key='2026-K1', size=10.0)
 
         lookup, fire = self._lookup(lookup_settings(db, enabled=False))
@@ -179,7 +181,8 @@ class TestSeasonPreference:
     def test_prior_season_serves_when_no_current_match(self, tmp_path):
         db = str(tmp_path / 'fires.db')
         last_seen = now() - timedelta(days=300)
-        record_stored(db, last_seen, key='2025-K1', size=99.0)
+        record_stored(db, last_seen, key='2025-K1', size=99.0,
+                      status='Out of Control', status_level=1)
 
         lookup, fire = self._lookup(lookup_settings(db, enabled=False))
 
@@ -192,7 +195,8 @@ class TestSeasonPreference:
         serves with its honest age."""
         db = str(tmp_path / 'fires.db')
         last_seen = now() - timedelta(days=300)
-        record_stored(db, last_seen, key='2025-K1')
+        record_stored(db, last_seen, key='2025-K1',
+                      status='Out of Control', status_level=1)
         with patch('app.fires.lookup.fetch_fire',
                    return_value=live_fire().iloc[0:0]) as mock_fetch:
             lookup, fire = self._lookup(lookup_settings(db))
@@ -200,6 +204,42 @@ class TestSeasonPreference:
         mock_fetch.assert_called_once()
         assert fire['Name'] == 'Stored Name'
         assert lookup.as_of == last_seen
+
+
+class TestHistoryWindow:
+    """A match last seen beyond lookup_history_months serves only while
+    its last known status is active; anything older and inactive is
+    not found."""
+
+    def _lookup(self, settings, term='K1', coords=None):
+        with patch('app.fires.lookup.get_config', return_value=settings):
+            return FireLookup(term, coords)
+
+    def test_old_inactive_match_is_not_found(self, tmp_path):
+        db = str(tmp_path / 'fires.db')
+        record_stored(db, now() - timedelta(days=300), key='2025-K1')
+
+        assert self._lookup(lookup_settings(db, enabled=False)).result() is None
+
+    def test_old_inactive_match_does_not_shadow_a_live_fire(self, tmp_path):
+        db = str(tmp_path / 'fires.db')
+        record_stored(db, now() - timedelta(days=300), key='2025-K1')
+        with patch('app.fires.lookup.fetch_fire', return_value=live_fire()) as mock_fetch:
+            fire = self._lookup(lookup_settings(db)).result()
+
+        assert fire['Name'] == 'Live Name'
+        mock_fetch.assert_called_once()
+
+    def test_recent_inactive_match_serves(self, tmp_path):
+        db = str(tmp_path / 'fires.db')
+        fetched = now() - timedelta(days=30)
+        record_stored(db, fetched, key='2026-K1')
+
+        lookup = self._lookup(lookup_settings(db, enabled=False))
+        fire = lookup.result()
+
+        assert fire['Name'] == 'Stored Name'
+        assert lookup.as_of == fetched
 
 
 class TestAsOf:

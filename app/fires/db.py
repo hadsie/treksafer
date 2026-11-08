@@ -18,7 +18,10 @@ from pathlib import Path
 from typing import Optional
 
 import geopandas as gpd
+from dateutil.relativedelta import relativedelta
 from shapely import wkb
+
+from ..filters import STATUS_LEVELS
 
 SCHEMA_VERSION = 1
 
@@ -292,25 +295,24 @@ def load_source(conn: sqlite3.Connection, source: str) -> Optional[gpd.GeoDataFr
     return _fires_frame(rows)
 
 
-def load_fire(conn: sqlite3.Connection, source: str,
-              fire: str) -> gpd.GeoDataFrame:
+def load_fire(conn: sqlite3.Connection, source: str, fire: str,
+              now: datetime, history_months: int) -> gpd.GeoDataFrame:
     """Load the most recently seen fire matching its displayed identifier.
 
-    Matches case-insensitively and exactly against the displayed fire field.
-    Fires no longer in the source's feed still match, newest last_seen
-    first, so a fire number that recycles annually resolves to the current
-    season's fire and falls back to the most recent previous season only
-    when no current fire carries the number. The frame's LastSeen column
-    tells the caller how current the data is. The identifier is a bound
-    parameter, so % and _ are matched literally rather than as LIKE
-    wildcards.
+    Matches case-insensitively, including fires no longer in the source's
+    feed, newest last_seen first. A match last seen more than history_months
+    ago is ignored unless status is active.
 
     Returns a one-row (or empty) GeoDataFrame in EPSG:3857.
     """
+    # last_seen and the cutoff are isoformat strings in the same UTC
+    # format, so string order matches time order.
+    cutoff = (now - relativedelta(months=history_months)).isoformat()
     rows = conn.execute(
-        _FIRES_SQL + " AND f.fire = ? COLLATE NOCASE "
-        "ORDER BY f.last_seen DESC LIMIT 1",
-        (source, fire),
+        _FIRES_SQL + " AND f.fire = ? COLLATE NOCASE"
+        " AND (f.last_seen >= ? OR s.status_level = ?)"
+        " ORDER BY f.last_seen DESC LIMIT 1",
+        (source, fire, cutoff, STATUS_LEVELS['active']),
     ).fetchall()
     return _fires_frame(rows)
 

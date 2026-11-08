@@ -3,8 +3,8 @@
 Each scenario's full response is stored under tests/data/golden/ and
 compared exactly, so any change to response output, intended or not,
 fails here first. The one exception is volatile time spans ("26h ago",
-"3d ago"), which are normalized to "T ago" because they grow with
-wall-clock time against the fixed-date fixture database.
+"3d ago"), which are normalized to "T ago" because they depend on
+wall-clock time.
 
 Regenerate after an INTENDED output change:
 
@@ -55,7 +55,6 @@ SCENARIOS = [
     ('fires_none_nearby', 'fires (54.5, -125.5)'),
     ('fires_outside_coverage', 'fires (64.9, -18.5)'),
     ('fires_no_coordinates', 'fires please'),
-    ('fireid_found', 'fireid C10784 (49.06, -120.79)'),
     ('fireid_not_found', 'fireid NOPE999'),
     ('keyword_help', 'help'),
     ('keyword_usage', 'usage'),
@@ -107,6 +106,12 @@ class TestGoldenResponses:
              patch('app.messages.get_wind', return_value=None):
             _check('fires_manning_all_rising_aqi',
                    handle_message('fires all (49.064646, -120.7919022)'))
+
+    @pytest.mark.usefixtures('lookup_fire_db')
+    def test_fireid_found(self):
+        with patch('app.messages.get_aqi', return_value=AqiReport(42, 42)), \
+             patch('app.messages.get_wind', return_value=None):
+            _check('fireid_found', handle_message('fireid C10784 (49.06, -120.79)'))
 
     def test_aqi_absent_when_unavailable(self):
         with patch('app.messages.get_aqi', return_value=None), \

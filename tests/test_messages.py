@@ -1,5 +1,6 @@
-from datetime import date, datetime, timezone
+from datetime import date
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 import requests
@@ -7,6 +8,7 @@ import requests
 from app.messages import Messages, handle_fire_request, handle_message, in_fire_season
 from app.weather import AqiReport, WindReport
 from app.messaging.assembler import Block, as_text, fits_segment
+from tests.conftest import FIXTURE_FETCHED_AT
 
 
 class TestOutsideCoverage:
@@ -246,9 +248,8 @@ class TestFallbackMarker:
     """Responses built from stored data after a realtime failure carry a
     freshness marker; stored data as the configured mode does not."""
 
-    # Fixture data was fetched 2026-07-01 12:00 UTC; the test coordinates
-    # are in America/Vancouver (PDT, UTC-7).
-    MARKER = "Data from Jul 1 05:00"
+    # The test coordinates are in America/Vancouver.
+    MARKER = Messages.data_age(FIXTURE_FETCHED_AT.astimezone(ZoneInfo('America/Vancouver')))
     COORDS = (49.06, -120.79)
 
     @pytest.fixture
@@ -292,6 +293,7 @@ class TestFireLookupResponse:
     database, realtime disabled) or the not-found reply -- never a radius
     search."""
 
+    @pytest.mark.usefixtures('lookup_fire_db')
     def test_distance_and_direction_only_with_coords(self):
         with_coords = handle_message('fireid C10784 (50.5, -121.0)')
         without_coords = handle_message('fireid C10784')
@@ -320,6 +322,7 @@ class TestFireLookupResponse:
 
         assert 'No fire matching' in message
 
+    @pytest.mark.usefixtures('lookup_fire_db')
     def test_reply_carries_perimeter_and_as_of_lines(self):
         message = handle_message('fireid C10784')
 
@@ -340,11 +343,11 @@ class TestFireLookupResponse:
     def test_ontario_lookup_is_case_insensitive(self):
         assert 'Fire: NIP991' in handle_message('fireid nip991')
 
+    @pytest.mark.usefixtures('lookup_fire_db')
     def test_as_of_relative_to_stored_fetch(self, monkeypatch):
         """A stale hit whose live refresh fails is served from storage with
         an As-of age measured from the stored fetch time."""
         from app.config import get_config
-        from tests.conftest import FIXTURE_FETCHED_AT
         bc = next(d for d in get_config().data if d.location == 'BC')
         monkeypatch.setattr(bc.realtime, 'enabled', True)
         monkeypatch.setattr(bc.realtime, 'enrichment', None)
@@ -353,8 +356,7 @@ class TestFireLookupResponse:
              patch('app.messages.get_wind', return_value=None):
             message = handle_message('fireid C10784 (49.06, -120.79)')
 
-        days = round((datetime.now(timezone.utc) - FIXTURE_FETCHED_AT).total_seconds() / 86400)
-        assert message.endswith(f'As of {days}d ago')
+        assert message.endswith('As of 3d ago')
 
 
 class TestServiceKeywords:
