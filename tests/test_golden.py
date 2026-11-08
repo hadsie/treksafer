@@ -21,6 +21,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from app.avalanche.avcan import AvalancheCanadaProvider
+from app.config import get_config
 from app.messages import handle_message, handle_message_segments
 from app.weather import AqiReport, WindReport
 
@@ -64,6 +65,12 @@ SCENARIOS = [
 
 class TestGoldenResponses:
     """Every user-visible response shape, pinned."""
+
+    @pytest.fixture(autouse=True)
+    def fire_report_limits(self, monkeypatch):
+        """Pin the fire report limits the goldens were recorded with."""
+        monkeypatch.setattr(get_config().thresholds, 'fire_report_segments', 4)
+        monkeypatch.setattr(get_config().thresholds, 'fire_count_cap', 8)
 
     @pytest.mark.parametrize('name,message', SCENARIOS)
     def test_fire_and_service_responses(self, name, message):

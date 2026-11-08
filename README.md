@@ -17,6 +17,8 @@ See https://treksafer.com for more information.
 
 **Note:** Reports with several fires can arrive as several messages, typically one fire per SMS. This is to prevent confusion with fires spanning messages and out-of-order SMSes.
 
+It's recommended to review the full **[messages guide](docs/message-guide.md)** which covers the reply formats, what each line means, why fires are ordered the way they are, and shorthand formats that are used.
+
 **Fire response example:**
 ```
 AQI: 95
@@ -35,30 +37,23 @@ Size: 4 ha
 Status: Out of Control
 ```
 
-Fires that grew or shrank recently show the change next to their size, and fires that where discovered since the last full data sync are labelled `(NEW)`.
-
-The AQI and wind lines appear only when useful. AQI when it crosses a threshold (default: 75) or is forecast to rise sharply within the next few hours (`AQI: 35 rising to 160`), wind when sustained speeds reach fire-driving strength and there are fires to drive. Wind direction is where the wind blows *from* (a SW wind pushes fire toward the NE), and its `rising to` figure is the strongest wind forecast in the next 12 hours. All thresholds are tunable in `thresholds.yaml`. Currently integrated with [Open-Meteo.com](https://open-meteo.com) for Air quality and wind data.
+Fires that grew or shrank recently show the change next to their size, and fires that where discovered since the last full data sync are labelled `(NEW)`. The nearest and most serious fires get full detail, farther ones progressively shorter formats, and anything that doesn't fit is counted on a closing `+N more` line. The AQI and wind lines appear only when they cross a specified threshold (defined in `thresholds.yaml`.
 
 **Avalanche response example:**
 ```
-Sea to Sky
+Spearhead
 Mon: ALP:C TL:M BTL:L
 
-Storm Slabs
-ALP,TL Slp:N,NE,E
+StormSlb
+AllElev Slp:All
 Lkly, Sz:1-2.5
 
-Wind Slabs
+WindSlb
 ALP Slp:N,NE
 Poss, Sz:1-2
 ```
 
-Elevation bands are:
- - ALP (alpine)
- - TL (treeline)
- - BTL (below treeline)
-
-Danger ratings are abbreviated (C = Considerable, M = Moderate, L = Low) as are problem likelihood and destructive size.
+Danger ratings, elevation bands, likelihood, and size abbreviations are decoded in the [message guide](docs/message-guide.md).
 
 By default, fires within 50km of your GPS location are returned. If you’re in an area covered by an avalanche forecast provider (Avalanche Canada, Avalanche Quebec, US National Avalanche Center), you’ll get the current forecast instead.
 

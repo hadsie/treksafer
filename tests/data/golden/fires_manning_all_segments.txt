@@ -8,14 +8,6 @@ Status: Out of Control
 
 -- next SMS --
 
-Fire: Skagit_Close (C20146)
-Location: Skagit Valley
-24km W
-Size: 1.5 ha
-Status: Being Held
-
--- next SMS --
-
 Fire: Manning_East (C10802)
 Location: Manning Park
 14km E
@@ -24,11 +16,11 @@ Status: Under Control
 
 -- next SMS --
 
-Fire: Fraser_Medium (C20147)
-Location: Fraser Valley
-37km WNW
-Size: 25 ha
-Status: Under Control
+Fire: Skagit_Close (C20146)
+Location: Skagit Valley
+24km W
+Size: 1.5 ha
+Status: Being Held
 
 -- next SMS --
 
@@ -37,3 +29,7 @@ Location: Hope
 17km WSW
 Size: 0.5 ha
 Status: Out
+
+Fire: Fraser_Medium C20147
+37km WNW UC
+Size: 25 ha

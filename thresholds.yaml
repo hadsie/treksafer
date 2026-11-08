@@ -1,14 +1,15 @@
-# Tunable thresholds governing what fire responses include. Structural
-# configuration (data sources, transports, paths) stays in config.yaml.
-# Values support the same ${VAR:-default} placeholder syntax.
+# Thresholds that determine what to include in fire responses.
 
-# Hard ceiling on messages sent for one reply: a bug detector, never
-# policy. Any legitimate reply is far below it; if it ever fires, the
-# assembler produced a runaway reply and the error log says so. Set it
-# well above the content budget so the two never compete.
-sms_segment_backstop: ${TREKSAFER_SMS_SEGMENT_BACKSTOP:-15}
+# The maximum number of SMSs to send in a single reply.
+fire_report_segments: ${TREKSAFER_FIRE_REPORT_SEGMENTS:-8}
 
-# The wind line appears when sustained speed reaches this floor (km/h).
+# The maximum number of fires to respond with before summarizing with "+N more"
+fire_count_cap: ${TREKSAFER_FIRE_COUNT_CAP:-12}
+
+# Failsafe to prevent spamming a satellite device due to a bug in the system.
+sms_segment_backstop: ${TREKSAFER_SMS_SEGMENT_BACKSTOP:-17}
+
+# The wind is shown when sustained speed reaches this floor (km/h).
 wind_floor: ${TREKSAFER_WIND_FLOOR:-20}
 
 # Minimum rise (km/h) from current speed to the forecast peak before the

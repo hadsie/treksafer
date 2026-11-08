@@ -185,24 +185,20 @@ data:
         controlled: ['Under Control']
         out: ['Out']
   - location: CA
-    # National CWFIS layers (via Esri Canada). BC, AB, and ON are excluded;
-    # they have dedicated sources. The hotspot perimeters carry no fire ID,
-    # so points join to polygons by location; fires with no polygon get a
-    # circle of their reported size.
+    # National CWFIS layers (via Esri Canada). The hotspot perimeters don't have
+    # a fire ID, so points are joined to polygons by location; fires with no
+    # polygon get a circle of their reported size.
     realtime:
       enabled: ${TREKSAFER_CA_REALTIME:-true}
       points_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/activefires/FeatureServer/0/query
       perimeters_url: https://services.arcgis.com/wjcPoefzjpzCgffS/arcgis/rest/services/Active_Wildfire_Perimeters_in_Canada/FeatureServer/0/query
       join: spatial
       points_where: Agency NOT IN ('BC','AB','ON')
-      # Composite values like Manitoba/Saskatchewan survive NOT IN, so a
-      # border-straddling patch whose fire we do cover still comes through.
       perimeters_where: Province NOT IN ('British Columbia','Alberta','Ontario')
       key_fields: [Fire_Name]
       cache_timeout: 900
       mapping:
         Fire: Fire_Name
-        Location: Agency
         Size: Hectares__Ha_
         Status: Stage_of_Control
         Discovered: Start_Date

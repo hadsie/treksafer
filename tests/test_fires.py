@@ -407,6 +407,20 @@ class TestUSNormalization:
         assert 'Size' not in fire
         assert fire['Fire'] == 'Fire 0'
 
+    def test_nan_size_is_stripped_without_a_size_transform(self):
+        """Sources with no size transform (and database rows) rely on
+        normalization itself to drop a NaN size."""
+        from types import SimpleNamespace
+        from app.fires.find import _DB_DATA_FILE, _normalize_row
+        row = SimpleNamespace(Fire='K1', Name=None, Location=None, Type=None,
+                              Size=math.nan, Status='Out of Control',
+                              StatusLevel=1, Discovered=None)
+
+        fire = _normalize_row(_DB_DATA_FILE, row, distance=1000.0, direction='NW')
+
+        assert 'Size' not in fire
+        assert fire['Status'] == 'Out of Control'
+
 
 class TestOntarioNormalization:
     """A merged ON frame (rewritten ids, synthesized year) normalizes to

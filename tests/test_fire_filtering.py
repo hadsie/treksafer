@@ -381,37 +381,45 @@ class TestFireFilteringIntegration:
              patch.object(FindFires, 'search', return_value=fires):
             return find.nearby()
 
-    def test_nearby_sorts_by_status_then_distance(self):
-        """Fires are ordered by status priority, then by distance within a status."""
+    def test_nearby_ranking_is_distance_dominant_status_modulated(self):
+        """A big active fire a bit farther out outranks a small controlled
+        one, but a distant fire never outranks a close one."""
         fires = [
-            {'Fire': 'ManagedNear', 'StatusLevel': 2, 'Distance': 3000},
-            {'Fire': 'ActiveFar', 'StatusLevel': 1, 'Distance': 20000},
-            {'Fire': 'ActiveNear', 'StatusLevel': 1, 'Distance': 3000},
-            {'Fire': 'ControlledNear', 'StatusLevel': 3, 'Distance': 1000},
+            {'Fire': 'SmallControlledNear', 'StatusLevel': 3, 'Size': 1.0,
+             'Distance': 10000},
+            {'Fire': 'BigActiveFarther', 'StatusLevel': 1, 'Size': 300.0,
+             'Distance': 18000},
+            {'Fire': 'BigActiveWayOut', 'StatusLevel': 1, 'Size': 300.0,
+             'Distance': 60000},
+            {'Fire': 'ControlledClose', 'StatusLevel': 3, 'Size': 1.0,
+             'Distance': 3000},
         ]
 
         result = self._nearby_with_fires(fires)
 
         assert [f['Fire'] for f in result] == [
-            'ActiveNear', 'ActiveFar', 'ManagedNear', 'ControlledNear'
+            'ControlledClose', 'BigActiveFarther', 'SmallControlledNear',
+            'BigActiveWayOut'
         ]
 
-    def test_nearby_sorts_missing_status_level_last(self):
-        """Fires without a StatusLevel sort after any known status."""
+    def test_nearby_ranks_missing_status_level_as_neutral(self):
+        """A fire without a StatusLevel ranks like a controlled one: ahead of
+        a farther controlled fire, behind a slightly farther active one."""
         fires = [
-            {'Fire': 'NoStatus', 'Distance': 500},
-            {'Fire': 'Controlled', 'StatusLevel': 3, 'Distance': 40000},
+            {'Fire': 'ControlledFarther', 'StatusLevel': 3, 'Distance': 12000},
+            {'Fire': 'NoStatus', 'Distance': 10000},
+            {'Fire': 'ActiveFarther', 'StatusLevel': 1, 'Distance': 15000},
         ]
 
         result = self._nearby_with_fires(fires)
 
-        assert [f['Fire'] for f in result] == ['Controlled', 'NoStatus']
+        assert [f['Fire'] for f in result] == ['ActiveFarther', 'NoStatus', 'ControlledFarther']
 
     def test_filter_with_no_status_level(self):
         """Test filtering fires with missing status levels."""
         test_fires = [
             {'Fire': 'Fire1', 'StatusLevel': 1},     # known
-            {'Fire': 'Fire2', 'StatusLevel': None},  # no status (treated as inf)
+            {'Fire': 'Fire2', 'StatusLevel': None},  # no status (treated as out)
             {'Fire': 'Fire3', 'StatusLevel': 2},     # known
         ]
 
@@ -421,7 +429,7 @@ class TestFireFilteringIntegration:
         filtered_fires = apply_status_filter(test_fires, 'controlled')
 
         # Should only include fires with status levels <= 3
-        # None is treated as float('inf') so it's filtered out
+        # None is treated as the out level so it's filtered out
         assert len(filtered_fires) == 2
         fire_names = [f['Fire'] for f in filtered_fires]
         assert set(fire_names) == {'Fire1', 'Fire3'}

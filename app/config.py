@@ -30,6 +30,8 @@ class Thresholds(BaseModel):
     """Tunable messaging thresholds, loaded from thresholds.yaml."""
     # Most messages one reply may send.
     sms_segment_backstop: int
+    fire_report_segments: int
+    fire_count_cap: int
     # Conditions-header floors and their forecast trend rules.
     wind_floor: int
     wind_trend_delta: int

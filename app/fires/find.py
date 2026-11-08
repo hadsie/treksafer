@@ -30,6 +30,35 @@ from ..helpers import acres_to_hectares, compass_direction, epoch_ms_to_datetime
 from ..filters import apply_filters, STATUS_LEVELS
 
 
+# We use a ranked status to determine the order of fires to present in the
+# results. Ideally more important fires are shown first.
+# @todo: Need to test this against real world data in a high fire activity area.
+_RANK_STATUS_FACTORS = {
+    STATUS_LEVELS['active']: 0.5,
+    STATUS_LEVELS['managed']: 0.75,
+    STATUS_LEVELS['controlled']: 1.0,
+    STATUS_LEVELS['out']: 1.5,
+}
+
+
+def rank_key(fire: Dict[str, Any]) -> float:
+    """Returns the key used to sort / prioritize fires.
+
+    The priority is distance, followed by status and size. This way a large
+    active fire will show first over a small controlled one even if the smaller
+    fire is slightly closer.
+    """
+
+    # Prioritize fires based on their defined status factor. A fire with unknown
+    # status are left as 1.0 / neutral.
+    status_factor = _RANK_STATUS_FACTORS.get(fire.get('StatusLevel'), 1.0)
+    # Larger fires are prioritized by up to 30% on a log scale (10ha is about 10%,
+    # 100ha about 20%).
+    size_factor = 1 - min(0.3, math.log10(float(fire.get('Size') or 0) + 1) / 10)
+    # The adjusted distance; lower sorts first.
+    return fire['Distance'] * status_factor * size_factor
+
+
 def _iso_datetime(value):
     """Parse an ISO8601 string (as stored in the fire database) to a datetime."""
     return datetime.fromisoformat(value) if value else None
@@ -194,8 +223,9 @@ def _normalize_row(data_file, row, distance=None, direction=None) -> dict:
         get_value_fn=lambda key: getattr(row, key, None),
     ))
 
-    # Strip None values
-    data = {k: v for k, v in data.items() if v is not None}
+    # Strip missing values: None, NaN.
+    data = {k: v for k, v in data.items()
+            if v is not None and not (isinstance(v, float) and math.isnan(v))}
 
     return data
 
@@ -493,10 +523,7 @@ class FindFires:
             fires += found
 
         growth.enrich(fires, self.settings.database)
-
-        # Sort by status priority (active, managed, controlled, out), then distance.
-        fires.sort(key=lambda f: (f.get('StatusLevel', float('inf')), f['Distance']))
-
+        fires.sort(key=rank_key)
         return fires
 
     @staticmethod
