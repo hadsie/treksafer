@@ -12,7 +12,8 @@ class TestFireSeasonValidation:
                             stale_data_hours=6, optout_database="data/optouts.db",
                             request_database="data/requests.db",
                             thresholds=Thresholds(
-                                sms_segment_backstop=10, wind_floor=20,
+                                sms_segment_backstop=10, fire_report_segments=4,
+                                fire_count_cap=8, wind_floor=20,
                                 wind_trend_delta=10, wind_forecast_hours=12, aqi_floor=75,
                                 aqi_forecast_hours=4, aqi_trend_delta=50))
         assert settings.fire_season_start == "05-15"
@@ -96,6 +97,8 @@ class TestThresholds:
         operator-tunable and deliberately not pinned."""
         thresholds = get_config().thresholds
         assert thresholds.sms_segment_backstop > 0
+        assert thresholds.fire_report_segments > 0
+        assert thresholds.fire_count_cap > 0
         assert thresholds.wind_floor > 0
         assert thresholds.wind_trend_delta > 0
         assert thresholds.wind_forecast_hours > 0

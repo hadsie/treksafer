@@ -90,9 +90,11 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> list
         fire_filters: Dictionary of fire-specific filters
 
     Returns:
-        The fire report as blocks: a conditions header (AQI and wind
-        lines), one block per fire carrying its full/medium/short
-        renderings, and a data freshness marker when stored data was served.
+        The fire report as blocks:
+         - A conditions header (AQI and wind lines)
+         - Fire blocks capped to the segment threshold
+         - a '+N more' fires summary for any that don't fit in the SMS budget
+         - a data freshness marker when stored data was served.
     """
     responses = Messages()
     settings = get_config()
@@ -128,20 +130,20 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> list
     if not fires and findfires.unavailable_sources:
         return blocks + [Block([responses.data_unavailable()], kind='data_unavailable')]
 
+    # When a realtime source failed and stored data was used instead, a
+    # freshness marker is added so the user knows the data is not current.
+    trailer = []
+    if findfires.fallback_fetched:
+        trailer.append(Block([responses.data_age(
+            local_time(findfires.fallback_fetched, coords))]))
+
     if not fires:
         distance = min(findfires.filters['distance'], settings.max_radius)
         status_filter = fire_filters.get('status')
         blocks.append(Block([responses.no_fires(distance, coords, status_filter)], kind='no_fires'))
-    else:
-        blocks.extend(Block(responses.fire_ladder(fire), kind='fires') for fire in fires)
+        return blocks + trailer
 
-    # When a realtime source failed and stored data was used instead, a
-    # freshness marker goes last so old data is never presented as current.
-    if findfires.fallback_fetched:
-        blocks.append(Block([responses.data_age(
-            local_time(findfires.fallback_fetched, coords))]))
-
-    return blocks
+    return responses.fire_report(fires, header=blocks, trailer=trailer)
 
 
 def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,

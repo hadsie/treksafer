@@ -3,23 +3,30 @@ and the no-result replies (no fires, out of coverage, data unavailable)."""
 
 from datetime import datetime, timezone
 from functools import cache
-from typing import Dict
+from typing import Dict, Iterable
 
 import yaml
 
 from ..config import get_config
 from ..filters import STATUS_LEVELS
 from ..weather import AqiReport, WindReport
-from .assembler import fits_segment
+from .assembler import Block, assemble, fits_segment
+
+
+@cache
+def _status_terms() -> Dict[str, str]:
+    """Status wording -> SMS abbreviation."""
+    with open('data/fire_terms.yaml') as f:
+        return yaml.safe_load(f)['status']
 
 
 @cache
 def _status_words() -> Dict[str, str]:
-    """Feed status code -> full wording, inverted from the status table
-    in data/fire_terms.yaml."""
-    with open('data/fire_terms.yaml') as f:
-        terms = yaml.safe_load(f)
-    return {abbreviation: word for word, abbreviation in terms['status'].items()}
+    """Feed status code -> full wording."""
+    return {abbreviation: word for word, abbreviation in _status_terms().items()}
+
+
+_TIERS = ('full', 'medium', 'compact')
 
 
 class FireMessages:
@@ -166,15 +173,57 @@ class FireMessages:
 
     def fire_ladder(self, fire: Dict) -> list[str]:
         """Every size of this fire's message, largest first."""
-        return [self._render(fire, size) for size in ('full', 'medium', 'short')]
+        return [self._render(fire, size) for size in _TIERS]
+
+    def fire_report(self, fires: list[Dict],
+                    header: Iterable[Block] = (),
+                    trailer: Iterable[Block] = ()) -> list[Block]:
+        """Fit ranked fires into the segment budget, shrinking detail down
+        the list and summarizing the rest on a '+N more' line."""
+        thresholds = get_config().thresholds
+        budget = thresholds.fire_report_segments
+        header, trailer = list(header), list(trailer)
+        kept = []
+        tier = 0
+        for fire in fires[:thresholds.fire_count_cap]:
+            while tier < len(_TIERS):
+                block = Block(self.fire_ladder(fire)[tier:], kind='fires')
+                if len(assemble([*header, *kept, block, *trailer])) <= budget:
+                    kept.append(block)
+                    break
+                tier += 1
+            if tier == len(_TIERS):
+                break
+        # Make room for the '+N more' line by shrinking, then dropping, the
+        # last kept fire.
+        while True:
+            blocks = [*header, *kept]
+            dropped = fires[len(kept):]
+            if dropped:
+                blocks.append(Block(self.more_fires_ladder(dropped), kind='fires'))
+            blocks.extend(trailer)
+            if not kept or len(assemble(blocks)) <= budget:
+                return blocks
+            if len(kept[-1].ladder) > 1:
+                kept[-1] = Block(kept[-1].ladder[1:], kind='fires')
+            else:
+                kept.pop()
+
+    def more_fires_ladder(self, dropped: list[Dict]) -> list[str]:
+        """The '+N more' line: the dropped ids, falling back to a bare count."""
+        distances = sorted(self._format_distance(fire['Distance']) for fire in dropped)
+        span = (f"{distances[0]}-{distances[-1]}km" if distances[0] != distances[-1]
+                else f"{distances[0]}km")
+        ids = ' '.join(fire['Fire'] for fire in dropped)
+        return [f"+{len(dropped)} {span}: {ids}", f"+{len(dropped)} more {span}"]
 
     def _fire(self, fire, size = "full"):
-        """Render at size, stepping full -> medium -> short until the
+        """Render at size, stepping full -> medium -> compact until the
         message fits one SMS. Each retry re-renders from the same fire
         dict, so _render must leave it unmodified."""
         message = self._render(fire, size)
-        if not fits_segment(message) and size != "short":
-            return self._fire(fire, "medium" if size == "full" else "short")
+        if not fits_segment(message) and size != "compact":
+            return self._fire(fire, "medium" if size == "full" else "compact")
         return message
 
     def _render(self, fire, size):
@@ -182,7 +231,7 @@ class FireMessages:
         Format the message for this specific fire.
 
         :param dict fire: The fire data dictionary.
-        :param str size: The message size, one of full, medium, short.
+        :param str size: The message size, one of full, medium, compact.
         :return: The formatted message.
         :rtype: str
         """
@@ -198,14 +247,8 @@ class FireMessages:
                 ("FullName", "Fire: {}"),
                 ("DistDir", "{}"),
                 ("Size", "Size: {} ha")
-            ],
-            "short": [
-                ("Fire", "{}"),
-                ("DistDir", "{}"),
-                ("Size", "{}ha")
             ]
         }
-        fields = level_fields[size]
 
         # Strip all strings
         fire = {k: v.strip() if isinstance(v, str) else v
@@ -214,6 +257,11 @@ class FireMessages:
         # Feeds that publish status codes (CA: OC/BH/UC) display as words.
         if 'Status' in fire:
             fire['Status'] = _status_words().get(fire['Status'], fire['Status'])
+            fire['StatusCode'] = _status_terms().get(fire['Status'], fire['Status'])
+
+        # Skip a Location that just repeats the fire's name or id.
+        if fire.get('Location') in (fire.get('Name'), fire['Fire']):
+            fire.pop('Location', None)
 
         fire['FullName'] = fire['Fire']
         if 'Name' in fire and fire['Name'] != fire['Fire']:
@@ -227,9 +275,14 @@ class FireMessages:
         if 'Distance' in fire:
             distance = self._format_distance(fire['Distance'])
             fire['DistDir'] = f"{distance}km {fire['Direction']}"
-        # New fires may not have a size estimate yet; the line is omitted.
+        # New fires may not have a size estimate yet.
         if 'Size' in fire:
             fire['Size'] = self._format_size(fire['Size'])
+
+        if size == 'compact':
+            return self._compact(fire)
+
+        fields = level_fields[size]
         message = []
 
         change = fire.get('SizeChange')
@@ -237,17 +290,34 @@ class FireMessages:
         for key, template in fields:
             value = fire.get(key)
             if not value:
+                if key == 'Size' and size == 'full':
+                    message.append("Size: Unknown")
                 continue
             line = template.format(value)
-            if is_new and key in ('FullName', 'Fire'):
+            if is_new and key == 'FullName':
                 line += " (NEW)"
-            # The delta rides the Size line; short is the last-resort
-            # squeeze and shows the bare size.
-            if change and key == 'Size' and size != 'short':
+            # Medium keeps the status as its code on the distance line.
+            if size == 'medium' and key == 'DistDir' and fire.get('StatusCode'):
+                line += f" {fire['StatusCode']}"
+            # The delta and its timeframe ride the Size line.
+            if change and key == 'Size':
                 line += f" ({self._size_change(change)})"
             message.append(line)
 
         return "\n".join(message)
+
+    def _compact(self, fire: Dict) -> str:
+        """One-line rendering, e.g. 'K72481 423ha(+300) 12km NW OC'."""
+        parts = [fire['Fire'] + (' (NEW)' if fire.get('New') else '')]
+        if fire.get('Size'):
+            change = fire.get('SizeChange')
+            delta = f"({change['delta']:+d})" if change else ''
+            parts.append(f"{fire['Size']}ha{delta}")
+        if fire.get('DistDir'):
+            parts.append(fire['DistDir'])
+        if fire.get('StatusCode'):
+            parts.append(fire['StatusCode'])
+        return ' '.join(parts)
 
     @staticmethod
     def _size_change(change: Dict) -> str:
@@ -260,7 +330,7 @@ class FireMessages:
 
         Rules
         -----
-        1. 0 ha     → "" (no estimate yet; the Size line is omitted)
+        1. 0 ha     → "" (no estimate yet; rendered as unknown or omitted)
         2. < 0.1 ha → "<0.1" so tiny new fires still show a size
         3. < 10 ha  → round to 1 decimal place
         4. ≥ 10 ha  → round to nearest whole hectare
@@ -277,7 +347,7 @@ class FireMessages:
 
     @staticmethod
     def _format_distance(meters: float) -> int | float:
-        """Return a nicely formatted distance string in km.
+        """Return a nicely formatted distance in km, as an int when whole.
 
         Rules
         -----

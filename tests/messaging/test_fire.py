@@ -37,29 +37,25 @@ class TestFireBlockRendering:
         assert "Status: Out of Control" in message
         assert message.count("\n") == 4  # 5 lines = 4 newlines
 
-    def test_medium_format_excludes_location_and_status(self):
-        """Medium format should omit location and status fields."""
+    def test_medium_format_drops_location_and_abbreviates_status(self):
+        """Medium format omits location and carries the status code on the
+        distance line."""
         fire = mock_fire()
         message = FireMessages().fire(fire, size="medium")
 
         assert "Fire: Little Creek K72481" in message
-        assert "12km NW" in message  # 12345m = 12.345km → rounds to 12km
+        assert "12km NW OC" in message  # 12345m = 12.345km → rounds to 12km
         assert "Size: 123 ha" in message
         assert "Location" not in message
-        assert "Status" not in message
+        assert "Status:" not in message
         assert message.count("\n") == 2  # 3 lines = 2 newlines
 
-    def test_short_format_minimal(self):
-        """Short format should contain only fire code, distance, and size."""
+    def test_compact_format_is_one_line(self):
+        """Compact format is a single line: id, size, distance, status code."""
         fire = mock_fire()
-        message = FireMessages().fire(fire, size="short")
+        message = FireMessages().fire(fire, size="compact")
 
-        assert "K72481" in message
-        assert "12km NW" in message  # 12345m = 12.345km → rounds to 12km
-        assert "123ha" in message
-        assert "Fire:" not in message
-        assert "Location" not in message
-        assert "Status" not in message
+        assert message == "K72481 123ha 12km NW OC"
 
     def test_fire_name_same_as_code_omits_duplicate(self):
         """When fire name equals code, don't show duplicate in full format."""
@@ -88,25 +84,25 @@ class TestFireBlockRendering:
 
         message = FireMessages().fire(fire, size="full")
 
-        # Should auto-shorten to medium or short
+        # Should auto-shorten to medium or compact
         assert len(message) < 200, "Long location should trigger auto-shortening"
 
     def test_distance_formatting_below_10km(self):
         """Distances under 10km should show one decimal place."""
         fire = mock_fire(Distance=9444)  # 9.444 km
-        message = FireMessages().fire(fire, size="short")
+        message = FireMessages().fire(fire, size="compact")
         assert "9.4km" in message
 
     def test_distance_formatting_above_10km(self):
         """Distances 10km and above should be whole numbers."""
         fire = mock_fire(Distance=43210)  # 43.21 km
-        message = FireMessages().fire(fire, size="short")
+        message = FireMessages().fire(fire, size="compact")
         assert "43km" in message
 
     def test_distance_strips_trailing_zero(self):
         """Whole number distances should not show .0 decimal."""
         fire = mock_fire(Distance=1000)  # Exactly 1.0 km
-        message = FireMessages().fire(fire, size="short")
+        message = FireMessages().fire(fire, size="compact")
         assert "1km" in message
         assert "1.0km" not in message
 
@@ -119,7 +115,7 @@ class TestFireBlockRendering:
     def test_direction_included_with_distance(self):
         """Distance and direction should be combined."""
         fire = mock_fire(Distance=25567, Direction="ENE")
-        message = FireMessages().fire(fire, size="short")
+        message = FireMessages().fire(fire, size="compact")
         assert "25.6km ENE" in message or "26km ENE" in message
 
     def test_no_fires_basic_message(self):
@@ -183,11 +179,11 @@ class TestFormatSize:
     def test_size_formatting(self, hectares, expected):
         assert FireMessages._format_size(hectares) == expected
 
-    def test_zero_size_renders_empty_and_omits_line(self):
-        """A 0 ha size means no estimate yet; the Size line is dropped."""
+    def test_zero_size_renders_empty_and_reads_unknown(self):
+        """A 0 ha size means no estimate yet; full says so."""
         assert FireMessages._format_size(0) == ""
         message = FireMessages().fire(mock_fire(Size=0.0))
-        assert 'Size' not in message
+        assert 'Size: Unknown' in message
 
     def test_tiny_fire_message_shows_size(self):
         message = FireMessages().fire(mock_fire(Size=0.009))
@@ -195,19 +191,26 @@ class TestFormatSize:
 
 
 class TestFireMessageWithoutSize:
-    """New fires may have no size estimate; the Size line is omitted."""
+    """New fires may have no size estimate; full says Unknown, the smaller
+    tiers drop the line."""
 
-    def test_full_format_omits_size_line(self):
+    def test_full_format_shows_size_unknown(self):
         fire = mock_fire()
         del fire['Size']
         message = FireMessages().fire(fire)
-        assert 'Size' not in message
-        assert 'K72481' in message
+        assert 'Size: Unknown' in message
+        assert 'ha' not in message
 
-    def test_short_format_omits_size(self):
+    def test_medium_format_omits_size_line(self):
         fire = mock_fire()
         del fire['Size']
-        message = FireMessages().fire(fire, size='short')
+        message = FireMessages().fire(fire, size='medium')
+        assert 'Size' not in message
+
+    def test_compact_format_omits_size(self):
+        fire = mock_fire()
+        del fire['Size']
+        message = FireMessages().fire(fire, size='compact')
         assert 'ha' not in message
 
 
@@ -229,11 +232,11 @@ class TestSizeChangeRendering:
         message = FireMessages().fire(fire)
         assert '(+2000 since 4d ago)' in message
 
-    def test_short_format_drops_the_delta(self):
+    def test_compact_format_keeps_the_delta_without_its_timeframe(self):
         fire = mock_fire(SizeChange={'delta': 300, 'hours': 26.0})
-        message = FireMessages().fire(fire, size='short')
+        message = FireMessages().fire(fire, size='compact')
+        assert '123ha(+300)' in message
         assert 'since' not in message
-        assert 'ha' in message
 
     def test_no_annotation_renders_plain_size(self):
         message = FireMessages().fire(mock_fire(Size=14333))
@@ -247,9 +250,9 @@ class TestNewLabelRendering:
         message = FireMessages().fire(fire)
         assert '(K72481) (NEW)' in message
 
-    def test_new_label_survives_short_format(self):
+    def test_new_label_survives_compact_format(self):
         fire = mock_fire(New=True)
-        message = FireMessages().fire(fire, size='short')
+        message = FireMessages().fire(fire, size='compact')
         assert 'K72481 (NEW)' in message
 
     def test_no_label_without_flag(self):
@@ -380,3 +383,162 @@ class TestStatusTerms:
         with open('data/fire_terms.yaml') as f:
             table = yaml.safe_load(f)['status']
         assert len(set(table.values())) == len(table)
+
+
+class TestCompactStatusAbbreviation:
+    """Compact statuses abbreviate through the fire terms table."""
+
+    @pytest.mark.parametrize('status', ['Out of Control', 'OC'])
+    def test_words_and_codes_both_abbreviate(self, status):
+        message = FireMessages().fire(mock_fire(Status=status), size='compact')
+        assert message.endswith(' OC')
+
+    def test_unlisted_status_passes_through(self):
+        message = FireMessages().fire(mock_fire(Status='45% contained'), size='compact')
+        assert message.endswith(' 45% contained')
+
+
+class TestLocationRules:
+    """The Location line shows only when it adds information."""
+
+    def test_location_equal_to_name_is_dropped(self):
+        fire = mock_fire(Name='Peachland Creek', Location='Peachland Creek')
+        message = FireMessages().fire(fire, size='full')
+        assert 'Location' not in message
+
+    def test_location_equal_to_id_is_dropped(self):
+        fire = mock_fire(Name='K72481', Location='K72481')
+        message = FireMessages().fire(fire, size='full')
+        assert 'Location' not in message
+
+    def test_full_format_keeps_a_distinct_location(self):
+        full = FireMessages().fire_ladder(mock_fire())[0]
+        assert 'Location: 5 km NW of Town' in full
+
+
+class TestMoreFiresLadder:
+    """The '+N more' line names dropped fires while ids fit, then counts."""
+
+    def test_ids_form_lists_ids_with_distance_range(self):
+        dropped = [mock_fire(Fire='K50921', Distance=40000),
+                   mock_fire(Fire='V33019', Distance=50000)]
+        ladder = FireMessages().more_fires_ladder(dropped)
+        assert ladder[0] == '+2 40-50km: K50921 V33019'
+
+    def test_count_form_has_no_ids(self):
+        dropped = [mock_fire(Fire='K50921', Distance=40000),
+                   mock_fire(Fire='V33019', Distance=50000)]
+        ladder = FireMessages().more_fires_ladder(dropped)
+        assert ladder[1] == '+2 more 40-50km'
+
+    def test_single_distance_shows_no_range(self):
+        ladder = FireMessages().more_fires_ladder([mock_fire(Fire='K1', Distance=42000)])
+        assert ladder[0] == '+1 42km: K1'
+
+
+def report_fire(index, distance_km, location='Long Valley Behind The Ridge Area'):
+    """A fire whose full rendering needs most of an SMS to itself."""
+    return mock_fire(
+        Fire=f'K{50900 + index}',
+        Name=f'Fire Number {index} Long Name',
+        Location=location,
+        Distance=distance_km * 1000,
+    )
+
+
+class TestFireReport:
+    """fire_report fits ranked fires to the segment budget and count cap."""
+
+    @pytest.fixture(autouse=True)
+    def thresholds(self, monkeypatch):
+        from app.config import get_config
+        monkeypatch.setattr(get_config().thresholds, 'fire_report_segments', 2)
+        monkeypatch.setattr(get_config().thresholds, 'fire_count_cap', 8)
+        self.config = get_config()
+
+    def segments(self, blocks):
+        from app.messaging.assembler import assemble
+        return assemble(blocks)
+
+    def test_everything_fits_inside_the_budget(self):
+        fires = [report_fire(1, 5), report_fire(2, 10)]
+        segments = self.segments(FireMessages().fire_report(fires))
+        assert len(segments) == 2
+        assert all('Location' in segment for segment in segments)
+
+    def test_budget_walks_fires_down_the_ladder(self):
+        """Fires past the full-detail budget shrink rather than add messages."""
+        fires = [report_fire(i, 5 * i) for i in range(1, 5)]
+        segments = self.segments(FireMessages().fire_report(fires))
+        assert len(segments) <= 2
+        assert 'K50901' in segments[0] and 'K50904' in ''.join(segments)
+
+    def test_detail_never_increases_down_the_list(self):
+        """Once a fire drops to compact, no later fire is more detailed."""
+        fires = [report_fire(i, 5 * i) for i in range(1, 5)]
+        text = '\n\n'.join(self.segments(FireMessages().fire_report(fires)))
+        fire_lines = [line for line in text.split('\n') if 'K509' in line]
+        tiers = [0 if line.startswith('Fire:') else 1 for line in fire_lines]
+        assert tiers == sorted(tiers)
+
+    def test_count_cap_drops_the_rest_onto_the_more_line(self, monkeypatch):
+        monkeypatch.setattr(self.config.thresholds, 'fire_count_cap', 2)
+        monkeypatch.setattr(self.config.thresholds, 'fire_report_segments', 10)
+        fires = [report_fire(i, 10 * i) for i in range(1, 5)]
+        segments = self.segments(FireMessages().fire_report(fires))
+        joined = '\n\n'.join(segments)
+        assert '+2 30-40km: K50903 K50904' in joined
+        assert 'Fire Number 3' not in joined
+
+    def test_more_line_falls_back_to_count_when_ids_overflow(self, monkeypatch):
+        monkeypatch.setattr(self.config.thresholds, 'fire_count_cap', 1)
+        monkeypatch.setattr(self.config.thresholds, 'fire_report_segments', 10)
+        dropped = [mock_fire(Fire=f'HWF-{i:03d}-2026-EXTRA-LONG-IDENTIFIER',
+                             Distance=20000 + i * 1000) for i in range(12)]
+        fires = [report_fire(0, 5)] + dropped
+        joined = '\n\n'.join(self.segments(FireMessages().fire_report(fires)))
+        assert '+12 more 20-31km' in joined
+        assert 'HWF-000' not in joined
+
+    def test_header_and_trailer_count_against_the_budget(self):
+        from app.messaging.assembler import Block
+        header = [Block(['AQI: 160'], optional=True)]
+        trailer = [Block(['Data from Jul 1 06:00'])]
+        fires = [report_fire(i, 5 * i) for i in range(1, 4)]
+        blocks = FireMessages().fire_report(fires, header=header, trailer=trailer)
+        segments = self.segments(blocks)
+        assert len(segments) <= 2
+        assert 'AQI: 160' in segments[0]
+        assert 'Data from' in segments[-1]
+
+    def test_more_line_shrinks_the_last_fire_to_make_room(self, monkeypatch):
+        """When the dropped-fires line overflows the budget, the last shown
+        fire steps down a tier rather than a message being added."""
+        monkeypatch.setattr(self.config.thresholds, 'fire_count_cap', 2)
+        location = 'Long Valley Behind The Ridge Area Past The Lake'
+        fires = [report_fire(i, 10 * i, location) for i in range(1, 5)]
+        segments = self.segments(FireMessages().fire_report(fires))
+        assert len(segments) == 2
+        assert 'Location: ' + location in segments[0]
+        assert 'Fire: Fire Number 2 Long Name K50902' in segments[1]
+        assert '+2 30-40km: K50903 K50904' in segments[1]
+
+    def test_more_line_drops_the_last_fire_when_shrinking_is_not_enough(self, monkeypatch):
+        """A fire already at its smallest tier is dropped onto the more
+        line when the two cannot share the budget."""
+        monkeypatch.setattr(self.config.thresholds, 'fire_report_segments', 1)
+        fires = [report_fire(i, 5 * i) for i in range(1, 5)]
+        segments = self.segments(FireMessages().fire_report(fires))
+        assert len(segments) == 1
+        assert 'Fire Number 1 Long Name (K50901)' in segments[0]
+        assert '+3 10-20km: K50902 K50903 K50904' in segments[0]
+
+    def test_more_line_alone_when_no_fire_fits(self, monkeypatch):
+        """With the budget already spent by the trailer, every fire lands on
+        the more line and nothing is silently lost."""
+        from app.messaging.assembler import Block
+        monkeypatch.setattr(self.config.thresholds, 'fire_report_segments', 1)
+        trailer = [Block(['x' * 150])]
+        fires = [report_fire(i, 5 * i) for i in range(1, 4)]
+        blocks = FireMessages().fire_report(fires, trailer=trailer)
+        assert [b.ladder[0] for b in blocks] == ['+3 5-15km: K50901 K50902 K50903', 'x' * 150]

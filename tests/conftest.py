@@ -63,7 +63,7 @@ def _normalize_fixture(location, props):
     if location == 'CA':
         status, level = _STAGE_LEVELS[props['stage_of_c']]
         return {'Fire': props['firename'], 'Name': None,
-                'Location': props.get('agency'), 'Type': None,
+                'Location': None, 'Type': None,
                 'Size': props['hectares'], 'Status': status, 'level': level,
                 'fire_key': props['firename']}
     if location == 'US':
