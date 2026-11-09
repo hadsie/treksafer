@@ -9,7 +9,7 @@ from typing import Dict, Optional
 from . import request_log
 from .config import get_config
 from .health import health_report
-from .helpers import parse_message, local_time, quoted
+from .helpers import message_commands, parse_message, local_time, quoted
 from .fires import FindFires, FireLookup
 from .avalanche import AvalancheReport
 from .messaging import FireMessages
@@ -47,10 +47,10 @@ class Messages(FireMessages):
 
     def usage(self) -> str:
         """The USAGE/EXAMPLES reply: the advanced guide."""
-        return ('Keyword: fire or avalanche w/ coords\n'
-                'Filters: active|all|25km|10mi (max 150km)\n'
-                'fireid K70597 - single fire\n'
-                'Coords: (lat,lon) or map link')
+        return ('Keyword: fire or avalanche + (lat,lon) or map link\n'
+                'Filters: active|all|25km|10mi\n'
+                '!full - fires returned with full detail\n'
+                'fireid K1234 K5678 - lookup fires')
 
     def opt_in_notice(self) -> str:
         """The one-time confirmation a number's first message triggers,
@@ -82,12 +82,14 @@ class Messages(FireMessages):
         return '\n'.join(lines)
 
 
-def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> list[Block]:
+def handle_fire_request(coords: tuple[float, float], fire_filters: Dict,
+                        full: bool = False) -> list[Block]:
     """Handle fire information requests.
 
     Args:
         coords: Tuple of (latitude, longitude)
         fire_filters: Dictionary of fire-specific filters
+        full: Show every fire at full detail, ignoring the budget and cap
 
     Returns:
         The fire report as blocks:
@@ -143,12 +145,28 @@ def handle_fire_request(coords: tuple[float, float], fire_filters: Dict) -> list
         blocks.append(Block([responses.no_fires(distance, coords, status_filter)], kind='no_fires'))
         return blocks + trailer
 
-    return responses.fire_report(fires, header=blocks, trailer=trailer)
+    return responses.fire_report(fires, header=blocks, trailer=trailer, full=full)
 
 
-def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,
-                        responses: 'Messages') -> Block:
-    """Resolve a "fireid <id>" lookup to its single fire, or not-found.
+def _handle_fire_lookups(coords: tuple[float, float] | None, terms: list[str],
+                         responses: 'Messages') -> list[Block]:
+    """Resolve a "fireid" lookup to a block per fire found, plus one
+    not-found block naming any misses."""
+    blocks, missing = [], []
+    for term in terms:
+        block = _fire_lookup_block(coords, term, responses)
+        if block is None:
+            missing.append(term)
+        else:
+            blocks.append(block)
+    if missing:
+        blocks.append(Block([responses.fire_not_found(missing)], kind='fire_not_found'))
+    return blocks
+
+
+def _fire_lookup_block(coords: tuple[float, float] | None, term: str,
+                       responses: 'Messages') -> Block | None:
+    """One fire's lookup reply, or None when nothing matches the term.
 
     The reply is enriched with the perimeter extent, recent edge movement,
     and the time the served data was current -- one block, so the
@@ -157,7 +175,7 @@ def _handle_fire_lookup(coords: tuple[float, float] | None, term: str,
     lookup = FireLookup(term, coords)
     fire = lookup.result()
     if fire is None:
-        return Block([responses.fire_not_found(term)], kind='fire_not_found')
+        return None
     lines = [responses.fire(fire)]
     if lookup.perimeter:
         lines.append(responses.fire_perimeter(lookup.perimeter))
@@ -261,7 +279,7 @@ def handle_message_blocks(message: str) -> list[Block]:
         return [Block([responses.health(health_report())], kind='health')]
     if _HELP_PATTERN.fullmatch(message):
         return [Block([responses.help()], kind='help')]
-    if _USAGE_PATTERN.match(message):
+    if _USAGE_PATTERN.match(message) or 'usage' in message_commands(message):
         return [Block([responses.usage()], kind='usage')]
 
     parsed_data = parse_message(message)
@@ -271,14 +289,14 @@ def handle_message_blocks(message: str) -> list[Block]:
 
     coords = parsed_data["coords"]
     fire_filters = parsed_data["fire_filters"]
-    fire_id = parsed_data.get("fire_id")
-    data_type = parsed_data.get("data_type", "auto")
-    avalanche_filters = parsed_data.get("avalanche_filters", {})
+    fire_ids = parsed_data["fire_ids"]
+    data_type = parsed_data["data_type"]
+    avalanche_filters = parsed_data["avalanche_filters"]
 
     # An explicit "fireid" lookup outranks data-type routing: the user asked
-    # about one specific fire.
-    if fire_id:
-        return [_handle_fire_lookup(coords, fire_id, responses)]
+    # about specific fires.
+    if fire_ids:
+        return _handle_fire_lookups(coords, fire_ids, responses)
 
     # Auto-detect data type. During fire season, default straight to fire;
     # otherwise use avalanche when available, with out-of-season reports
@@ -297,7 +315,7 @@ def handle_message_blocks(message: str) -> list[Block]:
     if data_type == "avalanche":
         return handle_avalanche_request(coords, avalanche_filters)
     elif data_type == "fire":
-        return handle_fire_request(coords, fire_filters)
+        return handle_fire_request(coords, fire_filters, full=parsed_data["full"])
     else:
         return [Block([f"Unknown data type: {data_type}"], kind='system_error')]
 

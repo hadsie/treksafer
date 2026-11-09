@@ -500,6 +500,16 @@ class TestFireReport:
         assert '+12 more 20-31km' in joined
         assert 'HWF-000' not in joined
 
+    def test_full_ignores_the_budget_and_count_cap(self, monkeypatch):
+        monkeypatch.setattr(self.config.thresholds, 'fire_count_cap', 1)
+        monkeypatch.setattr(self.config.thresholds, 'fire_report_segments', 1)
+        fires = [report_fire(i, 5 * i) for i in range(1, 5)]
+        segments = self.segments(FireMessages().fire_report(fires, full=True))
+        assert len(segments) == 4
+        assert all(segment.startswith('Fire:') and 'Location' in segment
+                   for segment in segments)
+        assert not any(segment.startswith('+') for segment in segments)
+
     def test_header_and_trailer_count_against_the_budget(self):
         from app.messaging.assembler import Block
         header = [Block(['AQI: 160'], optional=True)]

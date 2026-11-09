@@ -44,11 +44,14 @@ class FireMessages:
     def data_unavailable(self) -> str:
         return 'Fire data is temporarily unavailable for your area. Try again later.'
 
-    def fire_not_found(self, term: str) -> str:
-        """A fireid lookup matched nothing. Informational, so it carries no
+    def fire_not_found(self, terms: list[str]) -> str:
+        """fireid terms that matched nothing. Informational, so it carries no
         TrekSafer branding."""
-        return (f'No fire matching "{term}" was found. Check the fire number, '
-                'or send "fires" with your location for nearby fires.')
+        names = ', '.join(f'"{term}"' for term in terms)
+        lead = (f'No fire matching {names} was found. Check the fire number'
+                if len(terms) == 1 else
+                f'No fires matching {names} were found. Check the fire numbers')
+        return f'{lead}, or send "fires" with your location for nearby fires.'
 
     def fire_perimeter(self, perimeter: Dict) -> str:
         """One line of perimeter bounds, e.g.
@@ -177,12 +180,19 @@ class FireMessages:
 
     def fire_report(self, fires: list[Dict],
                     header: Iterable[Block] = (),
-                    trailer: Iterable[Block] = ()) -> list[Block]:
+                    trailer: Iterable[Block] = (),
+                    full: bool = False) -> list[Block]:
         """Fit ranked fires into the segment budget, shrinking detail down
-        the list and summarizing the rest on a '+N more' line."""
+        the list and summarizing the rest on a '+N more' line. With full,
+        every fire shows at the largest size that fits one SMS and nothing
+        is summarized."""
+        header, trailer = list(header), list(trailer)
+        if full:
+            # Whole ladders, so the assembler can still shrink a fire that won't fit one SMS.
+            return [*header, *(Block(self.fire_ladder(fire), kind='fires') for fire in fires),
+                    *trailer]
         thresholds = get_config().thresholds
         budget = thresholds.fire_report_segments
-        header, trailer = list(header), list(trailer)
         kept = []
         tier = 0
         for fire in fires[:thresholds.fire_count_cap]:

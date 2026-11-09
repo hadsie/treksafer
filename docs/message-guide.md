@@ -103,9 +103,13 @@ the count:
 ```
 
 Nothing is ever silently dropped: every fire in your search area is either
-shown or counted on this line. To see one of them in detail, look it up by
-its number. To see fewer, closer fires, send a smaller radius (for
-example `fires 25km`).
+shown or counted on this line. To see them in detail, look them up by
+number (`fireid K50921 V33019`). To see fewer, closer fires, send a smaller
+radius (for example `fires 25km`).
+
+To get every fire at full detail with nothing left out, add `!full` to
+your message (for example `fires !full`). Expect a longer reply, and more
+text messages, in a busy fire area.
 
 ## Air quality and wind
 
@@ -153,7 +157,8 @@ fireid K50911 (50.68, -121.93)
 ```
 
 Include your coordinates and the reply adds distance and direction from
-you. A lookup reply can carry extra lines a regular report doesn't:
+you. To look up several fires at once, list their numbers:
+`fireid K50921 V33019`. A lookup reply can include additional data:
 
 ```
 Fire: Lower Young Creek (K50911)

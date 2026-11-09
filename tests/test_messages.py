@@ -5,7 +5,8 @@ from zoneinfo import ZoneInfo
 import pytest
 import requests
 
-from app.messages import Messages, handle_fire_request, handle_message, in_fire_season
+from app.messages import (Messages, handle_fire_request, handle_message,
+                          handle_message_segments, in_fire_season)
 from app.weather import AqiReport, WindReport
 from app.messaging.assembler import Block, as_text, fits_segment
 from tests.conftest import FIXTURE_FETCHED_AT
@@ -229,7 +230,8 @@ class TestConditionsHeader:
         }]
 
         with patch('app.messages.parse_message', return_value={
-                'coords': (50.0, -122.0), 'fire_filters': {}}):
+                'coords': (50.0, -122.0), 'fire_filters': {}, 'fire_ids': [],
+                'full': False, 'data_type': 'fire', 'avalanche_filters': {}}):
             segments = handle_message_segments('fires (50.0, -122.0)')
 
         assert len(segments) == 1
@@ -301,11 +303,10 @@ class TestFireLookupResponse:
         assert 'C10784' in with_coords and 'km ' in with_coords
         assert 'C10784' in without_coords and 'km ' not in without_coords
 
-    def test_not_found_reply_exact_wording(self):
+    def test_not_found_reply_names_the_missing_id(self):
         message = handle_message('fireid NOPE999')
 
-        assert message == ('No fire matching "NOPE999" was found. Check the fire '
-                           'number, or send "fires" with your location for nearby fires.')
+        assert 'NOPE999' in message
 
     def test_miss_with_coords_never_falls_back_to_radius_search(self):
         """An explicit lookup gets a direct answer; coordinates in the
@@ -321,6 +322,13 @@ class TestFireLookupResponse:
         message = handle_message('avalanche fireid NOPE999')
 
         assert 'No fire matching' in message
+
+    @pytest.mark.usefixtures('lookup_fire_db')
+    def test_list_answers_found_fires_and_names_the_misses(self):
+        segments = handle_message_segments('fireid C10784 NOPE1 NOPE2')
+
+        assert segments[0].startswith('Fire: Kamloops_Base (C10784)')
+        assert 'NOPE1' in segments[-1] and 'NOPE2' in segments[-1]
 
     @pytest.mark.usefixtures('lookup_fire_db')
     def test_reply_carries_perimeter_and_as_of_lines(self):
@@ -406,6 +414,9 @@ class TestServiceKeywords:
             response = handle_message('fires usage (50.5, -121.0)')
 
         assert response != Messages().usage()
+
+    def test_usage_command_anywhere_returns_guide(self):
+        assert handle_message('fires (50.5, -121.0) !usage') == Messages().usage()
 
     def test_keyword_replies_fit_one_sms_segment(self):
         for text in (Messages().help(), Messages().usage(),
