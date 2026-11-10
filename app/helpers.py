@@ -156,19 +156,39 @@ def compass_direction(pointA, pointB):
     bearing = math.degrees(math.atan2(pointB.x - pointA.x, pointB.y - pointA.y)) % 360
     return directions[round(bearing/22.5)]
 
-# An explicit fire lookup: "fireid <token>". The token is the next run of
-# non-whitespace characters, so identifiers with hyphens, underscores, or the
-# word "fire" inside them (HWF-096-2026, 2026_ON_DRY_FIRE_013) pass through
-# untouched. Common trailing punctuation is trimmed from the token.
-_FIREID_RE = re.compile(r'\bfireid\s+(\S+)', re.IGNORECASE)
+# A fire lookup: "fireid <id> [<id> ...]". Everything the user typed after
+# the keyword is an id, split on whitespace or commas; the list ends where
+# appended coordinates or a location link begin.
+_FIREID_RE = re.compile(r'\bfireid[\s,:]+', re.IGNORECASE)
+_ID_TOKEN_RE = re.compile(r'[^\s,]+')
+_ID_PUNCTUATION = '.,;:!?()[]{}"\''
+
+# A "!" glued to other text (help!50.02,-120.44) is not a command.
+_COMMAND_RE = re.compile(r'(?<!\S)!([a-z]+)\b', re.IGNORECASE)
+_COMMANDS = {'usage', 'full'}
 
 
-def _fire_id(message: str) -> str | None:
-    """The identifier following the "fireid" keyword, or None."""
+def message_commands(message: str) -> set[str]:
+    """The known "!" commands in the message, lowercased."""
+    return {name.lower() for name in _COMMAND_RE.findall(message)} & _COMMANDS
+
+
+def _fire_ids(message: str) -> list[str]:
+    """The identifiers following the "fireid" keyword, in order, without
+    case-insensitive duplicates."""
     match = _FIREID_RE.search(message)
     if not match:
-        return None
-    return match.group(1).strip('.,;:!?()[]{}"\'') or None
+        return []
+    cutoff = min((start for start in _location_starts(message) if start >= match.end()),
+                 default=len(message))
+    ids = []
+    for token in _ID_TOKEN_RE.finditer(message, match.end()):
+        if token.end() > cutoff or token.group().startswith('!'):
+            break
+        term = token.group().strip(_ID_PUNCTUATION)
+        if term and term.lower() not in (seen.lower() for seen in ids):
+            ids.append(term)
+    return ids
 
 
 def parse_message(message):
@@ -176,15 +196,15 @@ def parse_message(message):
 
     Supports:
         - Various coordinate formats, see coords_from_message().
-        - A specific fire lookup: "fireid <id>", see _fire_id().
+        - Fire lookups: "fireid <id> [<id> ...]", see _fire_ids().
         - Filter keywords: "active", "all"
         - Distance filters: "25km", "10mi"
         - Data type keywords: "avalanche", "fire"
         - Forecast time keywords: "current", "tomorrow", "all"
 
-    Returns the parsed dict (with a "fire_id" key, None when absent) when the
-    message carries coordinates OR a fire lookup, and None only when it has
-    neither. Coordinates stay optional for lookups.
+    Returns the parsed dict (with a "fire_ids" list, empty when absent) when
+    the message carries coordinates OR a fire lookup, and None only when it
+    has neither. Coordinates stay optional for lookups.
     """
 
     # Extract filters from message (case insensitive, using word boundaries)
@@ -225,15 +245,15 @@ def parse_message(message):
         avalanche_filters['forecast'] = 'all'
 
     coords = coords_from_message(message)
-    fire_id = _fire_id(message)
+    fire_ids = _fire_ids(message)
 
-    if not coords and not fire_id:
+    if not coords and not fire_ids:
         return None
 
     return {
         "coords": coords,
         "fire_filters": filters,
-        "fire_id": fire_id,
+        "fire_ids": fire_ids,
         "data_type": data_type,
         "avalanche_filters": avalanche_filters
     }
@@ -315,7 +335,7 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
     Returns:
       tuple of (lat, long) coordinates, or None if no valid patterns were found.
     """
-    candidates = []  # (position in message, lat, lon)
+    candidates = _typed_coordinates(message)
 
     # Google or Apple map shares.
     for m in re.finditer(r'https?://\S+', message):
@@ -334,6 +354,21 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
             coords = _coords_from_google(parsed)
         if coords:
             candidates.append((m.start(), *coords))
+
+    if candidates:
+        _, lat, lon = min(candidates, key=lambda c: c[0])
+        return lat, lon
+
+    # Last resort: a message carrying only a satellite messenger's share
+    # link (inReach, ZOLEO) resolves to the device's send location. These
+    # links are appended automatically, so anything else wins first.
+    return _coords_from_device_link(message)
+
+
+def _typed_coordinates(message: str) -> list[tuple[int, float, float]]:
+    """Every valid coordinate pair written out in the message (not behind a
+    link), as (position, lat, lon)."""
+    candidates = []
 
     # Degree + hemisphere letters.
     for pattern in _DEG_HEMI_PATTERNS:
@@ -373,14 +408,16 @@ def coords_from_message(message: str) -> tuple[float, float]|None:
         if _valid_coords(lat, lon):
             candidates.append((m.start(), lat, lon))
 
-    if candidates:
-        _, lat, lon = min(candidates, key=lambda c: c[0])
-        return lat, lon
+    return candidates
 
-    # Last resort: a message carrying only a satellite messenger's share
-    # link (inReach, ZOLEO) resolves to the device's send location. These
-    # links are appended automatically, so anything else wins first.
-    return _coords_from_device_link(message)
+
+def _location_starts(message: str) -> list[int]:
+    """Where each written coordinate pair or location link in the message
+    begins, without resolving any links."""
+    starts = [start for start, _, _ in _typed_coordinates(message)]
+    starts += [m.start() for m in re.finditer(r'https?://\S+', message)]
+    starts += [m.start() for m in _DEVICE_LINK_RE.finditer(message)]
+    return starts
 
 def _apply_hemisphere(value: float, hemi: str, for_lat: bool) -> float:
     """Apply hemisphere direction to coordinate value.

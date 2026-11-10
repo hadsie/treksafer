@@ -8,7 +8,7 @@ Tests parse_message() which extracts:
 import pytest
 import responses
 
-from app.helpers import parse_message
+from app.helpers import message_commands, parse_message
 
 
 class TestCoordinateParsing:
@@ -515,22 +515,22 @@ class TestFilterExtraction:
 
 
 class TestFireIdParsing:
-    """A "fireid <token>" message yields a fire_id lookup, with or without
-    coordinates. The id is the next run of non-whitespace characters after
-    the keyword; nothing else in the message is touched."""
+    """A "fireid <token>" message yields a fire_ids lookup, with or without
+    coordinates. The first id is the next run of non-whitespace characters
+    after the keyword; nothing else in the message is touched."""
 
     def test_id_only_message(self):
         result = parse_message('fireid K70597')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
         assert result['coords'] is None
 
     def test_keyword_is_case_insensitive(self):
         result = parse_message('FireID K70597')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
 
     def test_id_with_appended_device_coords(self):
         result = parse_message('fireid K70597 (52.5092, -115.6182)')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
         assert result['coords'] == (52.5092, -115.6182)
 
     @responses.activate
@@ -539,26 +539,35 @@ class TestFireIdParsing:
                       body='{"messages":[{"Latitude":44.1,"Longitude":-73.2}]}')
 
         result = parse_message('fireid K70597 inreachlink.com/ABC1234')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
         assert result['coords'] == (44.1, -73.2)
 
     def test_hyphenated_id_survives(self):
         result = parse_message('fireid HWF-096-2026')
-        assert result['fire_id'] == 'HWF-096-2026'
+        assert result['fire_ids'] == ['HWF-096-2026']
 
     def test_id_containing_the_word_fire_survives(self):
         """CA identifiers embed the word "fire"; the token is never re-scanned."""
         result = parse_message('fireid 2026_XX_DRY_FIRE_999')
-        assert result['fire_id'] == '2026_XX_DRY_FIRE_999'
+        assert result['fire_ids'] == ['2026_XX_DRY_FIRE_999']
 
-    def test_id_is_a_single_token(self):
-        """The id ends at whitespace; multi-word names are not supported."""
-        result = parse_message('fireid Kullagh Creek')
-        assert result['fire_id'] == 'Kullagh'
+    def test_every_typed_word_is_an_id(self):
+        result = parse_message('fireid Kullagh Creek active 25 km')
+        assert result['fire_ids'] == ['Kullagh', 'Creek', 'active', '25', 'km']
+
+    @pytest.mark.parametrize('message,coords', [
+        ('fireid K50921 V33019 Lat 50.12 Lon -89.65', (50.12, -89.65)),
+        ('fireid K50921 V33019 50.58225° N, 122.09114° W', (50.58225, -122.09114)),
+        ('fireid K50921 V33019 49.06, -120.79', (49.06, -120.79)),
+    ])
+    def test_list_stops_where_coordinates_begin(self, message, coords):
+        result = parse_message(message)
+        assert result['fire_ids'] == ['K50921', 'V33019']
+        assert result['coords'] == coords
 
     def test_trailing_punctuation_trimmed(self):
         result = parse_message('fireid K70597.')
-        assert result['fire_id'] == 'K70597'
+        assert result['fire_ids'] == ['K70597']
 
     def test_punctuation_only_token_is_no_lookup(self):
         assert parse_message('fireid !!!') is None
@@ -568,17 +577,75 @@ class TestFireIdParsing:
 
     def test_plain_fire_message_is_not_a_lookup(self):
         result = parse_message('fire (52.5092, -115.6182)')
-        assert result['fire_id'] is None
+        assert result['fire_ids'] == []
         assert result['coords'] == (52.5092, -115.6182)
 
     def test_neither_coords_nor_id_returns_none(self):
         assert parse_message('just checking in') is None
 
-    def test_filters_parsed_alongside_id(self):
-        result = parse_message('fireid K70597 active 25km')
-        assert result['fire_id'] == 'K70597'
-        assert result['fire_filters']['status'] == 'active'
-        assert result['fire_filters']['distance'] == 25
+    def test_list_of_ids(self):
+        result = parse_message('fireid K50921 V33019')
+        assert result['fire_ids'] == ['K50921', 'V33019']
+
+    def test_comma_separated_list(self):
+        result = parse_message('fireid K50921, V33019')
+        assert result['fire_ids'] == ['K50921', 'V33019']
+
+    def test_list_stops_before_appended_coords(self):
+        result = parse_message('fireid K50921 V33019 (52.5092, -115.6182)')
+        assert result['fire_ids'] == ['K50921', 'V33019']
+        assert result['coords'] == (52.5092, -115.6182)
+
+    @responses.activate
+    def test_list_stops_before_a_share_link(self):
+        responses.get('https://inreachlink.com/ABC1234',
+                      body='{"messages":[{"Latitude":44.1,"Longitude":-73.2}]}')
+
+        result = parse_message('fireid K50921 HWF-096-2026 inreachlink.com/ABC1234')
+        assert result['fire_ids'] == ['K50921', 'HWF-096-2026']
+
+    def test_list_stops_before_a_command(self):
+        result = parse_message('fireid K50921 !full')
+        assert result['fire_ids'] == ['K50921']
+
+    def test_repeated_ids_are_looked_up_once(self):
+        result = parse_message('fireid K50921 k50921')
+        assert result['fire_ids'] == ['K50921']
+
+    @pytest.mark.parametrize('message', ['fireid: K50921', 'fireid, K50921'])
+    def test_punctuation_after_the_keyword(self, message):
+        assert parse_message(message)['fire_ids'] == ['K50921']
+
+    def test_keyword_glued_to_an_id_is_no_lookup(self):
+        assert parse_message('fireid-K50921') is None
+
+
+class TestMessageCommands:
+    """"!" commands are recognized anywhere; unknown ones are plain text."""
+
+    def test_command_anywhere_in_message(self):
+        assert message_commands('fires !full (49.06, -120.79)') == {'full'}
+
+    def test_command_is_case_insensitive(self):
+        assert message_commands('fires (49.06, -120.79) !FULL') == {'full'}
+
+    def test_several_commands(self):
+        assert message_commands('fires !full !usage') == {'full', 'usage'}
+
+    def test_no_command(self):
+        assert message_commands('fires (49.06, -120.79)') == set()
+
+    def test_unknown_command_is_plain_text(self):
+        assert message_commands('fires !foo (49.06, -120.79)') == set()
+
+    def test_bang_glued_to_text_is_not_a_command(self):
+        assert message_commands('help !50.027,-120.44') == set()
+
+    def test_bang_before_coords_leaves_them_intact(self):
+        assert parse_message('help !50.027,-120.44')['coords'] == (50.027, -120.44)
+
+    def test_command_word_without_bang_is_not_a_command(self):
+        assert message_commands('fires full (49.06, -120.79)') == set()
 
 
 class TestReturnValueStructure:

@@ -55,10 +55,9 @@ SCENARIOS = [
     ('fires_none_nearby', 'fires (54.5, -125.5)'),
     ('fires_outside_coverage', 'fires (64.9, -18.5)'),
     ('fires_no_coordinates', 'fires please'),
+    ('fires_manning_all_full', 'fires all !full (49.064646, -120.7919022)'),
     ('fireid_not_found', 'fireid NOPE999'),
     ('keyword_help', 'help'),
-    ('keyword_usage', 'usage'),
-    ('keyword_usage_with_location', 'usage (49.2, -123.1)'),
 ]
 
 

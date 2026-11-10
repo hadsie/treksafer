@@ -93,12 +93,16 @@ Coordinates you type take priority over the device location your messenger appen
 
 ### Look up a specific fire
 
-Send **`fireid <number>`** to monitor a specific fire, e.g. `fireid K70597`. Include your coordinates and for the reply to includes the distance and direction from you to the fire.
+Send **`fireid <number>`** to monitor a specific fire, e.g. `fireid K70597`, or list several: `fireid K70597 V33019`. Include your coordinates for the reply to include the distance and direction from you to the fire.
+
+### Full firedetails
+
+Use the **`!full`** command in a fire request (e.g. `fires !full`) to get the full output of matched fires rather than abbreviated versions.
 
 ### Service keywords
 
 - **`help`** or **`info`** - What the service is and how to use it.
-- **`usage`** or **`examples`** - Advanced usage: filters, fire tracking, avalanche options, coordinate formats.
+- **`usage`** or **`examples`** (or **`!usage`** anywhere in a message) - Advanced usage: filters, fire lookups, `!full`, coordinate formats.
 - **`stop`** / **`start`** - Opt out of, or back in to, SMS replies (SMS only). An opted-out number receives nothing until it opts back in.
 
 Keywords only apply when they are the entire message, so they never override a real request, except `usage`, which will always return usage information if it's the first word in the message.
@@ -112,6 +116,8 @@ Combined filters: fires active 10mi
 With coordinates: (49.2827, -123.1207) active 25km
 Look up a fire: fireid K70597
 Look up with distance: fireid K70597 (49.2, -123.1)
+Look up several: fireid K70597 V33019
+Every fire in full: fires !full
 Avalanche: avalanche
 Avalanche tomorrow: avalanche tomorrow
 ```
