@@ -1,4 +1,4 @@
-#!venv/bin/python
+#!.venv/bin/python
 """Check TrekSafer health and alert the operator on failures.
 
 Checks:

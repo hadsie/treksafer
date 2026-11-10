@@ -1,4 +1,4 @@
-#!venv/bin/python
+#!.venv/bin/python
 """Email the operator a summary of requests with unusable coordinates.
 
 Run from cron once a day. Scans new sms.log entries since the last run,

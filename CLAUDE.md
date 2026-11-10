@@ -5,7 +5,7 @@ Backcountry safety notification system. Users send SMS from satellite messengers
 ## Running
 
 ```bash
-python -m venv venv && source venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp dotenv.example .env.dev   # then fill in values
 python -m app                # starts CLI transport on localhost:8888
