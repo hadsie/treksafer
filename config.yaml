@@ -77,6 +77,7 @@ transports:
     project_id: ${TREKSAFER_SW_PROJECT}
     api_token : ${TREKSAFER_SW_TOKEN}
     phone_number: "${TREKSAFER_SW_NUMBER}"
+    relay_ca_file: "${TREKSAFER_SW_RELAY_CA_FILE}"
     context: ${TREKSAFER_SW_CONTEXT:-treksafer}
   - type: "cli"
     enabled: ${TREKSAFER_CLI_ENABLED:-true}

@@ -1,6 +1,7 @@
 
 import asyncio
 import logging
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -84,6 +85,8 @@ class SignalWireTransport(BaseTransport):
         return sms_log
 
     async def listen(self) -> None:
+        # The SDK reads its RELAY trust store from the environment.
+        os.environ["SIGNALWIRE_RELAY_CA_FILE"] = self.config.relay_ca_file
         # RELAY authenticates with project + token against the SDK's default
         # gateway (relay.signalwire.com); the space domain is REST-only.
         self._client = LoggingRelayClient(

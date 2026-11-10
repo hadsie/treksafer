@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -22,7 +23,14 @@ def optout_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def signalwire_config():
+def ca_file(tmp_path):
+    path = tmp_path / "ca.pem"
+    path.write_text("test bundle")
+    return str(path)
+
+
+@pytest.fixture
+def signalwire_config(ca_file):
     """Create a mock SignalWire configuration."""
     return SignalWireConfig(
         type="signalwire",
@@ -30,6 +38,7 @@ def signalwire_config():
         project_id=SecretStr("test_project_id"),
         api_token=SecretStr("test_api_token"),
         phone_number="+15551234567",
+        relay_ca_file=ca_file,
     )
 
 
@@ -140,6 +149,18 @@ class TestSignalWireTransport:
         assert kwargs["contexts"] == ["treksafer"]
 
     @pytest.mark.asyncio
+    async def test_listen_hands_ca_file_to_sdk(self, signalwire_config, monkeypatch):
+        """The SDK finds the configured CA bundle in its environment variable."""
+        monkeypatch.delenv("SIGNALWIRE_RELAY_CA_FILE", raising=False)
+        transport = SignalWireTransport(signalwire_config)
+        transport._stopping = True
+
+        with patch("app.transport.signalwire.LoggingRelayClient"):
+            await transport.listen()
+
+        assert os.environ["SIGNALWIRE_RELAY_CA_FILE"] == signalwire_config.relay_ca_file
+
+    @pytest.mark.asyncio
     async def test_stop_disconnects_client(self, transport):
         """stop() sets the stop flag and disconnects the client."""
         transport._client.disconnect = AsyncMock()
@@ -210,6 +231,29 @@ class TestSignalWireConfig:
                 enabled=True,
                 project_id=SecretStr("p"),
                 api_token=SecretStr("t"),
+            )
+
+    def test_relay_ca_file_required_when_enabled(self):
+        """relay_ca_file is mandatory once the transport is enabled."""
+        with pytest.raises(ValidationError, match="relay_ca_file"):
+            SignalWireConfig(
+                type="signalwire",
+                enabled=True,
+                project_id=SecretStr("p"),
+                api_token=SecretStr("t"),
+                phone_number="+15551234567",
+            )
+
+    def test_missing_relay_ca_file_rejected(self, tmp_path):
+        """A relay_ca_file path that doesn't exist fails at config load."""
+        with pytest.raises(ValidationError, match="relay_ca_file not found"):
+            SignalWireConfig(
+                type="signalwire",
+                enabled=True,
+                project_id=SecretStr("p"),
+                api_token=SecretStr("t"),
+                phone_number="+15551234567",
+                relay_ca_file=str(tmp_path / "missing.pem"),
             )
 
     def test_fields_optional_when_disabled(self):
