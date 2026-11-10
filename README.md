@@ -132,8 +132,8 @@ Avalanche tomorrow: avalanche tomorrow
 ```bash
 git clone https://github.com/hadsie/treksafer.git
 cd treksafer
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
