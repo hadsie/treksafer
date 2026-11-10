@@ -194,8 +194,9 @@ def _normalize_row(data_file, row, distance=None, direction=None) -> dict:
         get_value_fn=lambda key: getattr(row, key, None),
     ))
 
-    # Strip None values
-    data = {k: v for k, v in data.items() if v is not None}
+    # Strip missing values: None, NaN.
+    data = {k: v for k, v in data.items()
+            if v is not None and not (isinstance(v, float) and math.isnan(v))}
 
     return data
 
