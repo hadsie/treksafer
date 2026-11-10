@@ -36,15 +36,16 @@ pipdeptree --warn fail
 
 ## Step 5 — Flag sensitive packages
 
-`shapely`, `pyproj`, and `fiona` have C library bindings.
+`shapely`, `pyproj`, and `pyogrio` have C library bindings.
 Major version bumps on these must be flagged for manual
 review — do not auto-update.
 
 ## Step 6 — Apply safe fixes
 
 Patch-level updates for security vulnerabilities can be
-applied directly. Pin to exact versions in `requirements.txt`
-(e.g. `requests==2.32.3`).
+applied directly. Raise the floor to the fixed version and keep
+the major cap, following the convention in CLAUDE.md
+(e.g. `requests>=2.32.4,<3`).
 
 Run `pytest` after any change to verify nothing breaks.
 

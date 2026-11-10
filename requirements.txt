@@ -5,10 +5,10 @@ pydantic_settings>=2.5,<3
 pyproj>=3.7
 pytest>=9.0.3,<10
 pytest-asyncio>=0.24
-python-dateutil>=2.9,<3
+python-dateutil>=2.9,<5
 python-dotenv>=1.0
 pyyaml>=6
-pytz>=2024.1
+pytz>=2026.4
 timezonefinder>=6.5
 requests>=2.3,<3
 requests_cache
