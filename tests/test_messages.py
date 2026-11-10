@@ -231,7 +231,7 @@ class TestConditionsHeader:
 
         with patch('app.messages.parse_message', return_value={
                 'coords': (50.0, -122.0), 'fire_filters': {}, 'fire_ids': [],
-                'full': False, 'data_type': 'fire', 'avalanche_filters': {}}):
+                'data_type': 'fire', 'avalanche_filters': {}}):
             segments = handle_message_segments('fires (50.0, -122.0)')
 
         assert len(segments) == 1

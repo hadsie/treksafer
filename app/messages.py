@@ -279,7 +279,8 @@ def handle_message_blocks(message: str) -> list[Block]:
         return [Block([responses.health(health_report())], kind='health')]
     if _HELP_PATTERN.fullmatch(message):
         return [Block([responses.help()], kind='help')]
-    if _USAGE_PATTERN.match(message) or 'usage' in message_commands(message):
+    commands = message_commands(message)
+    if _USAGE_PATTERN.match(message) or 'usage' in commands:
         return [Block([responses.usage()], kind='usage')]
 
     parsed_data = parse_message(message)
@@ -315,7 +316,7 @@ def handle_message_blocks(message: str) -> list[Block]:
     if data_type == "avalanche":
         return handle_avalanche_request(coords, avalanche_filters)
     elif data_type == "fire":
-        return handle_fire_request(coords, fire_filters, full=parsed_data["full"])
+        return handle_fire_request(coords, fire_filters, full='full' in commands)
     else:
         return [Block([f"Unknown data type: {data_type}"], kind='system_error')]
 

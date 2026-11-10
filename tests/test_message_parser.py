@@ -8,7 +8,7 @@ Tests parse_message() which extracts:
 import pytest
 import responses
 
-from app.helpers import parse_message
+from app.helpers import message_commands, parse_message
 
 
 class TestCoordinateParsing:
@@ -620,25 +620,32 @@ class TestFireIdParsing:
         assert parse_message('fireid-K50921') is None
 
 
-class TestCommands:
+class TestMessageCommands:
     """"!" commands are recognized anywhere; unknown ones are plain text."""
 
-    def test_full_command(self):
-        assert parse_message('fires !full (49.06, -120.79)')['full'] is True
+    def test_command_anywhere_in_message(self):
+        assert message_commands('fires !full (49.06, -120.79)') == {'full'}
 
-    def test_full_command_after_appended_coords(self):
-        assert parse_message('fires (49.06, -120.79) !FULL')['full'] is True
+    def test_command_is_case_insensitive(self):
+        assert message_commands('fires (49.06, -120.79) !FULL') == {'full'}
+
+    def test_several_commands(self):
+        assert message_commands('fires !full !usage') == {'full', 'usage'}
 
     def test_no_command(self):
-        assert parse_message('fires (49.06, -120.79)')['full'] is False
+        assert message_commands('fires (49.06, -120.79)') == set()
 
-    def test_unknown_command_leaves_coords_intact(self):
-        result = parse_message('help !50.027,-120.44')
-        assert result['coords'] == (50.027, -120.44)
-        assert result['full'] is False
+    def test_unknown_command_is_plain_text(self):
+        assert message_commands('fires !foo (49.06, -120.79)') == set()
+
+    def test_bang_glued_to_text_is_not_a_command(self):
+        assert message_commands('help !50.027,-120.44') == set()
+
+    def test_bang_before_coords_leaves_them_intact(self):
+        assert parse_message('help !50.027,-120.44')['coords'] == (50.027, -120.44)
 
     def test_command_word_without_bang_is_not_a_command(self):
-        assert parse_message('fires full (49.06, -120.79)')['full'] is False
+        assert message_commands('fires full (49.06, -120.79)') == set()
 
 
 class TestReturnValueStructure:

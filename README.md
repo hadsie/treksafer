@@ -93,11 +93,11 @@ Coordinates you type take priority over the device location your messenger appen
 
 ### Look up a specific fire
 
-Send **`fireid <number>`** to monitor a specific fire, e.g. `fireid K70597`, or list several: `fireid K70597 V33019`. Include your coordinates and for the reply to includes the distance and direction from you to the fire.
+Send **`fireid <number>`** to monitor a specific fire, e.g. `fireid K70597`, or list several: `fireid K70597 V33019`. Include your coordinates for the reply to include the distance and direction from you to the fire.
 
-### Every fire, full details
+### Full firedetails
 
-use **`!full`**  in a fire request (e.g. `fires !full`) to get all fires in the radius at full detail. This can potentially send dozens of texts in a very active area.
+Use the **`!full`** command in a fire request (e.g. `fires !full`) to get the full output of matched fires rather than abbreviated versions.
 
 ### Service keywords
 

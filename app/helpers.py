@@ -197,7 +197,6 @@ def parse_message(message):
     Supports:
         - Various coordinate formats, see coords_from_message().
         - Fire lookups: "fireid <id> [<id> ...]", see _fire_ids().
-        - "!" commands, see message_commands().
         - Filter keywords: "active", "all"
         - Distance filters: "25km", "10mi"
         - Data type keywords: "avalanche", "fire"
@@ -255,7 +254,6 @@ def parse_message(message):
         "coords": coords,
         "fire_filters": filters,
         "fire_ids": fire_ids,
-        "full": 'full' in message_commands(message),
         "data_type": data_type,
         "avalanche_filters": avalanche_filters
     }
