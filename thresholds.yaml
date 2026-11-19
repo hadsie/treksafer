@@ -7,7 +7,7 @@ fire_report_segments: ${TREKSAFER_FIRE_REPORT_SEGMENTS:-8}
 fire_count_cap: ${TREKSAFER_FIRE_COUNT_CAP:-12}
 
 # Failsafe to prevent spamming a satellite device due to a bug in the system.
-sms_segment_backstop: ${TREKSAFER_SMS_SEGMENT_BACKSTOP:-17}
+sms_segment_backstop: ${TREKSAFER_SMS_SEGMENT_BACKSTOP:-30}
 
 # The wind is shown when sustained speed reaches this floor (km/h).
 wind_floor: ${TREKSAFER_WIND_FLOOR:-20}
