@@ -42,7 +42,9 @@ marker.
 3. Auto-detects data type: avalanche if provider covers the location, otherwise fire
 4. Routes to `handle_fire_request()` or `handle_avalanche_request()` in `messages.py`
 
-A `fireid <id>` message carries a `fire_id` lookup (the single token after the keyword) instead of (or alongside) coordinates. It outranks data-type routing: `handle_message` resolves it via `fires.FireLookup` -- a single fire matched exactly across all sources, database first, with one targeted live re-query only when the stored match is stale -- and a miss reports not-found, never a radius search.
+A `fireid <id> [<id> ...]` message carries a `fire_ids` lookup instead of (or alongside) coordinates. Every word the user typed after the keyword is an id (split on whitespace or commas); the list stops where the coordinate parser finds written coordinates or a location link, or at any word beginning with `!`. It outranks data-type routing: `handle_message` resolves each id via `fires.FireLookup` -- a single fire matched exactly across all sources, database first, with one targeted live re-query only when the stored match is stale -- and replies with a block per fire found plus one not-found line naming the misses, never a radius search.
+
+`!` commands (`message_commands` in `helpers.py`, read by the router in `messages.py`) are recognized anywhere in a message, set off by whitespace: `!usage` answers the usage guide, and `!full` renders every fire at full detail with no budget, count cap, or `+N more` line. `!full` knows nothing about the transport's `sms_segment_backstop`, which still applies. Unknown `!tokens` are plain text.
 
 ### Key modules
 
@@ -76,7 +78,8 @@ Boundary files in `boundaries/` determine which data sources are nearby.
 
 Python 3.11+. Direct dependencies are listed in `requirements.txt` using a
 floor-plus-major-cap convention (e.g. `pandas>=2.2,<3`), which allows minor and
-patch updates while guarding against breaking major bumps.
+patch updates while guarding against breaking major bumps. `pytz` is the
+exception: its versions are dates, so it takes a floor only.
 Run `pytest` after any dependency change to verify nothing breaks.
 
 ## Testing
@@ -106,5 +109,8 @@ Key env vars: `TREKSAFER_ENV`, `TREKSAFER_SW_ENABLED`, `TREKSAFER_SW_PROJECT`, `
 ## Contributing
 
 Branch names: `claude/` prefix for automated changes, `feature/` for new work, `fix/` for bugfixes.
-PR descriptions should include what changed and why.
+Commit messages are a single line.
+PR descriptions are brief and written in a casual, plain-language tone, not
+formal technical prose. They only need to explain the changes. Don't mention
+tests passing or other routine checks; only flag a test if it does not pass.
 All PRs must pass `pytest` before merge.

@@ -29,6 +29,10 @@ pip list --outdated --format=json
 Cross-reference against `requirements.txt` to report only
 direct dependencies, not transitive ones.
 
+Ranges that span more than one major version (`pandas`,
+`python-dateutil`, `timezonefinder`) are deliberate. Do not flag
+them or suggest raising their floors.
+
 ## Step 4 — Check dependency tree for conflicts
 ```bash
 pipdeptree --warn fail
