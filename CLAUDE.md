@@ -5,7 +5,7 @@ Backcountry safety notification system. Users send SMS from satellite messengers
 ## Running
 
 ```bash
-python -m venv venv && source venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp dotenv.example .env.dev   # then fill in values
 python -m app                # starts CLI transport on localhost:8888
@@ -101,7 +101,7 @@ syntax), validated by the `Thresholds` model and exposed as
 
 All config placeholders use `${VAR:-default}` syntax. Pydantic validates everything in `app/config.py`.
 
-Key env vars: `TREKSAFER_ENV`, `TREKSAFER_SW_ENABLED`, `TREKSAFER_SW_PROJECT`, `TREKSAFER_SW_TOKEN`, `TREKSAFER_SW_NUMBER`, `TREKSAFER_SW_CONTEXT`.
+Key env vars: `TREKSAFER_ENV`, `TREKSAFER_SW_ENABLED`, `TREKSAFER_SW_PROJECT`, `TREKSAFER_SW_TOKEN`, `TREKSAFER_SW_NUMBER`, `TREKSAFER_SW_RELAY_CA_FILE`, `TREKSAFER_SW_CONTEXT`.
 
 ## Contributing
 

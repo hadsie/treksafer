@@ -7,6 +7,9 @@ TREKSAFER_SW_ENABLED=true
 TREKSAFER_SW_PROJECT=[REPLACE WITH YOUR SIGNALWIRE PROJECT ID]
 TREKSAFER_SW_TOKEN=[REPLACE WITH YOUR SIGNALWIRE API TOKEN]
 TREKSAFER_SW_NUMBER=[REPLACE WITH YOUR SIGNALWIRE PHONE NUMBER]
+# CA bundle the RELAY connection trusts, e.g. /etc/ssl/certs/ca-certificates.crt
+# on Debian/Ubuntu or /etc/ssl/cert.pem on macOS.
+TREKSAFER_SW_RELAY_CA_FILE=[REPLACE WITH THE PATH TO A CA BUNDLE]
 # Messaging context configured on your SignalWire number. Defaults to 'treksafer'.
 # TREKSAFER_SW_CONTEXT=treksafer
 

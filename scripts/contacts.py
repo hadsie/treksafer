@@ -1,4 +1,4 @@
-#!venv/bin/python
+#!.venv/bin/python
 """Manage the SMS compliance lists (first-contact records and opt-outs).
 
 The contacts table decides who receives the one-time opt-in notice: a

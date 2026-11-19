@@ -1,4 +1,4 @@
-#!venv/bin/python
+#!.venv/bin/python
 """Email the operator a daily digest of request problems and volume.
 
 Run from cron once a day, entirely from the request log database: parse

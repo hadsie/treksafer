@@ -138,8 +138,8 @@ Avalanche tomorrow: avalanche tomorrow
 ```bash
 git clone https://github.com/hadsie/treksafer.git
 cd treksafer
-python -m venv venv
-source venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -159,6 +159,7 @@ TREKSAFER_SW_ENABLED=false
 TREKSAFER_SW_PROJECT=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
 TREKSAFER_SW_TOKEN=PTXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 TREKSAFER_SW_NUMBER=+15555551234
+TREKSAFER_SW_RELAY_CA_FILE=/etc/ssl/certs/ca-certificates.crt
 ```
 
 ### Running the app

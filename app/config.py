@@ -53,6 +53,7 @@ class SignalWireConfig(BaseTransportConfig):
     project_id: SecretStr | None = None
     api_token: SecretStr | None = None
     phone_number: str | None = None
+    relay_ca_file: str | None = None
     context: str = "treksafer"
 
     # require secrets only if enabled
@@ -60,13 +61,15 @@ class SignalWireConfig(BaseTransportConfig):
     def check_required_when_enabled(self):
         if self.enabled:
             missing = [
-                name for name in ("project_id", "api_token", "phone_number")
+                name for name in ("project_id", "api_token", "phone_number", "relay_ca_file")
                 if getattr(self, name) in (None, "", "REPLACE WITH...")
             ]
             if missing:
                 raise ValueError(
                     f"SignalWire transport enabled but missing: {', '.join(missing)}"
                 )
+            if not Path(self.relay_ca_file).is_file():
+                raise ValueError(f"SignalWire relay_ca_file not found: {self.relay_ca_file}")
         return self
 
 class CLIConfig(BaseTransportConfig):

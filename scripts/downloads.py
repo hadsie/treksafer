@@ -1,4 +1,4 @@
-#!venv/bin/python
+#!.venv/bin/python
 """Refresh the fire database from every configured source.
 
 Fetches each source's complete fire set from its realtime layers (the same
